@@ -5,6 +5,7 @@ import com.easytier.jni.EasyTierJNI
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -20,12 +21,25 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
                         "stopInstance" -> {
-                            checkRc(EasyTierJNI.retainNetworkInstance(emptyArray()))
+                            val instanceName = call.argument<String>("instanceName")
+                                ?: throw IllegalArgumentException("missing instanceName")
+                            val all = EasyTierJNI.listInstances(10)
+                                ?.let { JSONObject(it).keys().asSequence().toList() }
+                                .orEmpty()
+                            // 只停目标实例、retain 其余；目标不存在时 retain 全部，
+                            // 等价 no-op（静默成功）。
+                            checkRc(
+                                EasyTierJNI.retainNetworkInstance(
+                                    (all - instanceName).toTypedArray()
+                                )
+                            )
                             result.success(null)
                         }
-                        "currentVirtualIp" ->
-                            // 原样返回 collectNetworkInfos 的 JSON，解析在 Dart 侧。
-                            result.success(EasyTierJNI.collectNetworkInfos(10))
+                        "currentVirtualIp" -> {
+                            val instanceName = call.argument<String>("instanceName")
+                                ?: throw IllegalArgumentException("missing instanceName")
+                            result.success(collectInstanceInfo(instanceName))
+                        }
                         "startForwarder" -> {
                             val instanceName = call.argument<String>("instanceName")
                                 ?: throw IllegalArgumentException("missing instanceName")
@@ -49,6 +63,16 @@ class MainActivity : FlutterActivity() {
                     result.error("easytier", e.message, null)
                 }
             }
+    }
+
+    // 从 collectNetworkInfos 的 JSON 里取出指定实例的条目，保持
+    // {"map": {"<name>": <info>}} 形状回传，解析仍在 Dart 侧；
+    // collectNetworkInfos 返回 null 时原样回 null。
+    private fun collectInstanceInfo(instanceName: String): String? {
+        val infos = EasyTierJNI.collectNetworkInfos(10) ?: return null
+        val map = JSONObject(infos).optJSONObject("map") ?: return null
+        val info = map.opt(instanceName) ?: return null
+        return JSONObject().put("map", JSONObject().put(instanceName, info)).toString()
     }
 
     // JNI 失败时一般会先抛 RuntimeException；少数路径只回 -1，这里兜底转成异常。
