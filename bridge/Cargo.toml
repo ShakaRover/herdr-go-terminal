@@ -20,10 +20,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive", "env"] }
 qrcode = { version = "0.14", default-features = false }
 url = "2"
-easytier = { git = "https://github.com/EasyTier/EasyTier.git", rev = "62e4fd15", default-features = false, features = [
+easytier = { path = "../../EasyTier/easytier", default-features = false, features = [
     "smoltcp", "aes-gcm", "dhcp-ipv4", "tracing-log",
 ] }
-easytier-core = { git = "https://github.com/EasyTier/EasyTier.git", rev = "62e4fd15", default-features = false }
+easytier-core = { path = "../../EasyTier/easytier-core", default-features = false }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

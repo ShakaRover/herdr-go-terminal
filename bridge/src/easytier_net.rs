@@ -3,36 +3,79 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use anyhow::Context as _;
 use easytier::common::config::{ConfigLoader, NetworkIdentity, PeerConfig, TomlConfigLoader};
 use easytier::instance::factory::create_native_instance;
-use easytier_core::gateway::{DataPlaneTcpListener, DataPlaneTcpStream};
+use easytier_core::gateway::{
+    DataPlaneErrorKind, DataPlaneTcpListener, DataPlaneTcpStream,
+};
 
 use crate::config::Config;
 
-/// 持有运行中的 EasyTier 实例与其 data-plane TCP listener。
+/// 持有运行中的 EasyTier 实例，供 data-plane listener 在 net 代际更换后重 bind。
 pub struct EasyTierNet {
     pub instance: Arc<easytier::instance::factory::NativeCoreInstance>,
-    // 同一端口不能 bind 两次，listener 在启动时创建，移交所有权给 axum serve。
-    listener: std::sync::Mutex<Option<DataPlaneTcpListener>>,
+    /// 首个 data-plane TCP listener（启动时已 bind）。
+    first_listener: std::sync::Mutex<Option<DataPlaneTcpListener>>,
+    /// bridge REST 在虚拟网内的监听端口（重 bind 用）。
+    port: u16,
     pub virtual_addr: SocketAddr,
     /// 实例加入的网络名（env 覆盖或持久化 uuid），配对/测试组网用。
     pub network_name: String,
 }
 
 impl EasyTierNet {
-    /// 取出 data-plane listener（只能取一次），交给 axum 服务。
+    /// 取出可自愈的 data-plane listener（只能取一次），交给 axum 服务。
     pub fn take_listener(&self) -> anyhow::Result<DataPlaneListener> {
         let inner = self
-            .listener
+            .first_listener
             .lock()
             .unwrap()
             .take()
             .context("data-plane listener already taken")?;
-        Ok(DataPlaneListener { inner })
+        Ok(DataPlaneListener {
+            current: inner,
+            instance: self.instance.clone(),
+            port: self.port,
+        })
     }
 }
 
 /// 适配 axum::serve 的 data-plane TCP listener。
+///
+/// 断网/虚拟网变化时 EasyTier 会关闭旧 net，listener 的 accept 随之永久返回
+/// 永久错误（NetworkChanged/HandleClosed/InstanceStopped → BrokenPipe）。
+/// 检测到这类错误时对同一端口重新 `data_plane_tcp_bind` 拿新一代 listener
+/// 继续 accept，bridge 进程无需重启即可自愈；其余 accept 错误按临时失败重试。
 pub struct DataPlaneListener {
-    inner: DataPlaneTcpListener,
+    current: DataPlaneTcpListener,
+    instance: Arc<easytier::instance::factory::NativeCoreInstance>,
+    port: u16,
+}
+
+/// 该 accept 错误是否表示底层 net 已永久关闭（需重 bind 而非重试）。
+fn is_dead_listener(e: &std::io::Error) -> bool {
+    e.get_ref()
+        .and_then(|inner| inner.downcast_ref::<easytier_core::gateway::DataPlaneError>())
+        .is_some_and(|de| {
+            matches!(
+                de.kind(),
+                DataPlaneErrorKind::NetworkChanged
+                    | DataPlaneErrorKind::HandleClosed
+                    | DataPlaneErrorKind::InstanceStopped
+            )
+        })
+}
+
+impl DataPlaneListener {
+    /// 重新 bind 当前这代 net 的同一端口，换掉死掉的 listener。
+    async fn rebind(&mut self) -> anyhow::Result<()> {
+        let fresh = self
+            .instance
+            .data_plane_tcp_bind(self.port, Duration::from_secs(15))
+            .await
+            .map_err(|e| anyhow::anyhow!("data-plane rebind {}: {e}", self.port))?;
+        tracing::info!(%self.port, "data-plane listener rebound after net change");
+        self.current = fresh;
+        Ok(())
+    }
 }
 
 impl axum::serve::Listener for DataPlaneListener {
@@ -41,9 +84,23 @@ impl axum::serve::Listener for DataPlaneListener {
 
     async fn accept(&mut self) -> (Self::Io, Self::Addr) {
         loop {
-            match self.inner.accept().await {
+            match self.current.accept().await {
                 Ok(pair) => return pair,
                 Err(e) => {
+                    if is_dead_listener(&e) {
+                        tracing::warn!(%e, "data-plane listener dead (net changed), rebinding");
+                        // 重 bind 失败（net 尚未就绪）退避重试，直到成功。
+                        loop {
+                            match self.rebind().await {
+                                Ok(()) => break,
+                                Err(re) => {
+                                    tracing::warn!(error=%format!("{re:#}"), "data-plane rebind failed, retrying");
+                                    tokio::time::sleep(Duration::from_millis(500)).await;
+                                }
+                            }
+                        }
+                        continue;
+                    }
                     tracing::warn!(%e, "data-plane accept failed, retrying");
                     tokio::time::sleep(Duration::from_millis(200)).await;
                 }
@@ -52,7 +109,7 @@ impl axum::serve::Listener for DataPlaneListener {
     }
 
     fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        Ok(self.inner.local_addr())
+        Ok(self.current.local_addr())
     }
 }
 
@@ -148,7 +205,8 @@ pub async fn start_easytier(cfg: &Config) -> anyhow::Result<EasyTierNet> {
 
     Ok(EasyTierNet {
         instance,
-        listener: std::sync::Mutex::new(Some(listener)),
+        first_listener: std::sync::Mutex::new(Some(listener)),
+        port: cfg.port,
         virtual_addr,
         network_name,
     })

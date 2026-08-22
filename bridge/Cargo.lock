@@ -1063,7 +1063,6 @@ dependencies = [
 [[package]]
 name = "easytier"
 version = "2.6.4"
-source = "git+https://github.com/EasyTier/EasyTier.git?rev=62e4fd15#62e4fd15e94f04ee3d0032bf5b5fa65aaf3064a7"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1141,7 +1140,6 @@ dependencies = [
 [[package]]
 name = "easytier-core"
 version = "2.6.4"
-source = "git+https://github.com/EasyTier/EasyTier.git?rev=62e4fd15#62e4fd15e94f04ee3d0032bf5b5fa65aaf3064a7"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1199,7 +1197,6 @@ dependencies = [
 [[package]]
 name = "easytier-proto"
 version = "2.6.4"
-source = "git+https://github.com/EasyTier/EasyTier.git?rev=62e4fd15#62e4fd15e94f04ee3d0032bf5b5fa65aaf3064a7"
 dependencies = [
  "anyhow",
  "async-trait",
