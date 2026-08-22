@@ -10,9 +10,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../model/models.dart';
-import '../notify/blocked_watch.dart';
 import 'bridges.dart';
-import 'settings.dart';
 
 /// 多 session 部署下当前选中的 herdr session（null = primary），per bridge。
 class SessionFilterNotifier extends Notifier<String?> {
@@ -53,7 +51,6 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
   final String bridgeId;
   Timer? _timer;
   bool _inFlight = false;
-  DateTime? _lastHeartbeat;
 
   @override
   SnapshotState build() {
@@ -86,30 +83,20 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
     try {
       final snap = await api.getSnapshot(
           session: ref.read(sessionFilterProvider(bridgeId)));
+      // await 后 provider 可能已随 bridgesProvider 重建被销毁。
+      if (!ref.mounted) return;
       state = SnapshotState(data: snap, lastOk: DateTime.now());
-      _stampForegroundHeartbeat();
     } catch (e) {
+      if (!ref.mounted) return;
       state = SnapshotState(data: state.data, error: e, lastOk: state.lastOk);
     } finally {
       _inFlight = false;
     }
   }
-
-  /// 前台轮询成功 → 节流写心跳，后台任务据此判断「用户正在看」而不发通知。
-  void _stampForegroundHeartbeat() {
-    final now = DateTime.now();
-    if (_lastHeartbeat != null &&
-        now.difference(_lastHeartbeat!) < heartbeatWriteInterval) {
-      return;
-    }
-    _lastHeartbeat = now;
-    ref
-        .read(sharedPrefsProvider)
-        .setInt(foregroundHeartbeatKey, now.millisecondsSinceEpoch);
-  }
 }
 
-/// 单 bridge 的 snapshot 轮询（3s、stale-while-error、前台心跳）。
+/// 单 bridge 的 snapshot 轮询（3s、stale-while-error）。
+/// 前台心跳与 blocked 通知副作用在 bridgesProvider（state/bridges.dart）。
 final bridgeSnapshotProvider =
     NotifierProvider.family<SnapshotNotifier, SnapshotState, String>(
         SnapshotNotifier.new);

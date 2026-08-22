@@ -58,9 +58,18 @@ Future<ProviderContainer> buildContainer(
   final container = ProviderContainer(overrides: [
     sharedPrefsProvider.overrideWithValue(prefs),
     easytierChannelProvider.overrideWithValue(channel),
+    // bridgesProvider 的 Android 通知副作用会 listen bridgeSnapshotProvider；
+    // 本文件不测通知，发信口 override 成 no-op 避免触碰 method channel。
+    blockedNotifierProvider.overrideWithValue(_NoopBlockedNotifier()),
   ]);
   addTearDown(container.dispose);
   return container;
+}
+
+class _NoopBlockedNotifier implements BlockedNotifier {
+  @override
+  Future<void> show(String bridgeId, String paneId, String label, String title,
+          String body) async {}
 }
 
 /// 常驻监听 bridgesProvider（Provider 非 autoDispose，但保活以便后续读 notifier）。

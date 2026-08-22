@@ -4,17 +4,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'notify/notify_service.dart';
+import 'state/bridges.dart';
 import 'state/settings.dart';
-import 'state/snapshot.dart';
 import 'ui/agent/agent_screen.dart';
 import 'ui/dashboard/dashboard_screen.dart';
 import 'ui/settings/settings_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
-void _openPane(String paneId) {
+/// 通知点击直达对应 bridge 的详情页。升级期旧通知 payload 无 bridgeId
+///（decode 回退 ''）：忽略并停在 dashboard。
+void _openPane(String bridgeId, String paneId) {
+  if (bridgeId.isEmpty) return;
   navigatorKey.currentState?.push(
-    MaterialPageRoute(builder: (_) => AgentScreen(paneId: paneId)),
+    MaterialPageRoute(
+      builder: (_) => AgentScreen(bridgeId: bridgeId, paneId: paneId),
+    ),
   );
 }
 
@@ -22,25 +27,25 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   // 后台 blocked 通知是 Android-only（WorkManager）；iOS v1 不做后台轮询。
-  String? launchPaneId;
+  (String, String)? launchTarget;
   if (defaultTargetPlatform == TargetPlatform.android) {
     await registerBackgroundWatch();
     await initNotifications(onTap: _openPane);
-    launchPaneId = await consumeLaunchPaneId();
+    launchTarget = await consumeLaunchTarget();
   }
   runApp(
     ProviderScope(
       overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
-      child: HerdrApp(launchPaneId: launchPaneId),
+      child: HerdrApp(launchTarget: launchTarget),
     ),
   );
 }
 
 class HerdrApp extends StatelessWidget {
-  const HerdrApp({super.key, this.launchPaneId});
+  const HerdrApp({super.key, this.launchTarget});
 
-  /// 冷启动由通知拉起时目标 pane。
-  final String? launchPaneId;
+  /// 冷启动由通知拉起时的目标（bridgeId, paneId）。
+  final (String, String)? launchTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -55,50 +60,26 @@ class HerdrApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: RootGate(launchPaneId: launchPaneId),
+      home: RootGate(launchTarget: launchTarget),
     );
   }
 }
 
-/// 已配置 bridge → dashboard；未配置 → 设置页。
-/// 同时负责 app 前后台切换时暂停/恢复 snapshot 轮询。
-class RootGate extends ConsumerStatefulWidget {
-  const RootGate({super.key, this.launchPaneId});
+/// 任一 enabled bridge 连接存在 → dashboard；空配置 → 设置页。
+class RootGate extends ConsumerWidget {
+  const RootGate({super.key, this.launchTarget});
 
-  final String? launchPaneId;
-
-  @override
-  ConsumerState<RootGate> createState() => _RootGateState();
-}
-
-class _RootGateState extends ConsumerState<RootGate> {
-  late final AppLifecycleListener _lifecycleListener;
+  final (String, String)? launchTarget;
 
   @override
-  void initState() {
-    super.initState();
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (state) {
-        ref
-            .read(snapshotProvider.notifier)
-            .setPaused(state != AppLifecycleState.resumed);
-      },
-    );
-    final paneId = widget.launchPaneId;
-    if (paneId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _openPane(paneId));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final target = launchTarget;
+    if (target != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _openPane(target.$1, target.$2));
     }
-  }
-
-  @override
-  void dispose() {
-    _lifecycleListener.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final configured = ref.watch(settingsProvider).isConfigured;
-    return configured ? const DashboardScreen() : const SettingsScreen();
+    return ref.watch(bridgesProvider).isNotEmpty
+        ? const DashboardScreen()
+        : const SettingsScreen();
   }
 }
