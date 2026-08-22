@@ -74,7 +74,7 @@ class _ScanPairingScreenState extends State<ScanPairingScreen> {
           )),
           const Padding(
             padding: EdgeInsets.all(16),
-            child: Text('对准 bridge 启动时打印的二维码（herdr-bridge --show-qr）。'),
+            child: Text('对准 bridge 启动时打印的配对二维码。'),
           ),
         ],
       ),

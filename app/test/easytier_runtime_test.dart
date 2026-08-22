@@ -135,10 +135,13 @@ void main() {
       expect(toml, '''
 instance_name = "abcdefgh-1234-5678-9abc-def012345678"
 hostname = "herdr-app"
-network_name = "mynet"
-network_secret = "s3cr3t"
 dhcp = true
 listeners = []
+
+[network_identity]
+network_name = "mynet"
+network_secret = "s3cr3t"
+
 [[peer]]
 uri = "tcp://10.0.0.2:22023"
 [[peer]]

@@ -104,7 +104,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 8),
           if (_profiles.isEmpty)
             Text(
-              '尚未配对。在 bridge 主机上运行 herdr-bridge --show-qr，扫码后即可通过 EasyTier 虚拟网连接。',
+              '尚未配对。bridge 启动时会打印配对二维码（herdr-bridge 日志里找），扫码后即可通过 EasyTier 虚拟网连接。',
               style: theme.textTheme.bodySmall,
             )
           else

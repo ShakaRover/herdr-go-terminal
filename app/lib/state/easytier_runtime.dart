@@ -62,10 +62,13 @@ String buildInstanceToml(RemoteProfile p) {
   return '''
 instance_name = "${_esc(p.id)}"
 hostname = "herdr-app"
-network_name = "${_esc(p.networkName)}"
-network_secret = "${_esc(p.secret)}"
 dhcp = true
 listeners = []
+
+[network_identity]
+network_name = "${_esc(p.networkName)}"
+network_secret = "${_esc(p.secret)}"
+
 $peers[flags]
 no_tun = true
 disable_upnp = true
