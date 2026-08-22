@@ -56,13 +56,18 @@ impl axum::serve::Listener for DataPlaneListener {
     }
 }
 
-/// 扫码配对的凭据载荷。server 取第一个 easytier_server，virtualIp 截掉 CIDR 后缀；
-/// 两者缺失时报错（二维码要求显式配置，避免打印 DHCP 之后才确定的错误地址）。
+/// 扫码配对的凭据载荷。server 是地址数组：首项为本机内网监听地址
+/// `tcp://<内网IP>:<listen_port>`（UDP connect 探测失败时跳过该项），
+/// 其后追加全部 easytier_server 中继。secret/virtual_ip/network_id 仍必填
+///（二维码要求显式配置，避免打印 DHCP 之后才确定的错误地址）。
 pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
-    let server = cfg
-        .easytier_server
-        .first()
-        .context("easytier server not set (HERDR_BRIDGE_EASYTIERSERVER)")?;
+    let mut servers: Vec<String> = Vec::new();
+    if let Some(ip) = lan_ipv4() {
+        servers.push(format!("tcp://{ip}:{}", cfg.easytier_listen_port));
+    } else {
+        tracing::warn!("lan ipv4 probe failed, pairing payload carries relays only");
+    }
+    servers.extend(cfg.easytier_server.iter().cloned());
     let secret = cfg
         .easytier_secret
         .clone()
@@ -76,12 +81,23 @@ pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
     let network_name = cfg.easytier_network_id().context("load network id")?;
     Ok(serde_json::json!({
         "v": 1,
-        "server": server,
+        "server": servers,
         "networkName": network_name,
         "secret": secret,
         "virtualIp": virtual_ip,
         "port": cfg.port,
     }))
+}
+
+/// 探测本机内网 IPv4：向 8.8.8.8:80 发 UDP connect（不产生实际流量），
+/// 读回内核选路的本地源地址。返回 None 表示无可用非回环 IPv4。
+pub fn lan_ipv4() -> Option<std::net::Ipv4Addr> {
+    let sock = std::net::UdpSocket::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    sock.connect((std::net::Ipv4Addr::new(8, 8, 8, 8), 80)).ok()?;
+    match sock.local_addr().ok()?.ip() {
+        std::net::IpAddr::V4(v4) if !v4.is_loopback() => Some(v4),
+        _ => None,
+    }
 }
 
 /// 启动内嵌 EasyTier 实例，并在虚拟网络上绑定 data-plane TCP `cfg.port`。
@@ -108,17 +124,14 @@ pub async fn start_easytier(cfg: &Config) -> anyhow::Result<EasyTierNet> {
             .collect();
         config.set_peers(peers?);
     }
-    if cfg.easytier_test_listeners.is_empty() {
-        config.set_listeners(Vec::new()); // 不被动监听，只主动连中继
-    } else {
-        // 测试注入：监听本地回环端口，供对端实例直连。
-        let listeners: anyhow::Result<Vec<url::Url>> = cfg
-            .easytier_test_listeners
-            .iter()
-            .map(|u| u.parse().with_context(|| format!("parse listener uri {u}")))
-            .collect();
-        config.set_listeners(listeners?);
-    }
+    // 默认无条件监听 tcp://0.0.0.0:<listen_port>：被动监听利于 p2p 打洞，
+    // 对端扫到的内网地址即指向该端口。easytier_test_listeners 作为额外注入。
+    let default_listener = format!("tcp://0.0.0.0:{}", cfg.easytier_listen_port);
+    let listeners: anyhow::Result<Vec<url::Url>> = std::iter::once(&default_listener)
+        .chain(cfg.easytier_test_listeners.iter())
+        .map(|u| u.parse().with_context(|| format!("parse listener uri {u}")))
+        .collect();
+    config.set_listeners(listeners?);
     let mut flags = config.get_flags();
     flags.no_tun = true;
     flags.disable_upnp = true;
@@ -150,21 +163,40 @@ mod tests {
         assert_listener::<super::DataPlaneListener>();
     }
 
-    #[test]
-    fn pairing_payload_shape() {
-        let _g = crate::config::tests_lock();
+    /// 清环境后构建 Config；relays 非空时写入 HERDR_BRIDGE_EASYTIERSERVER。
+    fn fresh_cfg(relays: &str) -> crate::config::Config {
         crate::config::tests::clear();
+        if !relays.is_empty() {
+            std::env::set_var("HERDR_BRIDGE_EASYTIERSERVER", relays);
+        }
         std::env::set_var(
             "HERDR_BRIDGE_STATE_DIR",
             std::env::temp_dir().join(format!("herdr-qr-{}", uuid::Uuid::new_v4())),
         );
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", "s3cret");
-        std::env::set_var("HERDR_BRIDGE_EASYTIERSERVER", "tcp://et.example.com:11010");
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
-        let cfg = crate::config::Config::from_cli(&crate::config::Cli::from_process_env());
+        crate::config::Config::from_cli(&crate::config::Cli::from_process_env())
+    }
+
+    #[test]
+    fn pairing_payload_shape() {
+        let _g = crate::config::tests_lock();
+        let cfg = fresh_cfg("tcp://et.example.com:11010");
         let v = super::pairing_payload(&cfg).unwrap();
         assert_eq!(v["v"], 1);
-        assert_eq!(v["server"], "tcp://et.example.com:11010");
+        // server 为数组：内网监听地址在前（若探测成功），中继在后。
+        let servers = v["server"].as_array().unwrap();
+        assert_eq!(servers.last().unwrap(), "tcp://et.example.com:11010");
+        assert!(servers.len() <= 2);
+        if let Some(ip) = super::lan_ipv4() {
+            assert_eq!(
+                servers.first().unwrap().as_str().unwrap(),
+                format!("tcp://{ip}:22023")
+            );
+            assert_eq!(servers.len(), 2);
+        } else {
+            assert_eq!(servers.len(), 1);
+        }
         assert_eq!(v["secret"], "s3cret");
         assert_eq!(v["virtualIp"], "10.126.0.1");
         assert_eq!(v["port"], 8787);
@@ -172,14 +204,66 @@ mod tests {
     }
 
     #[test]
-    fn pairing_payload_requires_explicit_server_and_ip() {
+    fn pairing_payload_server_list_variants() {
         let _g = crate::config::tests_lock();
+        // 无中继：server 数组只有内网 IP 项（探测失败则空数组）。
+        let cfg = fresh_cfg("");
+        let v = super::pairing_payload(&cfg).unwrap();
+        let servers = v["server"].as_array().unwrap();
+        let lan = super::lan_ipv4();
+        if let Some(ip) = lan {
+            assert_eq!(
+                *servers,
+                vec![serde_json::json!(format!("tcp://{ip}:22023"))]
+            );
+        } else {
+            assert!(servers.is_empty());
+        }
+        // 多个中继：全部追加在内网 IP 项之后。
+        let cfg = fresh_cfg("tcp://et1.example.com:11010,tcp://et2.example.com:11010");
+        let v = super::pairing_payload(&cfg).unwrap();
+        let servers: Vec<&str> = v["server"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_str().unwrap())
+            .collect();
+        let mut expect: Vec<String> = lan
+            .map(|ip| vec![format!("tcp://{ip}:22023")])
+            .unwrap_or_default();
+        expect.extend([
+            "tcp://et1.example.com:11010".to_string(),
+            "tcp://et2.example.com:11010".to_string(),
+        ]);
+        assert_eq!(servers, expect);
+    }
+
+    #[test]
+    fn pairing_payload_requires_explicit_secret_and_ip() {
+        let _g = crate::config::tests_lock();
+        crate::config::tests::clear();
+        // 缺 secret / virtual ip 时报错；easytier_server 已非必填。
+        assert!(super::pairing_payload(&crate::config::Config::from_cli(
+            &crate::config::Cli::from_process_env())).is_err());
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", "s3cret");
-        // 缺 server / virtual ip 时必须报错（避免打印 DHCP 之后才确定的错误地址）
         assert!(super::pairing_payload(&crate::config::Config::from_cli(
             &crate::config::Cli::from_process_env())).is_err());
-        std::env::set_var("HERDR_BRIDGE_EASYTIERSERVER", "tcp://et.example.com:11010");
+        std::env::set_var("HERDR_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
+        std::env::set_var(
+            "HERDR_BRIDGE_STATE_DIR",
+            std::env::temp_dir().join(format!("herdr-qr-{}", uuid::Uuid::new_v4())),
+        );
         assert!(super::pairing_payload(&crate::config::Config::from_cli(
-            &crate::config::Cli::from_process_env())).is_err());
+            &crate::config::Cli::from_process_env())).is_ok());
+    }
+
+    #[test]
+    fn lan_ipv4_returns_non_loopback_v4() {
+        let _g = crate::config::tests_lock();
+        // 无外网路由的环境（CI 容器）允许返回 None；有值则必须非回环。
+        if let Some(ip) = super::lan_ipv4() {
+            assert!(!ip.is_loopback());
+            assert!(!ip.is_unspecified());
+        }
     }
 }

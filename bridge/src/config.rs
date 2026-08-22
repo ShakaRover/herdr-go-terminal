@@ -31,7 +31,9 @@ pub struct Config {
     pub easytier_secret: Option<String>,
     pub easytier_network_name: Option<String>,
     pub easytier_virtual_ip: Option<String>,
-    // 测试注入：让内嵌 EasyTier 实例被动监听（默认不监听，只主动连中继）。
+    /// EasyTier 被动监听端口（默认 22023，利于 p2p 打洞；配对二维码引用）。
+    pub easytier_listen_port: u16,
+    // 测试注入：在默认监听之外追加 passive listener（供对端实例直连回环端口）。
     #[doc(hidden)]
     pub easytier_test_listeners: Vec<String>,
 }
@@ -109,13 +111,13 @@ pub struct Cli {
     /// 静态虚拟 IPv4（CIDR，如 10.126.0.1/24）；缺省 DHCP
     #[arg(long, env = "HERDR_BRIDGE_EASYTIERSERVIRTUALIP")]
     pub easytier_virtual_ip: Option<String>,
-    // 测试注入：让内嵌 EasyTier 实例被动监听（默认不监听，只主动连中继）。
+    /// EasyTier 被动监听端口（默认 22023，tcp://0.0.0.0 无条件监听）
+    #[arg(long, env = "HERDR_BRIDGE_EASYTIERLISTENPORT")]
+    pub easytier_listen_port: Option<u16>,
+    // 测试注入：在默认监听之外追加 passive listener（供对端实例直连回环端口）。
     #[doc(hidden)]
     #[arg(long, env = "HERDR_BRIDGE_EASYTIERSER_TEST_LISTENERS", value_delimiter = ',')]
     pub easytier_test_listeners: Vec<String>,
-    /// 打印配对二维码并退出
-    #[arg(long)]
-    pub show_qr: bool,
 }
 
 impl Cli {
@@ -233,6 +235,8 @@ impl Config {
             easytier_secret: cli.easytier_secret.clone().and_then(norm_string),
             easytier_network_name: cli.easytier_network_name.clone().and_then(norm_string),
             easytier_virtual_ip: cli.easytier_virtual_ip.clone().and_then(norm_string),
+            easytier_listen_port: clamp_min(
+                cli.easytier_listen_port.unwrap_or(22023).into(), 1, "easytier-listen-port") as u16,
             easytier_test_listeners: norm_list(cli.easytier_test_listeners.clone()),
         }
     }
@@ -305,6 +309,7 @@ pub(crate) mod tests {
             "HERDR_BRIDGE_PI_ROOT", "HERDR_BRIDGE_OPENCODE_ROOT",
             "HERDR_BRIDGE_EASYTIERSERVER", "HERDR_BRIDGE_EASYTIERSERCRET",
             "HERDR_BRIDGE_EASYTIERSERWORKNAME", "HERDR_BRIDGE_EASYTIERSERVIRTUALIP",
+            "HERDR_BRIDGE_EASYTIERLISTENPORT",
             "HERDR_BRIDGE_EASYTIERSER_TEST_LISTENERS",
         ] {
             env::remove_var(k);
@@ -332,6 +337,10 @@ pub(crate) mod tests {
         assert!(c.easytier_enabled());
         assert_eq!(c.easytier_server, vec!["tcp://a.example:11010", "tcp://b.example:11010"]);
         assert_eq!(c.easytier_virtual_ip.as_deref(), Some("10.126.0.1/24"));
+        assert_eq!(c.easytier_listen_port, 22023); // 默认监听端口
+        env::set_var("HERDR_BRIDGE_EASYTIERLISTENPORT", "23000");
+        let c = Config::from_cli(&Cli::from_process_env());
+        assert_eq!(c.easytier_listen_port, 23000);
     }
 
     #[test]

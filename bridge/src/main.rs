@@ -24,15 +24,6 @@ async fn main() {
         build = %herdr_bridge::config::Config::build_id(),
         "herdr-bridge starting"
     );
-    if cli.show_qr {
-        let payload = herdr_bridge::easytier_net::pairing_payload(&cfg)
-            .expect("pairing payload: need HERDR_BRIDGE_EASYTIERSERCRET/SERVER/VIRTUALIP");
-        let code = qrcode::QrCode::new(payload.to_string()).expect("qr encode");
-        let img = code.render::<qrcode::render::unicode::Dense1x2>().build();
-        println!("{img}");
-        println!("{}", serde_json::to_string_pretty(&payload).unwrap());
-        return;
-    }
     let registry = herdr_bridge::sessions::SessionRegistry::new(
         cfg.clone(),
         herdr_bridge::state::activity::ActivityLedger::load(
@@ -85,6 +76,19 @@ async fn main() {
         // net 需活到 serve 返回之后再 drop（EasyTier 实例随 net 销毁而停止）。
         let net = herdr_bridge::easytier_net::start_easytier(&cfg).await.expect("start easytier");
         tracing::info!(%net.virtual_addr, "listening on easytier data plane");
+        // 启动即打印配对二维码 + 明文 JSON；载荷生成失败（缺
+        // secret/virtual_ip）只告警，不阻塞 bridge 启动。
+        match herdr_bridge::easytier_net::pairing_payload(&cfg) {
+            Ok(payload) => match qrcode::QrCode::new(payload.to_string()) {
+                Ok(code) => {
+                    let img = code.render::<qrcode::render::unicode::Dense1x2>().build();
+                    println!("{img}");
+                    println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+                }
+                Err(e) => tracing::warn!("pairing qr encode failed: {e}"),
+            },
+            Err(e) => tracing::warn!("pairing payload unavailable: {e:#}"),
+        }
         let listener = net.take_listener().expect("take listener");
         axum::serve(listener, app.into_make_service()).await.expect("serve");
         drop(net);
