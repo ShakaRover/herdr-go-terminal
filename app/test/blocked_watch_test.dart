@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/models.dart';
-import 'package:herdr_web/notify/blocked_watch.dart';
+import 'package:herdrgo/model/models.dart';
+import 'package:herdrgo/notify/blocked_watch.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 PaneInfo pane(String id, AgentStatus status, {int? lastActiveAt}) => PaneInfo(

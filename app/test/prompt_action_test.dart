@@ -6,11 +6,11 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/ansi/ansi.dart';
-import 'package:herdr_web/api/bridge_api.dart';
-import 'package:herdr_web/blocks/prompt_action.dart';
-import 'package:herdr_web/blocks/prompt_select.dart';
-import 'package:herdr_web/model/models.dart';
+import 'package:herdrgo/ansi/ansi.dart';
+import 'package:herdrgo/api/bridge_api.dart';
+import 'package:herdrgo/blocks/prompt_action.dart';
+import 'package:herdrgo/blocks/prompt_select.dart';
+import 'package:herdrgo/model/models.dart';
 
 /// 含可识别 prompt 的 pane 文本（question 含 "?"，footer 可分类，
 /// 菜单为尾部连续 1,2 后缀）。供 fake 的 readPane 返回。

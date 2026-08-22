@@ -12,8 +12,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/api/bridge_api.dart';
-import 'package:herdr_web/model/history.dart';
+import 'package:herdrgo/api/bridge_api.dart';
+import 'package:herdrgo/model/history.dart';
 
 class _Recorded {
   _Recorded(this.method, this.uri, this.headers, this.body);

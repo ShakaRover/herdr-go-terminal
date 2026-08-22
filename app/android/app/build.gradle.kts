@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.herdr.herdr_web"
+    namespace = "dev.herdr.herdrgo"
     compileSdk = flutter.compileSdkVersion
     // 不用 flutter.ndkVersion（28.x）：磁盘紧张，复用 /opt/android-sdk 里的
     // NDK 26（通过 .toolchain/android-sdk/ndk/ 下的符号链接）。纯 Dart 应用
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "dev.herdr.herdr_web"
+        applicationId = "dev.herdr.herdrgo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

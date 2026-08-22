@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/models.dart';
-import 'package:herdr_web/state/pinned.dart';
+import 'package:herdrgo/model/models.dart';
+import 'package:herdrgo/state/pinned.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 PaneInfo pane(String id, AgentStatus status, {int? lastActiveAt}) => PaneInfo(

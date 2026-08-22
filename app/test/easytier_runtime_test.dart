@@ -16,9 +16,9 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/api/easytier_channel.dart';
-import 'package:herdr_web/model/remote_profile.dart';
-import 'package:herdr_web/state/easytier_runtime.dart';
+import 'package:herdrgo/api/easytier_channel.dart';
+import 'package:herdrgo/model/remote_profile.dart';
+import 'package:herdrgo/state/easytier_runtime.dart';
 
 /// 脚本化的 EasyTierChannel：记录调用顺序（含 instanceName），
 /// 按队列吐出 virtualIp 结果。

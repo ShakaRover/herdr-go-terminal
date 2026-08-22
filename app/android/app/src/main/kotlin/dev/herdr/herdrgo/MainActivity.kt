@@ -1,4 +1,4 @@
-package dev.herdr.herdr_web
+package dev.herdr.herdrgo
 
 import com.easytier.jni.EasyTierForwarder
 import com.easytier.jni.EasyTierJNI

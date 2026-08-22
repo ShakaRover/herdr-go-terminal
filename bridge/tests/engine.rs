@@ -1,14 +1,14 @@
 mod common;
 
 use std::time::Duration;
-use herdr_bridge::herdr::client::HerdrClient;
-use herdr_bridge::state::engine::StateEngine;
+use herdrgo_bridge::herdr::client::HerdrClient;
+use herdrgo_bridge::state::engine::StateEngine;
 
 #[tokio::test]
 async fn engine_polls_and_sorts_triage() {
     let mock = common::MockHerdr::start(common::engine_script()).await;
     let dir = tempfile::tempdir().unwrap();
-    let ledger = herdr_bridge::state::activity::ActivityLedger::load(
+    let ledger = herdrgo_bridge::state::activity::ActivityLedger::load(
         &dir.path().join("activity.json"));
     let engine = StateEngine::new(HerdrClient::new(mock.socket_path.clone()),
         250, 1000, ledger, "default".to_string());
@@ -23,7 +23,7 @@ async fn engine_polls_and_sorts_triage() {
     let view = engine.current();
     assert!(view.connected);
     assert_eq!(view.panes.len(), 3);
-    let (agents, shells) = herdr_bridge::state::view::build_pane_wires(
+    let (agents, shells) = herdrgo_bridge::state::view::build_pane_wires(
         &view, &engine.activity_snapshot(), &engine.session_names(), &|_| false);
     assert_eq!(agents.len(), 2);
     assert_eq!(shells.len(), 1);
@@ -51,7 +51,7 @@ async fn unknown_variant_falls_back_to_lists() {
     ]}));
     let mock = common::MockHerdr::start(script).await;
     let dir = tempfile::tempdir().unwrap();
-    let ledger = herdr_bridge::state::activity::ActivityLedger::load(
+    let ledger = herdrgo_bridge::state::activity::ActivityLedger::load(
         &dir.path().join("activity.json"));
     let engine = StateEngine::new(HerdrClient::new(mock.socket_path.clone()),
         250, 1000, ledger, "default".to_string());
@@ -76,7 +76,7 @@ async fn unknown_variant_falls_back_to_lists() {
 async fn engine_updates_ledger_on_status_transitions() {
     let mock = common::MockHerdr::start(common::engine_script()).await;
     let dir = tempfile::tempdir().unwrap();
-    let ledger = herdr_bridge::state::activity::ActivityLedger::load(
+    let ledger = herdrgo_bridge::state::activity::ActivityLedger::load(
         &dir.path().join("activity.json"));
     let engine = StateEngine::new(HerdrClient::new(mock.socket_path.clone()),
         250, 1000, ledger.clone(), "default".to_string());
@@ -102,7 +102,7 @@ async fn shutdown_flushes_ledger() {
     let mock = common::MockHerdr::start(common::engine_script()).await;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("activity.json");
-    let ledger = herdr_bridge::state::activity::ActivityLedger::load(&path);
+    let ledger = herdrgo_bridge::state::activity::ActivityLedger::load(&path);
     let engine = StateEngine::new(HerdrClient::new(mock.socket_path.clone()),
         250, 1000, ledger.clone(), "default".to_string());
     let (tx, rx) = tokio::sync::watch::channel(false);
@@ -134,7 +134,7 @@ async fn extracts_claude_session_name_after_poll() {
     }));
     let mock = common::MockHerdr::start(script).await;
     let engine = StateEngine::new(HerdrClient::new(mock.socket_path.clone()),
-        250, 1000, herdr_bridge::state::activity::ActivityLedger::load(
+        250, 1000, herdrgo_bridge::state::activity::ActivityLedger::load(
             &tempfile::tempdir().unwrap().path().join("a.json")), "default".to_string());
     let (tx, rx) = tokio::sync::watch::channel(false);
     let e = engine.clone();
@@ -145,7 +145,7 @@ async fn extracts_claude_session_name_after_poll() {
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
     let view = engine.current();
-    let (agents, _) = herdr_bridge::state::view::build_pane_wires(
+    let (agents, _) = herdrgo_bridge::state::view::build_pane_wires(
         &view, &engine.activity_snapshot(), &engine.session_names(), &|_| false);
     let claude = agents.iter().find(|a| a.pane_id == "w1:p1").unwrap();
     assert_eq!(claude.session_name.as_deref(), Some("my-feature"));
@@ -174,11 +174,11 @@ async fn registry_discovers_named_sessions() {
     // 两个 mock 各自绑一个 socket 路径
     let _m1 = common::MockHerdr::start_at(&primary_sock, common::engine_script()).await;
     let _m2 = common::MockHerdr::start_at(&work_sock, common::engine_script()).await;
-    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
+    let mut cfg = herdrgo_bridge::config::Config::from_cli(&herdrgo_bridge::config::Cli::from_process_env());
     cfg.socket_path = primary_sock.clone();
-    let registry = herdr_bridge::sessions::SessionRegistry::new(
+    let registry = herdrgo_bridge::sessions::SessionRegistry::new(
         std::sync::Arc::new(cfg),
-        herdr_bridge::state::activity::ActivityLedger::load(
+        herdrgo_bridge::state::activity::ActivityLedger::load(
             &dir.path().join("activity.json")));
     registry.refresh_once().await;
     assert!(registry.runtime(None).is_ok());
@@ -199,9 +199,9 @@ async fn event_poke_triggers_fast_repoll() {
     }));
     let mock = common::MockHerdr::start(script).await;
     let engine = StateEngine::new(HerdrClient::new(mock.socket_path.clone()), 60_000, 60_000,
-        herdr_bridge::state::activity::ActivityLedger::load(
+        herdrgo_bridge::state::activity::ActivityLedger::load(
             &tempfile::tempdir().unwrap().path().join("a.json")), "default".to_string());
-    let poker = herdr_bridge::herdr::events::EventPoker::new(
+    let poker = herdrgo_bridge::herdr::events::EventPoker::new(
         HerdrClient::new(mock.socket_path.clone()), engine.clone());
     let (tx, rx) = tokio::sync::watch::channel(false);
     let (tx2, rx2) = tokio::sync::watch::channel(false);

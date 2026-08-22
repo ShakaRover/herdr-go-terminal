@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/models.dart';
-import 'package:herdr_web/state/snapshot.dart';
+import 'package:herdrgo/model/models.dart';
+import 'package:herdrgo/state/snapshot.dart';
 
 PaneInfo pane(String id, AgentStatus status, {int? lastActiveAt}) => PaneInfo(
       paneId: id,

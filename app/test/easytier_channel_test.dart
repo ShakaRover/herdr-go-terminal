@@ -10,7 +10,7 @@ library;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/api/easytier_channel.dart';
+import 'package:herdrgo/api/easytier_channel.dart';
 
 class _Harness {
   _Harness() {

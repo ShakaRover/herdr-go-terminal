@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/remote_profile.dart';
+import 'package:herdrgo/model/remote_profile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Map<String, dynamic> validPairingJson() => {

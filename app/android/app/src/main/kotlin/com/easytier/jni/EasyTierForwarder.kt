@@ -7,8 +7,7 @@ package com.easytier.jni
  * 目标 IP:端口。适用于内嵌 EasyTier 但不使用 TUN/VpnService 的场景：应用内
  * 的 HTTP/TCP 客户端直接连接 `127.0.0.1:本地端口` 即可访问虚拟网络服务。
  *
- * 每个 EasyTier 实例同一时刻只能有一个转发器（native data plane session 每实例
- * 仅一个）；多实例通过各自的 instanceName 各起一个转发器。
+ * 每个实例同一时刻只能有一个转发器（native data plane session 每实例仅一个）。
  */
 object EasyTierForwarder {
 

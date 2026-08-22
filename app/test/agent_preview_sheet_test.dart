@@ -13,14 +13,14 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/api/bridge_api.dart';
-import 'package:herdr_web/blocks/prompt_select.dart';
-import 'package:herdr_web/model/models.dart';
-import 'package:herdr_web/ansi/ansi.dart';
-import 'package:herdr_web/state/bridges.dart';
-import 'package:herdr_web/state/settings.dart';
-import 'package:herdr_web/ui/agent/agent_screen.dart';
-import 'package:herdr_web/ui/dashboard/agent_preview_sheet.dart';
+import 'package:herdrgo/api/bridge_api.dart';
+import 'package:herdrgo/blocks/prompt_select.dart';
+import 'package:herdrgo/model/models.dart';
+import 'package:herdrgo/ansi/ansi.dart';
+import 'package:herdrgo/state/bridges.dart';
+import 'package:herdrgo/state/settings.dart';
+import 'package:herdrgo/ui/agent/agent_screen.dart';
+import 'package:herdrgo/ui/dashboard/agent_preview_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 含可识别 prompt 的 pane 文本（与 prompt_action_test 同款形状）。

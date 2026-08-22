@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/history.dart';
+import 'package:herdrgo/model/history.dart';
 
 void main() {
   group('paneHistoryFromJson', () {

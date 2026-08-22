@@ -128,13 +128,13 @@ pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
     let secret = cfg
         .easytier_secret
         .clone()
-        .context("easytier secret not set (HERDR_BRIDGE_EASYTIERSERCRET)")?;
+        .context("easytier secret not set (HERDRGO_BRIDGE_EASYTIERSERCRET)")?;
     let virtual_ip = cfg
         .easytier_virtual_ip
         .as_deref()
         .and_then(|s| s.split('/').next())
         .filter(|s| !s.is_empty())
-        .context("easytier virtual ip not set (HERDR_BRIDGE_EASYTIERSERVIRTUALIP)")?;
+        .context("easytier virtual ip not set (HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP)")?;
     let network_name = cfg.easytier_network_id().context("load network id")?;
     Ok(serde_json::json!({
         "v": 1,
@@ -221,18 +221,18 @@ mod tests {
         assert_listener::<super::DataPlaneListener>();
     }
 
-    /// 清环境后构建 Config；relays 非空时写入 HERDR_BRIDGE_EASYTIERSERVER。
+    /// 清环境后构建 Config；relays 非空时写入 HERDRGO_BRIDGE_EASYTIERSERVER。
     fn fresh_cfg(relays: &str) -> crate::config::Config {
         crate::config::tests::clear();
         if !relays.is_empty() {
-            std::env::set_var("HERDR_BRIDGE_EASYTIERSERVER", relays);
+            std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVER", relays);
         }
         std::env::set_var(
-            "HERDR_BRIDGE_STATE_DIR",
+            "HERDRGO_BRIDGE_STATE_DIR",
             std::env::temp_dir().join(format!("herdr-qr-{}", uuid::Uuid::new_v4())),
         );
-        std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", "s3cret");
-        std::env::set_var("HERDR_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
+        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERCRET", "s3cret");
+        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
         crate::config::Config::from_cli(&crate::config::Cli::from_process_env())
     }
 
@@ -303,12 +303,12 @@ mod tests {
         // 缺 secret / virtual ip 时报错；easytier_server 已非必填。
         assert!(super::pairing_payload(&crate::config::Config::from_cli(
             &crate::config::Cli::from_process_env())).is_err());
-        std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", "s3cret");
+        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERCRET", "s3cret");
         assert!(super::pairing_payload(&crate::config::Config::from_cli(
             &crate::config::Cli::from_process_env())).is_err());
-        std::env::set_var("HERDR_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
+        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
         std::env::set_var(
-            "HERDR_BRIDGE_STATE_DIR",
+            "HERDRGO_BRIDGE_STATE_DIR",
             std::env::temp_dir().join(format!("herdr-qr-{}", uuid::Uuid::new_v4())),
         );
         assert!(super::pairing_payload(&crate::config::Config::from_cli(

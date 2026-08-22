@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/models.dart';
+import 'package:herdrgo/model/models.dart';
 
 void main() {
   group('Snapshot.fromJson', () {

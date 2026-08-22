@@ -1,4 +1,4 @@
-# herdr-web
+# herdrgo
 
 [herdr](https://herdr.dev) agent 的 Flutter 原生手机客户端（Android）。
 
@@ -59,22 +59,22 @@ bridge 部署在 herdr 宿主机上：
 ```bash
 cd bridge
 cargo build --release
-# 产物：bridge/target/release/herdr-bridge，默认监听 127.0.0.1:8787
+# 产物：bridge/target/release/herdrgo-bridge，默认监听 127.0.0.1:8787
 ```
 
 常驻运行可用 `bridge/systemd/` 下的 systemd 单元。对外暴露有两种方式：
 
 1. **EasyTier 远程访问（推荐）**：bridge 内嵌 EasyTier，设置
-   `HERDR_BRIDGE_EASYTIERSERCRET`（+`HERDR_BRIDGE_EASYTIERSERVER` 中继、
-   `HERDR_BRIDGE_EASYTIERSERVIRTUALIP` 静态虚拟 IP）后进入纯 EasyTier
+   `HERDRGO_BRIDGE_EASYTIERSERCRET`（+`HERDRGO_BRIDGE_EASYTIERSERVER` 中继、
+   `HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP` 静态虚拟 IP）后进入纯 EasyTier
    模式，REST API 走 data plane 虚拟 TCP，不监听 OS 端口、不需要
-   TUN/root。`herdr-bridge --show-qr` 打印配对二维码，app 扫码即连
+   TUN/root。`herdrgo-bridge --show-qr` 打印配对二维码，app 扫码即连
    （app 侧同样经内嵌 EasyTier + 本地端口转发，不申请 VpnService）。
    详见 `bridge/README.md` 的「EasyTier 模式」节与设计文档
    [`docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md`](docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md)。
    注意：二维码含完整网络凭据，等同钥匙，只在宿主机终端就地展示。
-2. **前置代理**：bridge 侧设 `HERDR_BRIDGE_DEVICE_HEADER`（+
-   `HERDR_BRIDGE_DEVICE_ALLOWLIST`），app 首次启动填 bridge 地址，并在
+2. **前置代理**：bridge 侧设 `HERDRGO_BRIDGE_DEVICE_HEADER`（+
+   `HERDRGO_BRIDGE_DEVICE_ALLOWLIST`），app 首次启动填 bridge 地址，并在
    「自定义请求头」里填对应 header（否则为只读模式）。
 
 ## 已知限制

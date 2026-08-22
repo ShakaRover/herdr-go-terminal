@@ -10,11 +10,11 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/api/bridge_api.dart';
-import 'package:herdr_web/model/models.dart';
-import 'package:herdr_web/state/bridges.dart';
-import 'package:herdr_web/state/settings.dart';
-import 'package:herdr_web/state/snapshot.dart';
+import 'package:herdrgo/api/bridge_api.dart';
+import 'package:herdrgo/model/models.dart';
+import 'package:herdrgo/state/bridges.dart';
+import 'package:herdrgo/state/settings.dart';
+import 'package:herdrgo/state/snapshot.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// fake BridgeApi：脚本化 snapshot 的 agents，捕获 session 参数。

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/ansi/ansi.dart';
+import 'package:herdrgo/ansi/ansi.dart';
 
 void main() {
   group('parseAnsi 基础', () {

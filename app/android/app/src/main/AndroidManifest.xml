@@ -6,7 +6,7 @@
     <!-- 扫码配对需要相机。 -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <application
-        android:label="herdr"
+        android:label="HerdrGo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

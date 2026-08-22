@@ -8,11 +8,11 @@ async fn upload_app(state_dir: &std::path::Path)
     -> (axum::Router, tokio::sync::watch::Sender<bool>)
 {
     let mock = common::MockHerdr::start(serde_json::Map::new()).await;
-    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
+    let mut cfg = herdrgo_bridge::config::Config::from_cli(&herdrgo_bridge::config::Cli::from_process_env());
     cfg.socket_path = mock.socket_path.clone();
     cfg.state_dir = state_dir.to_path_buf();
-    let (state, sd) = herdr_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
-    (herdr_bridge::http::build_router(state), sd)
+    let (state, sd) = herdrgo_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
+    (herdrgo_bridge::http::build_router(state), sd)
 }
 
 fn multipart_body(field: &str, filename: &str, content_type: &str, data: &[u8]) -> (String, Vec<u8>) {
@@ -97,10 +97,10 @@ async fn sweep_removes_old_files() {
     let ft: std::time::SystemTime = past;
     // 无 filetime crate：用 utimensat via libc 过重；改为暴露 sweep 的 now 参数做测试。
     let _ = ft;
-    herdr_bridge::uploads::sweep_before(dir.path(), std::time::SystemTime::now()
+    herdrgo_bridge::uploads::sweep_before(dir.path(), std::time::SystemTime::now()
         - std::time::Duration::from_secs(48 * 3600));
     assert!(old.exists()); // mtime 是新的，不删
-    herdr_bridge::uploads::sweep_before(dir.path(), std::time::SystemTime::now()
+    herdrgo_bridge::uploads::sweep_before(dir.path(), std::time::SystemTime::now()
         + std::time::Duration::from_secs(3600)); // 阈值在未来 → 全删
     assert!(!old.exists());
 }

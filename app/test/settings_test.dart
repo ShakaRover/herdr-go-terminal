@@ -9,8 +9,8 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/remote_profile.dart';
-import 'package:herdr_web/state/settings.dart';
+import 'package:herdrgo/model/remote_profile.dart';
+import 'package:herdrgo/state/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 用给定的 prefs 初始值建 container。

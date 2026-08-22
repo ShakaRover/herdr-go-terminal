@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/ansi/ansi.dart';
-import 'package:herdr_web/blocks/prompt_model.dart';
-import 'package:herdr_web/blocks/prompt_select.dart';
+import 'package:herdrgo/ansi/ansi.dart';
+import 'package:herdrgo/blocks/prompt_model.dart';
+import 'package:herdrgo/blocks/prompt_select.dart';
 
 // 黄金测试：夹具是 collie 仓库 web/src/fixtures/panes/*.txt 的原样拷贝
 // （真实 ESC 字节的 pane 抓屏），与 collie 的 prompt-select.test.ts 一一对应。

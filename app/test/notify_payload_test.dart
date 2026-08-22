@@ -2,9 +2,9 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/notify/blocked_watch.dart';
-import 'package:herdr_web/notify/foreground_heartbeat.dart';
-import 'package:herdr_web/notify/notify_service.dart';
+import 'package:herdrgo/notify/blocked_watch.dart';
+import 'package:herdrgo/notify/foreground_heartbeat.dart';
+import 'package:herdrgo/notify/notify_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

@@ -25,20 +25,20 @@ const NETWORK_SECRET: &str = "testsecret";
 async fn http_over_data_plane() {
     // bridge 端：静态虚拟 IP + 测试 listener（Config::from_env 读取）
     let state_dir = tempfile::tempdir().unwrap();
-    std::env::set_var("HERDR_BRIDGE_STATE_DIR", state_dir.path());
-    std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", NETWORK_SECRET);
-    std::env::set_var("HERDR_BRIDGE_EASYTIERSERVIRTUALIP", format!("{BRIDGE_IP}/24"));
-    std::env::set_var("HERDR_BRIDGE_EASYTIERSER_TEST_LISTENERS", BRIDGE_LISTENER);
-    let cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
-    let net = herdr_bridge::easytier_net::start_easytier(&cfg).await.unwrap();
+    std::env::set_var("HERDRGO_BRIDGE_STATE_DIR", state_dir.path());
+    std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERCRET", NETWORK_SECRET);
+    std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", format!("{BRIDGE_IP}/24"));
+    std::env::set_var("HERDRGO_BRIDGE_EASYTIERSER_TEST_LISTENERS", BRIDGE_LISTENER);
+    let cfg = herdrgo_bridge::config::Config::from_cli(&herdrgo_bridge::config::Cli::from_process_env());
+    let net = herdrgo_bridge::easytier_net::start_easytier(&cfg).await.unwrap();
     assert_eq!(net.virtual_addr.ip().to_string(), BRIDGE_IP);
     let listener = net.take_listener().unwrap();
 
     // 真实 router + 真实 AppState（/api/v1/config 不碰 herdr socket，
     // registry refresh loop 连不上 socket 只会静默重试）。
     let (state, _shutdown) =
-        herdr_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
-    let app = herdr_bridge::http::build_router(state);
+        herdrgo_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
+    let app = herdrgo_bridge::http::build_router(state);
     tokio::spawn(async move { axum::serve(listener, app.into_make_service()).await.unwrap() });
 
     // client 端：直接用 easytier API 组网，peer 直连 bridge 端 listener。

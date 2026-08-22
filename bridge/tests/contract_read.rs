@@ -8,13 +8,13 @@ async fn test_app(script: serde_json::Map<String, serde_json::Value>)
     -> (common::MockHerdr, axum::Router, tokio::sync::watch::Sender<bool>)
 {
     let mock = common::MockHerdr::start(script).await;
-    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
+    let mut cfg = herdrgo_bridge::config::Config::from_cli(&herdrgo_bridge::config::Cli::from_process_env());
     cfg.socket_path = mock.socket_path.clone();
     // 审计落在 tempdir（函数返回即清理），避免 cargo test 写进真实 state dir。
     let state_dir = tempfile::tempdir().unwrap();
     cfg.state_dir = state_dir.path().to_path_buf();
-    let (state, shutdown) = herdr_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
-    (mock, herdr_bridge::http::build_router(state), shutdown)
+    let (state, shutdown) = herdrgo_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
+    (mock, herdrgo_bridge::http::build_router(state), shutdown)
 }
 
 #[tokio::test]
