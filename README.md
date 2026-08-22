@@ -1,16 +1,44 @@
-# herdrgo
+<div align="center">
 
-[herdr](https://herdr.dev) agent 的 Flutter 原生手机客户端（Android）。
+# HerdrGo
 
-通过本仓库自带的 Rust bridge（`bridge/` 目录）访问 herdr：
-bridge 连 herdr socket，对外提供 REST API（snapshot / pane 读写 / 历史 /
-上传），app 只做客户端，不直接连 herdr socket。
+**把整群 coding agent 装进口袋。**
+**Your whole herd of coding agents, in your pocket.**
 
-设计文档：[`docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md`](docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md)
+[herdr](https://herdr.dev) agent 的原生手机客户端 · A native mobile client for herdr agents
 
-> iOS 适配进行中，断点续作记录见 [`docs/ios-progress.md`](docs/ios-progress.md)。
+`Flutter` · `Android` · `Rust bridge` · `EasyTier P2P`
 
-## 功能
+</div>
+
+---
+
+**中文** | [English](#english)
+
+在电脑上同时跑几个 codex / kimi / claude，人一旦离开工位就只能干等——生怕哪个
+agent 卡在审批弹窗上没人点。HerdrGo 让你在手机上盯住整群 agent：谁在干活、谁
+卡住了等你拍板，一眼看清；点进去就能回话、发键、批准操作，人在哪都能让它们
+继续跑。
+
+配对只要扫一个二维码。bridge 跑在宿主机上，启动即打印二维码，app 一扫就通过
+EasyTier 虚拟网直连——不用配 TUN、不用 root、不用申请 VPN 权限，secret 自动生成
+并持久化，零参数开箱即用。
+
+## 截图 / Screenshots
+
+<p>
+  <img src="docs/screenshots/readme/dashboard.png" width="260" alt="Dashboard：待处理置顶">
+  &nbsp;
+  <img src="docs/screenshots/readme/agent-detail.png" width="260" alt="agent 对话：ANSI 镜像 + 按键条">
+  &nbsp;
+  <img src="docs/screenshots/readme/approval.png" width="260" alt="审批菜单：原生按钮">
+</p>
+
+*左：Dashboard 把卡住等你处理的 agent 置顶（「需要你处理」），其余按状态分组。
+中：agent 对话是带 ANSI 颜色的终端镜像，底部有 Esc / Ctrl+C / 方向键 / 发送。
+右：Claude 式审批菜单被识别成原生按钮，点一下即批准。*
+
+## 功能 / Features
 
 - **Dashboard triage**：blocked 置顶（「需要你处理」），working 其次，其余沉底；
   下拉刷新、断线/只读横幅、多 herdr session 切换。
@@ -23,7 +51,27 @@ bridge 连 herdr socket，对外提供 REST API（snapshot / pane 读写 / 历�
 - **通知**：WorkManager 后台周期轮询（≥15min），新增 blocked 发本地通知，
   点击直达对应 agent；app 前台使用时自动静默。
 
-## 构建
+## 工作原理 / How it works
+
+```
+┌─────────────┐      扫码配对      ┌──────────────────────────────┐
+│  HerdrGo    │ ◄─────────────── │  herdrgo-bridge（宿主机）     │
+│  app（手机）│                    │  · 连本机 herdr socket        │
+└──────┬──────┘                    │  · 对外提供 REST API          │
+       │ EasyTier 虚拟网           │  · 内嵌 EasyTier（无 TUN）    │
+       │ （P2P 加密，中继不可见）  └──────────────┬───────────────┘
+       └──────────────────────────────────────────┘
+                        data plane 虚拟 TCP
+```
+
+app 不直接连 herdr socket，一切读写都经过 bridge；bridge 内嵌 EasyTier 把
+REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 做本地端口转发，全程用户态。
+
+设计文档：[`docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md`](docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md)
+
+> iOS 适配进行中，断点续作记录见 [`docs/ios-progress.md`](docs/ios-progress.md)。
+
+## 构建 / Build
 
 工具链固定在仓库的 `.toolchain/`（Flutter 3.47.0 + Android SDK 36，
 NDK 26 通过符号链接复用 `/opt/android-sdk`）：
@@ -52,7 +100,7 @@ app/tool/sync_easytier.sh   # 幂等；EASYTIER_REPO 可覆盖 EasyTier 仓库�
 `EasyTierManager.kt`/`EasyTierVpnService.t.kt` 依赖 VpnService 与 moshi，
 不同步。Dart 侧封装见 `app/lib/api/easytier_channel.dart`。
 
-## 配置
+## 部署 bridge / Deploy the bridge
 
 bridge 部署在 herdr 宿主机上：
 
@@ -78,7 +126,7 @@ secret 即网络凭据，等同钥匙，只在宿主机终端就地展示、勿�
 gate，app 首次启动填 bridge 地址并在「自定义请求头」里填对应 header（否则
 为只读模式）。
 
-## 已知限制
+## 已知限制 / Known limitations
 
 - 后台 blocked 通知只监视 primary session；非 primary session 的 agent
   变 blocked 不会触发通知。
@@ -88,8 +136,56 @@ gate，app 首次启动填 bridge 地址并在「自定义请求头」里填对�
   高亮选项）；自由文本项确认后仍可打字回答。
 - 后台轮询最小周期 15 分钟（Android WorkManager 下限），通知可能延迟。
 
-## 测试夹具
+## 测试夹具 / Test fixtures
 
 `app/test/fixtures/panes/*.txt` 是 vendored 的真实 pane 抓屏
 （byte-faithful，含 CRLF；`.gitattributes` 已禁用文本归一化），
 与外部仓库无运行时关系；prompt-select 语法的黄金测试基于这些夹具。
+
+---
+
+<a id="english"></a>
+
+## English
+
+HerdrGo is the native mobile client for [herdr](https://herdr.dev) agents.
+Running several coding agents (codex, kimi, claude, …) on your dev box is great
+until you step away — then any of them can stall on an approval prompt with
+nobody to click it. HerdrGo lets you watch the whole herd from your phone:
+see at a glance who's working and who's blocked waiting on you, then tap in to
+reply, send keys, or approve — from anywhere.
+
+Pairing is a single QR scan. The bridge runs on your host, prints a QR code on
+startup, and the app connects over an EasyTier virtual network — no TUN, no
+root, no VPN permission. The secret is generated and persisted automatically;
+zero arguments needed out of the box.
+
+### Features
+
+- **Dashboard triage** — blocked agents float to the top ("needs you"), working
+  next, the rest sink; pull-to-refresh, offline/read-only banners, multi-session.
+- **Agent conversation** — ANSI-colored terminal mirror with auto-follow, a reply
+  box, and a special key bar (Esc / Ctrl+C / arrows / Tab / Shift+Tab / Enter).
+- **Native dialog buttons** — Claude-style single-select approval/prompt menus
+  (prompt-select) become native buttons, guarded by a fresh-read → re-recognize →
+  structural-equality → expectedPrompt-binding chain before any key is sent.
+- **History** — paged full conversation read from the agent's own session log.
+- **Images** — pick from the gallery, upload to the host, path auto-filled.
+- **Notifications** — WorkManager background polling (≥15 min) with local
+  notifications for newly-blocked agents, tapping straight into the agent.
+
+### How it works
+
+The app never talks to the herdr socket directly; everything goes through the
+Rust bridge (`bridge/`), which embeds EasyTier to expose its REST API on a
+virtual TCP data plane. The app embeds EasyTier too and forwards a local port —
+all in userspace, no TUN or root. The network secret is the only credential:
+keep the QR code private.
+
+### Build & deploy
+
+See the Chinese sections above — the commands are identical. Toolchain is pinned
+in `.toolchain/` (Flutter 3.47.0 + Android SDK 36, NDK 26). Build the app with
+`flutter build apk --release`, build the bridge with `cargo build --release`,
+then run `herdrgo-bridge` (zero-config EasyTier by default; `--secret ""` for
+plain HTTP direct mode) and scan the QR code from the app.
