@@ -34,5 +34,5 @@ Future<String?> showRenamePaneDialog(BuildContext context, PaneInfo pane) {
         ),
       ],
     ),
-  );
+  ).whenComplete(controller.dispose);
 }

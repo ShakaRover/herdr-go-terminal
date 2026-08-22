@@ -83,7 +83,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
     if (label == null || label.isEmpty || !mounted) return;
     await ref.read(profileStoreProvider).setLabel(profile.id, label);
     await ref.read(enabledProfilesProvider.notifier).reload();
