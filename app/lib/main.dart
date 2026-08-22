@@ -65,6 +65,11 @@ class HerdrApp extends StatelessWidget {
   }
 }
 
+/// 任一 enabled bridge 连接存在即视为已配置（RootGate 据此进 dashboard）。
+/// bridgesProvider 只含 enabled 项。
+bool hasAnyConnection(WidgetRef ref) =>
+    ref.watch(bridgesProvider).isNotEmpty;
+
 /// 任一 enabled bridge 连接存在 → dashboard；空配置 → 设置页。
 class RootGate extends ConsumerWidget {
   const RootGate({super.key, this.launchTarget});
@@ -78,7 +83,7 @@ class RootGate extends ConsumerWidget {
       WidgetsBinding.instance.addPostFrameCallback(
           (_) => _openPane(target.$1, target.$2));
     }
-    return ref.watch(bridgesProvider).isNotEmpty
+    return hasAnyConnection(ref)
         ? const DashboardScreen()
         : const SettingsScreen();
   }
