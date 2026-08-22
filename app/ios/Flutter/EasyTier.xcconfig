@@ -10,6 +10,8 @@
 // `___chkstk_darwin` 栈探测符号由 Xcode 工具链里的 libclang_rt.ios.a 提供。
 
 EASYTIER_LIB_DIR = $(SRCROOT)/Frameworks
-LIBRARY_SEARCH_PATHS = $(inherited) $(EASYTIER_LIB_DIR)/$(PLATFORM_NAME) $(EASYTIER_LIB_DIR)
+// libclang_rt.ios.a 在工具链 clang/<版本>/lib/darwin 下；CLANG_VERSION 不是
+// build setting 变量会展开为空，这里硬编主版本号（升级 Xcode 主版本时同步）。
+LIBRARY_SEARCH_PATHS = $(inherited) $(EASYTIER_LIB_DIR)/$(PLATFORM_NAME) $(EASYTIER_LIB_DIR) $(TOOLCHAIN_DIR)/usr/lib/clang/21/lib/darwin
 HEADER_SEARCH_PATHS = $(inherited) $(EASYTIER_LIB_DIR)
-OTHER_LDFLAGS = $(inherited) -leasytier_ios -lclang_rt.ios
+OTHER_LDFLAGS = $(inherited) -leasytier_ios -lclang_rt.ios -framework SystemConfiguration -framework CoreFoundation -framework Security

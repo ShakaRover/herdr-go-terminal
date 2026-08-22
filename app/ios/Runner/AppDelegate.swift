@@ -12,7 +12,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    EasyTierChannel.register(with: engineBridge.binaryMessenger)
+    EasyTierChannel.register(with: engineBridge.applicationRegistrar.messenger())
   }
 }
 
