@@ -27,6 +27,11 @@ Flutter/flutter_export_environment.sh
 ServiceDefinitions.json
 Runner/GeneratedPluginRegistrant.*
 
+# EasyTier 静态库是构建产物（178MB），由 EasyTier 仓库的
+# easytier-contrib/easytier-ios 构建后拷入，不入库；头文件例外保留。
+Frameworks/iphoneos/libeasytier_ios.a
+Frameworks/iphonesimulator/libeasytier_ios.a
+
 # Exceptions to above rules.
 !default.mode1v3
 !default.mode2v3

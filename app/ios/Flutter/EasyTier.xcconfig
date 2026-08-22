@@ -1,0 +1,15 @@
+// EasyTier 静态库链接配置（被 Debug/Release.xcconfig include）。
+//
+// libeasytier_ios.a 由 EasyTier 仓库的 easytier-contrib/easytier-ios 在 macOS
+// 上构建（build-xcframework.sh 或 cargo build --target aarch64-apple-ios）。
+// 把 device / simulator 两个 slice 分别放到：
+//   ios/Frameworks/iphoneos/libeasytier_ios.a
+//   ios/Frameworks/iphonesimulator/libeasytier_ios.a（可选，仅模拟器需要）
+// 头文件 easytier-ios.h 在 ios/Frameworks/ 下（已 vendored）。
+//
+// `___chkstk_darwin` 栈探测符号由 Xcode 工具链里的 libclang_rt.ios.a 提供。
+
+EASYTIER_LIB_DIR = $(SRCROOT)/Frameworks
+LIBRARY_SEARCH_PATHS = $(inherited) $(EASYTIER_LIB_DIR)/$(PLATFORM_NAME) $(EASYTIER_LIB_DIR)
+HEADER_SEARCH_PATHS = $(inherited) $(EASYTIER_LIB_DIR)
+OTHER_LDFLAGS = $(inherited) -leasytier_ios -lclang_rt.ios
