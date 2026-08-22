@@ -43,6 +43,11 @@ class EasyTierChannel {
     return _parseVirtualIp(json);
   }
 
+  /// 调试用：返回 [instanceName] 实例的原始 collectNetworkInfos JSON。
+  Future<String?> currentVirtualIpRaw(String instanceName) =>
+      _channel.invokeMethod<String>(
+          'currentVirtualIp', {'instanceName': instanceName});
+
   /// 在 [instanceName] 实例上启动本地 TCP 转发器，
   /// 返回实际监听的本地端口（127.0.0.1:port）。
   Future<int> startForwarder(

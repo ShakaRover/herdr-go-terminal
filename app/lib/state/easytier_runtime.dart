@@ -176,8 +176,10 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   Future<String?> _waitVirtualIp(EasyTierChannel channel, int gen) async {
     final deadline = DateTime.now().add(virtualIpTimeout);
     for (;;) {
-      final ip = await channel.currentVirtualIp(profileId);
-      if (ip != null) return ip;
+      final raw = await channel.currentVirtualIpRaw(profileId);
+      // ignore: avoid_print
+      print('[easytier] _waitVirtualIp $profileId raw=$raw');
+      if (raw != null) return raw;
       if (gen != _generation) return null;
       if (DateTime.now().isAfter(deadline)) return null;
       await Future<void>.delayed(pollInterval);
