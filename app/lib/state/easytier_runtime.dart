@@ -119,11 +119,18 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       if (ip == null) {
         throw StateError('等待虚拟 IP 超时（${virtualIpTimeout.inSeconds}s）');
       }
+      // ignore: avoid_print
+      print('[easytier] instance $profileId got ip=$ip, '
+          'forwarding to ${profile.virtualIp}:${profile.port}');
       _localPort =
           await channel.startForwarder(profileId, profile.virtualIp, profile.port);
       if (gen != _generation) return;
+      // ignore: avoid_print
+      print('[easytier] instance $profileId forwarder on :$_localPort');
       state = EasyTierReady(_localPort);
     } catch (e) {
+      // ignore: avoid_print
+      print('[easytier] instance $profileId connect failed: $e');
       if (gen != _generation) return;
       await _stopForwarder(channel);
       try {
