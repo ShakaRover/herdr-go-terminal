@@ -10,6 +10,7 @@ async fn main() {
                 .unwrap_or_else(|_| "herdr_bridge=info".into()),
         )
         .init();
+    herdr_bridge::config::sanitize_env();
     let cli = herdr_bridge::config::Cli::parse();
     let cfg = Arc::new(herdr_bridge::config::Config::from_cli(&cli));
     std::fs::create_dir_all(&cfg.state_dir).expect("create state dir");

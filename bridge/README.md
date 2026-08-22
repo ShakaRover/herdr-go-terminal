@@ -64,7 +64,8 @@ systemctl --user restart herdr-bridge
 有对应的 CLI 参数（kebab-case，如 `HERDR_BRIDGE_PORT` ↔ `--port`），优先级
 **CLI > 环境变量 > 默认值**。列表类参数接受逗号分隔或重复传参；布尔参数
 接受 `on/off`、`1/0`、`true/false`。类型或取值非法时启动即报错退出；
-低于下限的数值 clamp 到下限并告警。
+低于下限的数值 clamp 到下限并告警。环境变量值解析前会去除首尾空白，
+空白值视为未设置。
 
 ```bash
 # CLI 传参

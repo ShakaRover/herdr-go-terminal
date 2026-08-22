@@ -121,7 +121,25 @@ pub struct Cli {
 impl Cli {
     /// 仅从进程环境解析（忽略 argv）。供测试与库调用方使用。
     pub fn from_process_env() -> Self {
+        sanitize_env();
         Self::parse_from(["herdr-bridge"])
+    }
+}
+/// 解析前规范化进程环境：env 值 trim 后为空视为未设置（兼容旧
+/// env_string 语义，避免 `HERDR_BRIDGE_PORT=` 之类被 clap 硬报错）。
+pub fn sanitize_env() {
+    for (k, v) in std::env::vars_os() {
+        let Some(name) = k.to_str() else { continue };
+        if !name.starts_with("HERDR_") {
+            continue;
+        }
+        let Ok(s) = v.into_string() else { continue };
+        let t = s.trim();
+        if t.is_empty() {
+            std::env::remove_var(name);
+        } else if t.len() != s.len() {
+            std::env::set_var(name, t);
+        }
     }
 }
 
