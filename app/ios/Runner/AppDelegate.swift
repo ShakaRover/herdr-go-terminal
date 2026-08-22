@@ -45,15 +45,18 @@ final class EasyTierChannel {
           result(nil)
         case "currentVirtualIp":
           let instanceName = try Self.arg(call, "instanceName")
-          // 过滤 collectNetworkInfos 结果，只回传目标实例。
+          // 过滤 collectNetworkInfos 结果，只回传目标实例（保留 map 包装层，
+          // Dart 侧 _parseVirtualIp 期望 {"map": {"<name>": <info>}}）。
           guard let json = Self.takeOwnedString(easytier_ios_collect_network_infos(10)),
                 let data = json.data(using: .utf8),
                 let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let info = obj[instanceName] else {
+                let map = obj["map"] as? [String: Any],
+                let info = map[instanceName] else {
             result(nil)
             return
           }
-          let filtered = try JSONSerialization.data(withJSONObject: [instanceName: info])
+          let filtered = try JSONSerialization.data(
+            withJSONObject: ["map": [instanceName: info]])
           result(String(data: filtered, encoding: .utf8))
         case "startForwarder":
           let instanceName = try Self.arg(call, "instanceName")
