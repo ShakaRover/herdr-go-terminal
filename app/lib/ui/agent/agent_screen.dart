@@ -13,6 +13,7 @@ import '../../state/snapshot.dart';
 import '../history/history_screen.dart';
 import '../status_style.dart';
 import 'ansi_span.dart';
+import 'rename_pane_dialog.dart';
 
 /// agent 详情：输出镜像 + 回复框 + 特殊按键条。
 class AgentScreen extends ConsumerStatefulWidget {
@@ -224,6 +225,34 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         .showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
   }
 
+  /// 重命名 agent：调 herdr pane.rename，AppBar 标题随下一次快照轮询刷新。
+  Future<void> _rename() async {
+    final api = ref.read(apiProvider(widget.bridgeId));
+    final pane = ref
+        .read(bridgeSnapshotProvider(widget.bridgeId))
+        .data
+        ?.agents
+        .where((p) => p.paneId == widget.paneId)
+        .firstOrNull;
+    if (api == null || pane == null || _sending) return;
+    final label = await showRenamePaneDialog(context, pane);
+    if (label == null || !mounted) return;
+    setState(() => _sending = true);
+    try {
+      final res = await api.renamePane(widget.paneId, label,
+          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      if (!mounted) return;
+      _toast(res.success
+          ? (label.isEmpty ? '已清除别名' : '已重命名')
+          : (res.error ?? '重命名失败'));
+      if (res.success) await _refreshAll();
+    } on ApiException catch (e) {
+      _toast('重命名失败：$e');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final paneKey = (bridgeId: widget.bridgeId, paneId: widget.paneId);
@@ -283,6 +312,12 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: _refreshAll,
           ),
+          if (pane != null && !readOnly)
+            IconButton(
+              tooltip: '重命名',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _sending ? null : _rename,
+            ),
           if (pane?.hasSession == true)
             IconButton(
               tooltip: '历史',

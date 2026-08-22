@@ -194,6 +194,22 @@ class ProfileStore {
     if (found) await _save(all);
   }
 
+  /// 更新单条 profile 的展示名（设备别名）并重写列表；空白 label 忽略。
+  Future<void> setLabel(String id, String label) async {
+    final trimmed = label.trim();
+    if (trimmed.isEmpty) return;
+    final all = await list();
+    var found = false;
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id == id) {
+        all[i] = all[i].copyWith(label: trimmed);
+        found = true;
+        break;
+      }
+    }
+    if (found) await _save(all);
+  }
+
   Future<void> _save(List<RemoteProfile> all) => _prefs.setString(
       profileStorePrefsKey, jsonEncode(all.map((p) => p.toJson()).toList()));
 }

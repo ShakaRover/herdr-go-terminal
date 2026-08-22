@@ -287,5 +287,26 @@ void main() {
       expect(list, hasLength(1));
       expect(list.single.enabled, isTrue);
     });
+
+    test('setLabel 改名后持久生效，其余字段不变', () async {
+      final store = await freshStore();
+      final p = await store.add(RemoteProfile.fromPairingJson(validPairingJson()));
+      await store.setLabel(p.id, '我的 NAS');
+      final got = await (await freshStore()).getById(p.id);
+      expect(got, isNotNull);
+      expect(got!.label, '我的 NAS');
+      expect(got.id, p.id);
+      expect(got.enabled, p.enabled);
+      expect(got.virtualIp, p.virtualIp);
+    });
+
+    test('setLabel 空白忽略，不存在的 id 不报错', () async {
+      final store = await freshStore();
+      final p = await store.add(RemoteProfile.fromPairingJson(validPairingJson()));
+      await store.setLabel(p.id, '   ');
+      expect((await store.getById(p.id))!.label, p.label);
+      await store.setLabel('no-such-id', 'x');
+      expect(await store.list(), hasLength(1));
+    });
   });
 }

@@ -17,6 +17,7 @@ import '../../state/pinned.dart';
 import '../../state/snapshot.dart';
 import '../agent/agent_screen.dart';
 import '../agent/ansi_span.dart';
+import '../agent/rename_pane_dialog.dart';
 import '../status_style.dart';
 
 /// 长按弹出的预览卡：最近一屏 ANSI + 状态 + 上下文按钮/通用动作 + pin +
@@ -168,10 +169,36 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
     if (mounted) _toast(widget.pinned ? '已取消置顶' : '已置顶');
   }
 
+  /// 重命名 agent：调 herdr pane.rename，显示名随下一次快照轮询刷新。
+  Future<void> _rename() async {
+    final api = ref.read(apiProvider(widget.bridgeId));
+    if (api == null || _busy) return;
+    final label = await showRenamePaneDialog(context, widget.pane);
+    if (label == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final res = await api.renamePane(widget.pane.paneId, label,
+          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      if (!mounted) return;
+      if (res.success) {
+        _toast(label.isEmpty ? '已清除别名' : '已重命名');
+      } else {
+        _toast(res.error ?? '重命名失败');
+      }
+    } on ApiException catch (e) {
+      if (mounted) _toast(e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final pane = widget.pane;
+    final readOnly = ref.watch(bridgeSnapshotProvider(widget.bridgeId)
+            .select((s) => s.data?.readOnly)) ??
+        false;
 
     return SafeArea(
       child: Padding(
@@ -207,6 +234,11 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
                       ? Icons.push_pin
                       : Icons.push_pin_outlined),
                   onPressed: _togglePinned,
+                ),
+                IconButton(
+                  tooltip: readOnly ? '只读模式，无法重命名' : '重命名',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: readOnly || _busy ? null : _rename,
                 ),
                 TextButton(
                   onPressed: _openDetail,

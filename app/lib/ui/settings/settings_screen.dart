@@ -58,6 +58,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _reloadProfiles();
   }
 
+  /// 编辑设备别名（展示名）：本地落盘 + 刷新连接集合。
+  Future<void> _editLabel(RemoteProfile profile) async {
+    final controller = TextEditingController(text: profile.label);
+    final label = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('设备别名'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 32,
+          decoration: const InputDecoration(hintText: '展示名'),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (label == null || label.isEmpty || !mounted) return;
+    await ref.read(profileStoreProvider).setLabel(profile.id, label);
+    await ref.read(enabledProfilesProvider.notifier).reload();
+    await _reloadProfiles();
+  }
+
   Future<void> _confirmDelete(RemoteProfile profile) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -116,6 +148,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          tooltip: '编辑别名',
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => _editLabel(p),
+                        ),
                         Switch(
                           value: p.enabled,
                           onChanged: (v) => _setEnabled(p, v),
