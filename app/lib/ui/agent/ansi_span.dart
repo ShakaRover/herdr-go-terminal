@@ -1,7 +1,7 @@
 /// ANSI 模型 → Flutter TextSpan 的映射。渲染只发生在这里。
 library;
 
-import 'package:flutter/painting.dart';
+import 'package:flutter/material.dart';
 
 import '../../ansi/ansi.dart';
 
@@ -53,3 +53,16 @@ InlineSpan linesToSpan(List<StyledLine> lines, {double fontSize = 12.5}) {
 
 /// 镜像底色（Scaffold/容器背景用）。
 Color get mirrorBackground => _mirrorBgColor;
+
+/// 一块 ANSI 终端镜像（可选择复制）。预览卡等小块场景用。
+class AnsiSpan extends StatelessWidget {
+  const AnsiSpan({super.key, required this.lines, this.fontSize = 12.5});
+
+  final List<StyledLine> lines;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) => SelectableText.rich(
+        TextSpan(children: [linesToSpan(lines, fontSize: fontSize)]),
+      );
+}
