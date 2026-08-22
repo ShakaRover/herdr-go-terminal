@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,9 +21,13 @@ void _openPane(String paneId) {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  await registerBackgroundWatch();
-  await initNotifications(onTap: _openPane);
-  final launchPaneId = await consumeLaunchPaneId();
+  // 后台 blocked 通知是 Android-only（WorkManager）；iOS v1 不做后台轮询。
+  String? launchPaneId;
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    await registerBackgroundWatch();
+    await initNotifications(onTap: _openPane);
+    launchPaneId = await consumeLaunchPaneId();
+  }
   runApp(
     ProviderScope(
       overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
