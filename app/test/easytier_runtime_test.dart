@@ -339,7 +339,7 @@ disable_upnp = true
       expect(
           channel.calls
               .where((c) => c.startsWith('startForwarder(${profile2.id},')),
-          ['startForwarder(${profile2.id},10.10.64.62:46811)']);
+          ['startForwarder(${profile2.id},10.10.64.99:46811)']);
 
       // disconnect 一个实例，另一个保持 Ready 且只停本实例。
       channel.calls.clear();

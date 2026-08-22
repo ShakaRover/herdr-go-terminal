@@ -112,12 +112,15 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     final channel = ref.read(easytierChannelProvider);
     try {
       await channel.startInstance(buildInstanceToml(profile));
+      // 等本实例拿到虚拟 IP（证明 EasyTier 已连上网络），然后向
+      // bridge 的虚拟 IP（pairing 里的 virtualIp）起转发器。
       final ip = await _waitVirtualIp(channel, gen);
       if (gen != _generation) return;
       if (ip == null) {
         throw StateError('等待虚拟 IP 超时（${virtualIpTimeout.inSeconds}s）');
       }
-      _localPort = await channel.startForwarder(profileId, ip, profile.port);
+      _localPort =
+          await channel.startForwarder(profileId, profile.virtualIp, profile.port);
       if (gen != _generation) return;
       state = EasyTierReady(_localPort);
     } catch (e) {
