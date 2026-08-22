@@ -8,6 +8,7 @@ import '../../state/snapshot.dart';
 import '../../util/relative_time.dart';
 import '../agent/agent_screen.dart';
 import '../settings/settings_screen.dart';
+import 'agent_preview_sheet.dart';
 
 /// triage 首页：「已置顶」分组最顶，随后 blocked（需要你处理）、working、idle/done。
 class DashboardScreen extends ConsumerWidget {
@@ -244,45 +245,6 @@ class _AgentCard extends ConsumerWidget {
   final PaneInfo pane;
   final bool pinned;
 
-  Future<void> _togglePinned(BuildContext context, WidgetRef ref) async {
-    final session = ref.read(sessionFilterProvider);
-    await ref.read(pinnedPanesProvider.notifier).toggle(session, pane.paneId);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(pinned ? '已取消置顶' : '已置顶'),
-        duration: const Duration(seconds: 2),
-      ));
-    }
-  }
-
-  void _showPinMenu(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading:
-                  Icon(pinned ? Icons.push_pin_outlined : Icons.push_pin),
-              title: Text(pinned ? '取消置顶' : '置顶'),
-              onTap: () {
-                Navigator.of(sheetCtx).pop();
-                _togglePinned(context, ref);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.close),
-              title: const Text('取消'),
-              onTap: () => Navigator.of(sheetCtx).pop(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
@@ -331,7 +293,8 @@ class _AgentCard extends ConsumerWidget {
                 builder: (_) => AgentScreen(paneId: pane.paneId)),
           );
         },
-        onLongPress: () => _showPinMenu(context, ref),
+        onLongPress: () =>
+            AgentPreviewSheet.show(context, pane: pane, pinned: pinned),
       ),
     );
   }
