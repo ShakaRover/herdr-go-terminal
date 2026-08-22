@@ -2,153 +2,18 @@
 
 # HerdrGo
 
-**把整群 coding agent 装进口袋。**
 **Your whole herd of coding agents, in your pocket.**
 
-[herdr](https://herdr.dev) agent 的原生手机客户端 · A native mobile client for herdr agents
+A native mobile client for [herdr](https://herdr.dev) agents
 
 `Flutter` · `Android` · `Rust bridge` · `EasyTier P2P`
+
+**[中文文档 → README_CN.md](README_CN.md)**
 
 </div>
 
 ---
 
-**中文** | [English](#english)
-
-在电脑上同时跑几个 codex / kimi / claude，人一旦离开工位就只能干等——生怕哪个
-agent 卡在审批弹窗上没人点。HerdrGo 让你在手机上盯住整群 agent：谁在干活、谁
-卡住了等你拍板，一眼看清；点进去就能回话、发键、批准操作，人在哪都能让它们
-继续跑。
-
-配对只要扫一个二维码。bridge 跑在宿主机上，启动即打印二维码，app 一扫就通过
-EasyTier 虚拟网直连——不用配 TUN、不用 root、不用申请 VPN 权限，secret 自动生成
-并持久化，零参数开箱即用。
-
-## 截图 / Screenshots
-
-<p>
-  <img src="docs/screenshots/readme/dashboard.png" width="260" alt="Dashboard：待处理置顶">
-  &nbsp;
-  <img src="docs/screenshots/readme/agent-detail.png" width="260" alt="agent 对话：ANSI 镜像 + 按键条">
-  &nbsp;
-  <img src="docs/screenshots/readme/approval.png" width="260" alt="审批菜单：原生按钮">
-</p>
-
-*左：Dashboard 把卡住等你处理的 agent 置顶（「需要你处理」），其余按状态分组。
-中：agent 对话是带 ANSI 颜色的终端镜像，底部有 Esc / Ctrl+C / 方向键 / 发送。
-右：Claude 式审批菜单被识别成原生按钮，点一下即批准。*
-
-## 功能 / Features
-
-- **Dashboard triage**：blocked 置顶（「需要你处理」），working 其次，其余沉底；
-  下拉刷新、断线/只读横幅、多 herdr session 切换。
-- **agent 对话**：ANSI 彩色输出镜像（自动跟随底部）、回复框、特殊按键条
-  （Esc / Ctrl+C / 方向键 / Tab / Shift+Tab / Enter）。
-- **对话框按钮**：识别 Claude 式单选审批/提问菜单（prompt-select）为原生按钮；
-  点击时经「新鲜读取 → 重新识别 → 结构相等 → expectedPrompt 绑定」防护链后才发键。
-- **历史**：从 agent 自己的会话日志分页读完整对话（终端滚屏之外的部分）。
-- **图片**：相册选图上传到宿主机，返回路径自动填入回复框。
-- **通知**：WorkManager 后台周期轮询（≥15min），新增 blocked 发本地通知，
-  点击直达对应 agent；app 前台使用时自动静默。
-
-## 工作原理 / How it works
-
-```
-┌─────────────┐      扫码配对      ┌──────────────────────────────┐
-│  HerdrGo    │ ◄─────────────── │  herdrgo-bridge（宿主机）     │
-│  app（手机）│                    │  · 连本机 herdr socket        │
-└──────┬──────┘                    │  · 对外提供 REST API          │
-       │ EasyTier 虚拟网           │  · 内嵌 EasyTier（无 TUN）    │
-       │ （P2P 加密，中继不可见）  └──────────────┬───────────────┘
-       └──────────────────────────────────────────┘
-                        data plane 虚拟 TCP
-```
-
-app 不直接连 herdr socket，一切读写都经过 bridge；bridge 内嵌 EasyTier 把
-REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 做本地端口转发，全程用户态。
-
-设计文档：[`docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md`](docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md)
-
-> iOS 适配进行中，断点续作记录见 [`docs/ios-progress.md`](docs/ios-progress.md)。
-
-## 构建 / Build
-
-工具链固定在仓库的 `.toolchain/`（Flutter 3.47.0 + Android SDK 36，
-NDK 26 通过符号链接复用 `/opt/android-sdk`）：
-
-```bash
-source .toolchain/env.sh
-cd app
-flutter pub get
-flutter test                 # 单测（含 pane 夹具黄金测试）
-flutter build apk --release  # 产物：app/build/app/outputs/flutter-apk/app-release.apk
-```
-
-debug 构建把 `app-debug.apk` 直接 `adb install` 到模拟器/手机即可。
-
-### EasyTier JNI 同步
-
-app 内嵌 EasyTier（无 TUN，经本地 127.0.0.1 端口转发访问虚拟网络内的
-bridge）。原生产物（`libeasytier_android_jni.so` + Kotlin 绑定）由
-`app/tool/sync_easytier.sh` 从 EasyTier 仓库构建并拷入
-`app/android/app/src/main/`（jniLibs 与 `kotlin/com/easytier/jni/`）：
-
-```bash
-app/tool/sync_easytier.sh   # 幂等；EASYTIER_REPO 可覆盖 EasyTier 仓库路径
-```
-
-`EasyTierManager.kt`/`EasyTierVpnService.t.kt` 依赖 VpnService 与 moshi，
-不同步。Dart 侧封装见 `app/lib/api/easytier_channel.dart`。
-
-## 部署 bridge / Deploy the bridge
-
-bridge 部署在 herdr 宿主机上：
-
-```bash
-cd bridge
-cargo build --release
-# 产物：bridge/target/release/herdrgo-bridge
-```
-
-常驻运行可用 `bridge/systemd/` 下的 systemd 单元。bridge **默认零配置即进入
-EasyTier 模式**：自动生成并持久化网络 secret，经默认中继
-`txt://herdrgo.et-link.cc` 组网，REST API 走 data plane 虚拟 TCP，不监听 OS
-端口、不需要 TUN/root。启动时打印配对二维码，app 扫码即连（app 侧同样经
-内嵌 EasyTier + 本地端口转发，不申请 VpnService）。常用选项只有
-`--secret` / `--server` / `--port`（`--help`），高级选项见 `--help-advance`。
-secret 即网络凭据，等同钥匙，只在宿主机终端就地展示、勿泄露。详见
-`bridge/README.md` 与设计文档
-[`docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md`](docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md)。
-
-如需走 HTTP 直连（本机/前置代理调试），显式关闭 EasyTier：`herdrgo-bridge
---secret ""`，此时监听 `--host`/`--http-port`（默认 `127.0.0.1:8787`），并可用
-`HERDRGO_BRIDGE_DEVICE_HEADER`（+`HERDRGO_BRIDGE_DEVICE_ALLOWLIST`）做 device
-gate，app 首次启动填 bridge 地址并在「自定义请求头」里填对应 header（否则
-为只读模式）。
-
-## 已知限制 / Known limitations
-
-- 后台 blocked 通知只监视 primary session；非 primary session 的 agent
-  变 blocked 不会触发通知。
-- 识别为按钮的对话框只有单选类（prompt-select）；wizard/multi-select/menu
-  落到原始镜像 + 按键条操作（v1 明确不移植）。
-- 对话框显示在屏幕上时从回复框发送文本会先弹确认（盲发 Enter 可能批准
-  高亮选项）；自由文本项确认后仍可打字回答。
-- 后台轮询最小周期 15 分钟（Android WorkManager 下限），通知可能延迟。
-
-## 测试夹具 / Test fixtures
-
-`app/test/fixtures/panes/*.txt` 是 vendored 的真实 pane 抓屏
-（byte-faithful，含 CRLF；`.gitattributes` 已禁用文本归一化），
-与外部仓库无运行时关系；prompt-select 语法的黄金测试基于这些夹具。
-
----
-
-<a id="english"></a>
-
-## English
-
-HerdrGo is the native mobile client for [herdr](https://herdr.dev) agents.
 Running several coding agents (codex, kimi, claude, …) on your dev box is great
 until you step away — then any of them can stall on an approval prompt with
 nobody to click it. HerdrGo lets you watch the whole herd from your phone:
@@ -157,35 +22,140 @@ reply, send keys, or approve — from anywhere.
 
 Pairing is a single QR scan. The bridge runs on your host, prints a QR code on
 startup, and the app connects over an EasyTier virtual network — no TUN, no
-root, no VPN permission. The secret is generated and persisted automatically;
-zero arguments needed out of the box.
+root, no VPN permission. The network secret is generated and persisted
+automatically, so it works out of the box with zero arguments.
 
-### Features
+## Screenshots
+
+<p>
+  <img src="docs/screenshots/readme/dashboard.png" width="260" alt="Dashboard: blocked agents pinned to the top">
+  &nbsp;
+  <img src="docs/screenshots/readme/agent-detail.png" width="260" alt="Agent conversation: ANSI mirror + key bar">
+  &nbsp;
+  <img src="docs/screenshots/readme/approval.png" width="260" alt="Approval menu rendered as native buttons">
+</p>
+
+*Left: the dashboard pins agents that need you ("需要你处理" = needs your input)
+above the working ones. Middle: the agent conversation is a terminal mirror with
+ANSI colors, plus a key bar for Esc / Ctrl+C / arrows / send. Right: a
+Claude-style approval menu recognized as native buttons — one tap to approve.*
+
+## Features
 
 - **Dashboard triage** — blocked agents float to the top ("needs you"), working
-  next, the rest sink; pull-to-refresh, offline/read-only banners, multi-session.
+  next, the rest sink; pull-to-refresh, offline/read-only banners, multi-session
+  switching.
 - **Agent conversation** — ANSI-colored terminal mirror with auto-follow, a reply
   box, and a special key bar (Esc / Ctrl+C / arrows / Tab / Shift+Tab / Enter).
 - **Native dialog buttons** — Claude-style single-select approval/prompt menus
   (prompt-select) become native buttons, guarded by a fresh-read → re-recognize →
   structural-equality → expectedPrompt-binding chain before any key is sent.
-- **History** — paged full conversation read from the agent's own session log.
-- **Images** — pick from the gallery, upload to the host, path auto-filled.
+- **History** — paged full conversation read from the agent's own session log
+  (beyond the terminal scrollback).
+- **Images** — pick from the gallery, upload to the host, and the returned path
+  is auto-filled into the reply box.
 - **Notifications** — WorkManager background polling (≥15 min) with local
-  notifications for newly-blocked agents, tapping straight into the agent.
+  notifications for newly-blocked agents, tapping straight into the agent;
+  silenced while the app is in the foreground.
 
-### How it works
+## How it works
 
-The app never talks to the herdr socket directly; everything goes through the
-Rust bridge (`bridge/`), which embeds EasyTier to expose its REST API on a
-virtual TCP data plane. The app embeds EasyTier too and forwards a local port —
-all in userspace, no TUN or root. The network secret is the only credential:
-keep the QR code private.
+```
+┌─────────────┐    scan QR code     ┌──────────────────────────────┐
+│  HerdrGo    │ ◄───────────────── │  herdrgo-bridge (host)       │
+│  app (phone)│                     │  · talks to the herdr socket  │
+└──────┬──────┘                     │  · exposes a REST API         │
+       │ EasyTier virtual network   │  · embedded EasyTier (no TUN) │
+       │ (P2P, encrypted; the relay └──────────────┬───────────────┘
+       │  can't read it)                           │
+       └───────────────────────────────────────────┘
+                 virtual TCP over the data plane
+```
 
-### Build & deploy
+The app never talks to the herdr socket directly; every read/write goes through
+the bridge. The bridge embeds EasyTier to expose its REST API on a virtual TCP
+data plane, and the app embeds EasyTier too to forward a local port — all in
+userspace, no TUN or root. The network secret is the only credential: keep the
+QR code private.
 
-See the Chinese sections above — the commands are identical. Toolchain is pinned
-in `.toolchain/` (Flutter 3.47.0 + Android SDK 36, NDK 26). Build the app with
-`flutter build apk --release`, build the bridge with `cargo build --release`,
-then run `herdrgo-bridge` (zero-config EasyTier by default; `--secret ""` for
-plain HTTP direct mode) and scan the QR code from the app.
+Design doc: [`docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md`](docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md)
+
+> iOS support is in progress; see [`docs/ios-progress.md`](docs/ios-progress.md).
+
+## Build
+
+The toolchain is pinned in `.toolchain/` (Flutter 3.47.0 + Android SDK 36;
+NDK 26 is symlinked from `/opt/android-sdk`):
+
+```bash
+source .toolchain/env.sh
+cd app
+flutter pub get
+flutter test                 # unit tests (incl. pane-fixture golden tests)
+flutter build apk --release  # output: app/build/app/outputs/flutter-apk/app-release.apk
+```
+
+For a debug build, `adb install` the `app-debug.apk` onto an emulator/phone.
+
+### EasyTier JNI sync
+
+The app embeds EasyTier (no TUN; it reaches the bridge inside the virtual
+network via a local 127.0.0.1 port forward). The native artifacts
+(`libeasytier_android_jni.so` + Kotlin bindings) are built from the EasyTier
+repo and copied into `app/android/app/src/main/` (jniLibs and
+`kotlin/com/easytier/jni/`) by `app/tool/sync_easytier.sh`:
+
+```bash
+app/tool/sync_easytier.sh   # idempotent; EASYTIER_REPO overrides the repo path
+```
+
+`EasyTierManager.kt`/`EasyTierVpnService.t.kt` depend on VpnService and moshi
+and are not synced. The Dart wrapper lives in `app/lib/api/easytier_channel.dart`.
+
+## Deploy the bridge
+
+The bridge runs on the herdr host:
+
+```bash
+cd bridge
+cargo build --release
+# output: bridge/target/release/herdrgo-bridge
+```
+
+A systemd unit is available under `bridge/systemd/`. The bridge **enters
+EasyTier mode with zero configuration by default**: it generates and persists a
+network secret, joins via the default relay `txt://herdrgo.et-link.cc`, and
+serves the REST API over the data-plane virtual TCP — listening on no OS port,
+needing no TUN/root. It prints the pairing QR code on startup; scan it from the
+app to connect (the app likewise uses embedded EasyTier + a local port forward,
+no VpnService). The only common options are `--secret` / `--server` / `--port`
+(`--help`); advanced options are under `--help-advance`. The secret is the
+network credential — treat it like a key, show it only in the host terminal,
+never leak it. See `bridge/README.md` and the design doc
+[`docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md`](docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md).
+
+For plain HTTP direct mode (local / reverse-proxy debugging), disable EasyTier
+explicitly with `herdrgo-bridge --secret ""`; it then listens on
+`--host`/`--http-port` (default `127.0.0.1:8787`), and you can enable a device
+gate with `HERDRGO_BRIDGE_DEVICE_HEADER` (+`HERDRGO_BRIDGE_DEVICE_ALLOWLIST`) —
+on first launch the app asks for the bridge address and the matching header
+(otherwise it stays read-only).
+
+## Known limitations
+
+- Background blocked notifications only watch the primary session; agents in
+  non-primary sessions going blocked do not notify.
+- Only single-select dialogs (prompt-select) are recognized as buttons;
+  wizard/multi-select/menu fall back to the raw mirror + key bar (not ported in
+  v1).
+- Sending text from the reply box while a dialog is on screen asks for
+  confirmation first (blindly sending Enter could approve the highlighted
+  option); free-text items can still be answered after confirming.
+- Background polling has a 15-minute minimum (Android WorkManager floor), so
+  notifications may be delayed.
+
+## Test fixtures
+
+`app/test/fixtures/panes/*.txt` are vendored real pane captures (byte-faithful,
+CRLF included; `.gitattributes` disables text normalization) with no runtime
+dependency on external repos; the prompt-select golden tests are based on them.
