@@ -1,13 +1,20 @@
+/// settings 层（删直连后）：sharedPrefsProvider / profileStoreProvider 壳 +
+/// 遗留 prefs 键清理 + enabledProfilesProvider。
+///
+/// 全 EasyTier 后直连配置不再有地方放：bridge_settings_v1/v2 检测到即删，
+/// 不做迁移。
+library;
+
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:herdr_web/model/direct_config.dart';
+import 'package:herdr_web/model/remote_profile.dart';
 import 'package:herdr_web/state/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 用给定的 prefs 初始值建 container，读 settings 并返回。
-Future<(ProviderContainer, BridgeSettings)> buildSettings(
+/// 用给定的 prefs 初始值建 container。
+Future<ProviderContainer> buildContainer(
     Map<String, Object> initialValues) async {
   SharedPreferences.setMockInitialValues(initialValues);
   final prefs = await SharedPreferences.getInstance();
@@ -15,91 +22,43 @@ Future<(ProviderContainer, BridgeSettings)> buildSettings(
     sharedPrefsProvider.overrideWithValue(prefs),
   ]);
   addTearDown(container.dispose);
-  return (container, container.read(settingsProvider));
+  return container;
 }
 
+const _profile = RemoteProfile(
+  id: 'p1',
+  label: 'devbox',
+  server: ['tcp://10.0.0.2:22023'],
+  networkName: 'mynet',
+  secret: 's3cr3t',
+  virtualIp: '10.10.64.62',
+  port: 46810,
+);
+
+const _profile2 = RemoteProfile(
+  id: 'p2',
+  label: 'buildbox',
+  server: ['tcp://10.0.0.3:22023'],
+  networkName: 'othernet',
+  secret: 'hunter2',
+  virtualIp: '10.10.64.99',
+  port: 46811,
+);
+
 void main() {
-  group('BridgeSettings v2', () {
-    test('v2 无数据时 directConfigs 为空、isConfigured false', () async {
-      final (_, s) = await buildSettings({});
-      expect(s.directConfigs, isEmpty);
-      expect(s.isConfigured, isFalse);
+  group('遗留键清理', () {
+    test('无任何遗留键时 prefs 不被触碰', () async {
+      final container = await buildContainer({'unrelated': 'x'});
+      container.read(profileStoreProvider);
+
+      final prefs = container.read(sharedPrefsProvider);
+      expect(prefs.getString('unrelated'), 'x');
+      expect(prefs.getString('bridge_settings_v1'), isNull);
+      expect(prefs.getString('bridge_settings_v2'), isNull);
     });
 
-    test('v2 round-trip：多条 DirectConfig 序列化反序列化不变', () {
-      const s = BridgeSettings(directConfigs: [
-        DirectConfig(
-          id: 'id-1',
-          label: 'home',
-          baseUrl: 'https://a.ts.net',
-          headerName: 'X-Device-Id',
-          headerValue: 'v1',
-        ),
-        DirectConfig(
-          id: 'id-2',
-          label: 'office',
-          baseUrl: 'https://b.ts.net',
-          headerName: 'X-Device-Id',
-          headerValue: 'v2',
-          enabled: false,
-        ),
-        DirectConfig(
-          id: 'id-3',
-          label: 'bare',
-          baseUrl: 'https://c.ts.net',
-        ),
-      ]);
-      final restored = BridgeSettings.fromJson(jsonDecode(jsonEncode(s.toJson()))
-          as Map<String, dynamic>);
-      expect(restored.directConfigs, hasLength(3));
-      for (var i = 0; i < s.directConfigs.length; i++) {
-        final want = s.directConfigs[i];
-        final got = restored.directConfigs[i];
-        expect(got.id, want.id);
-        expect(got.label, want.label);
-        expect(got.baseUrl, want.baseUrl);
-        expect(got.headerName, want.headerName);
-        expect(got.headerValue, want.headerValue);
-        expect(got.enabled, want.enabled);
-        expect(got.headers, want.headers);
-      }
-    });
-
-    test('isConfigured：全部 disabled 或 baseUrl 空时为 false', () {
-      const allDisabled = BridgeSettings(directConfigs: [
-        DirectConfig(
-            id: '1', label: 'a', baseUrl: 'https://a.ts.net', enabled: false),
-      ]);
-      expect(allDisabled.isConfigured, isFalse);
-
-      const blankUrl = BridgeSettings(directConfigs: [
-        DirectConfig(id: '1', label: 'a', baseUrl: '  '),
-      ]);
-      expect(blankUrl.isConfigured, isFalse);
-
-      const oneEnabled = BridgeSettings(directConfigs: [
-        DirectConfig(
-            id: '1', label: 'a', baseUrl: 'https://a.ts.net', enabled: false),
-        DirectConfig(id: '2', label: 'b', baseUrl: 'https://b.ts.net'),
-      ]);
-      expect(oneEnabled.isConfigured, isTrue);
-    });
-
-    test('copyWith 只替换 directConfigs', () {
-      const s = BridgeSettings(directConfigs: [
-        DirectConfig(id: '1', label: 'a', baseUrl: 'https://a.ts.net'),
-      ]);
-      const updated = BridgeSettings();
-      final got = s.copyWith(directConfigs: updated.directConfigs);
-      expect(got.directConfigs, isEmpty);
-      // 不传参时保持原值
-      expect(s.copyWith().directConfigs, hasLength(1));
-    });
-  });
-
-  group('bridge_settings_v1 → v2 迁移', () {
-    test('v1 非空 → 包成单条 DirectConfig，v1 键删除、v2 键写入', () async {
-      final (container, s) = await buildSettings({
+    test('bridge_settings_v1（旧单连接直连配置）检测到即删，不迁移', () async {
+      final container = await buildContainer({
         'bridge_settings_v1': jsonEncode({
           'baseUrl': 'https://a.ts.net',
           'headerName': 'X-Device-Id',
@@ -107,50 +66,80 @@ void main() {
           'profileId': 'abc',
         }),
       });
-      expect(s.directConfigs, hasLength(1));
-      final c = s.directConfigs.single;
-      expect(c.id, isNotEmpty);
-      expect(c.enabled, isTrue);
-      expect(c.label, 'a.ts.net');
-      expect(c.baseUrl, 'https://a.ts.net');
-      expect(c.headers, {'X-Device-Id': 'v'});
+      container.read(profileStoreProvider);
 
       final prefs = container.read(sharedPrefsProvider);
       expect(prefs.getString('bridge_settings_v1'), isNull);
-      final rawV2 = prefs.getString(bridgeSettingsPrefsKey);
-      expect(rawV2, isNotNull);
-      final decoded =
-          jsonDecode(rawV2!) as Map<String, dynamic>;
-      expect(decoded['directConfigs'], hasLength(1));
+      // 直连数据被丢弃：不产生任何新键、不进 profile 列表。
+      expect(prefs.getString('bridge_settings_v2'), isNull);
+      expect(await container.read(profileStoreProvider).list(), isEmpty);
     });
 
-    test('v1 baseUrl 为空 → directConfigs 为空、v1 键仍被删', () async {
-      final (container, s) = await buildSettings({
-        'bridge_settings_v1': jsonEncode({
-          'baseUrl': '',
-          'headerName': '',
-          'headerValue': '',
-          'profileId': 'abc',
+    test('bridge_settings_v2（直连配置列表）检测到即删', () async {
+      final container = await buildContainer({
+        'bridge_settings_v2': jsonEncode({
+          'directConfigs': [
+            {'id': 'id-1', 'label': 'home', 'baseUrl': 'https://a.ts.net'},
+          ],
         }),
       });
-      expect(s.directConfigs, isEmpty);
-      expect(s.isConfigured, isFalse);
-      expect(container.read(sharedPrefsProvider).getString('bridge_settings_v1'),
+      container.read(profileStoreProvider);
+
+      expect(container.read(sharedPrefsProvider).getString('bridge_settings_v2'),
           isNull);
     });
+  });
 
-    test('v2 已存在时不做迁移、v1 键保留', () async {
-      const existing = BridgeSettings(directConfigs: [
-        DirectConfig(id: 'id-9', label: 'x', baseUrl: 'https://x.ts.net'),
-      ]);
-      final (container, s) = await buildSettings({
-        bridgeSettingsPrefsKey: jsonEncode(existing.toJson()),
-        'bridge_settings_v1': jsonEncode({'baseUrl': 'https://a.ts.net'}),
+  group('enabledProfilesProvider', () {
+    test('空列表 → 空、isConfigured false', () async {
+      final container = await buildContainer({});
+      expect(container.read(enabledProfilesProvider), isEmpty);
+      expect(
+          container.read(enabledProfilesProvider.notifier).isConfigured, isFalse);
+    });
+
+    test('只含 enabled profile；setEnabled 后列表与 isConfigured 联动', () async {
+      final container = await buildContainer({});
+      final notifier = container.read(enabledProfilesProvider.notifier);
+      final store = container.read(profileStoreProvider);
+      await store.add(_profile);
+      await store.add(_profile2);
+      await notifier.reload();
+
+      expect(container.read(enabledProfilesProvider).map((p) => p.id),
+          ['p1', 'p2']);
+      expect(notifier.isConfigured, isTrue);
+
+      // disable 一条 → 列表只剩另一条。
+      await store.setEnabled('p1', false);
+      await notifier.reload();
+      expect(container.read(enabledProfilesProvider).map((p) => p.id), ['p2']);
+      expect(notifier.isConfigured, isTrue);
+
+      // 全部 disable → isConfigured false。
+      await store.setEnabled('p2', false);
+      await notifier.reload();
+      expect(container.read(enabledProfilesProvider), isEmpty);
+      expect(notifier.isConfigured, isFalse);
+
+      // 持久化层的 enabled 确实被翻转（profile 本体字段不变）。
+      final all = await store.list();
+      expect(all.firstWhere((p) => p.id == 'p1').enabled, isFalse);
+      expect(all.firstWhere((p) => p.id == 'p2').enabled, isFalse);
+    });
+
+    test('持久化里 disabled 的 profile 初始就不在列表里', () async {
+      final container = await buildContainer({
+        profileStorePrefsKey: jsonEncode([
+          _profile.toJson(),
+          _profile2.copyWith(enabled: false).toJson(),
+        ]),
       });
-      expect(s.directConfigs, hasLength(1));
-      expect(s.directConfigs.single.id, 'id-9');
-      expect(container.read(sharedPrefsProvider).getString('bridge_settings_v1'),
-          isNotNull);
+      // 先 read 触发 build（返回 []），首次 reload 在 microtask 里完成后
+      // 才含 enabled。
+      expect(container.read(enabledProfilesProvider), isEmpty);
+      await pumpEventQueue();
+      expect(container.read(enabledProfilesProvider).map((p) => p.id), ['p1']);
     });
   });
 }
