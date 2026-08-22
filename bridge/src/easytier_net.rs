@@ -259,7 +259,8 @@ mod tests {
         }
         assert_eq!(v["secret"], "s3cret");
         assert_eq!(v["virtualIp"], "10.126.0.1");
-        assert_eq!(v["port"], 8787);        assert!(uuid::Uuid::parse_str(v["networkName"].as_str().unwrap()).is_ok());
+        assert_eq!(v["port"], 8787);
+        assert!(uuid::Uuid::parse_str(v["networkName"].as_str().unwrap()).is_ok());
     }
 
     #[test]

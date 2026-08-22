@@ -21,9 +21,11 @@ clap = { version = "4", features = ["derive", "env"] }
 qrcode = { version = "0.14", default-features = false }
 url = "2"
 easytier = { path = "../../EasyTier/easytier", default-features = false, features = [
-    "smoltcp", "aes-gcm", "dhcp-ipv4", "tracing-log",
+    "smoltcp", "aes-gcm", "dhcp-ipv4", "tracing-log", "endpoint-discovery",
 ] }
-easytier-core = { path = "../../EasyTier/easytier-core", default-features = false }
+easytier-core = { path = "../../EasyTier/easytier-core", default-features = false, features = [
+    "endpoint-discovery",
+] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
