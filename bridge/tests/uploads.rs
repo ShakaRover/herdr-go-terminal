@@ -8,7 +8,7 @@ async fn upload_app(state_dir: &std::path::Path)
     -> (axum::Router, tokio::sync::watch::Sender<bool>)
 {
     let mock = common::MockHerdr::start(serde_json::Map::new()).await;
-    let mut cfg = herdr_bridge::config::Config::from_env();
+    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
     cfg.socket_path = mock.socket_path.clone();
     cfg.state_dir = state_dir.to_path_buf();
     let (state, sd) = herdr_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;

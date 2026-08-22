@@ -8,7 +8,7 @@ async fn write_app(script: serde_json::Map<String, serde_json::Value>)
     -> (common::MockHerdr, axum::Router, tokio::sync::watch::Sender<bool>)
 {
     let mock = common::MockHerdr::start(script).await;
-    let mut cfg = herdr_bridge::config::Config::from_env();
+    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
     cfg.socket_path = mock.socket_path.clone();
     // 审计落在 tempdir（函数返回即清理），避免 cargo test 写进真实 state dir。
     let state_dir = tempfile::tempdir().unwrap();
@@ -163,7 +163,7 @@ async fn writes_are_audited() {
     script.insert("pane.send_keys".into(), serde_json::json!({"type": "ok"}));
     let mock = common::MockHerdr::start(script).await;
     let state_dir = tempfile::tempdir().unwrap();
-    let mut cfg = herdr_bridge::config::Config::from_env();
+    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
     cfg.socket_path = mock.socket_path.clone();
     cfg.state_dir = state_dir.path().to_path_buf();
     let (state, _sd) = herdr_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;

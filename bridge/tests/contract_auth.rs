@@ -5,7 +5,7 @@ use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
 fn cfg_with(f: impl FnOnce(&mut herdr_bridge::config::Config)) -> std::sync::Arc<herdr_bridge::config::Config> {
-    let mut cfg = herdr_bridge::config::Config::from_env();
+    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
     f(&mut cfg);
     std::sync::Arc::new(cfg)
 }

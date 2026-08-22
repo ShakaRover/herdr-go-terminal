@@ -174,7 +174,7 @@ async fn registry_discovers_named_sessions() {
     // 两个 mock 各自绑一个 socket 路径
     let _m1 = common::MockHerdr::start_at(&primary_sock, common::engine_script()).await;
     let _m2 = common::MockHerdr::start_at(&work_sock, common::engine_script()).await;
-    let mut cfg = herdr_bridge::config::Config::from_env();
+    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
     cfg.socket_path = primary_sock.clone();
     let registry = herdr_bridge::sessions::SessionRegistry::new(
         std::sync::Arc::new(cfg),

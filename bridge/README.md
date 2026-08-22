@@ -58,12 +58,24 @@ printf 'HERDR_BRIDGE_PORT=8878\n' > ~/.config/herdr-bridge/env
 systemctl --user restart herdr-bridge
 ```
 
-## 配置（环境变量）
+## 配置（CLI 与环境变量）
 
-权威来源是 `bridge/src/config.rs`；非法值一律告警并回退默认（低于下限的
-数值 clamp 到下限）。
+权威来源是 `bridge/src/config.rs` 的 `Cli`（clap derive）。每个环境变量都
+有对应的 CLI 参数（kebab-case，如 `HERDR_BRIDGE_PORT` ↔ `--port`），优先级
+**CLI > 环境变量 > 默认值**。列表类参数接受逗号分隔或重复传参；布尔参数
+接受 `on/off`、`1/0`、`true/false`。类型或取值非法时启动即报错退出；
+低于下限的数值 clamp 到下限并告警。
 
-| 变量 | 默认 | 说明 |
+```bash
+# CLI 传参
+herdr-bridge --port 8878 --multi-session off
+# 等价的环境变量方式（systemd 部署推荐）
+HERDR_BRIDGE_PORT=8878 HERDR_BRIDGE_MULTI_SESSION=off herdr-bridge
+```
+
+全部参数见 `herdr-bridge --help`；与下表一一对应：
+
+| 变量 / CLI 参数 | 默认 | 说明 |
 | --- | --- | --- |
 | `HERDR_SOCKET_PATH` | `~/.config/herdr/herdr.sock`（遵循 `XDG_CONFIG_HOME`） | herdr API socket |
 | `HERDR_BRIDGE_HOST` | `127.0.0.1` | 绑定地址 |
@@ -89,7 +101,7 @@ systemctl --user restart herdr-bridge
 | `HERDR_BRIDGE_EASYTIERSERWORKNAME` | 空 | 覆盖网络名；缺省用 state 目录持久化的 uuid（`<state_dir>/easytier_network_id`，0600） |
 | `HERDR_BRIDGE_EASYTIERSERVIRTUALIP` | 空 | 静态虚拟 IPv4（CIDR，如 `10.126.0.1/24`）；缺省 DHCP |
 
-布尔值接受 `on/off`、`1/0`、`true/false`。
+布尔值接受 `on/off`、`1/0`、`true/false`；CLI 侧同理（如 `--multi-session off`）。
 
 ## EasyTier 模式（远程访问）
 

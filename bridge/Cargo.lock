@@ -1768,6 +1768,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "clap",
  "easytier",
  "easytier-core",
  "qrcode",

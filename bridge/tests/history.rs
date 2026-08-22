@@ -25,7 +25,7 @@ async fn history_app(claude_root: &std::path::Path)
             }],
             "layouts": [], "agents": []}}));
     let mock = common::MockHerdr::start(script).await;
-    let mut cfg = herdr_bridge::config::Config::from_env();
+    let mut cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
     cfg.socket_path = mock.socket_path.clone();
     cfg.transcript_roots = vec![claude_root.to_path_buf()];
     let state_dir = tempfile::tempdir().unwrap();

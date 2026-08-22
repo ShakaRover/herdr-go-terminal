@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use clap::Parser;
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -8,7 +10,8 @@ async fn main() {
                 .unwrap_or_else(|_| "herdr_bridge=info".into()),
         )
         .init();
-    let cfg = Arc::new(herdr_bridge::config::Config::from_env());
+    let cli = herdr_bridge::config::Cli::parse();
+    let cfg = Arc::new(herdr_bridge::config::Config::from_cli(&cli));
     std::fs::create_dir_all(&cfg.state_dir).expect("create state dir");
     {
         use std::os::unix::fs::PermissionsExt;
@@ -20,7 +23,7 @@ async fn main() {
         build = %herdr_bridge::config::Config::build_id(),
         "herdr-bridge starting"
     );
-    if std::env::args().any(|a| a == "--show-qr") {
+    if cli.show_qr {
         let payload = herdr_bridge::easytier_net::pairing_payload(&cfg)
             .expect("pairing payload: need HERDR_BRIDGE_EASYTIERSERCRET/SERVER/VIRTUALIP");
         let code = qrcode::QrCode::new(payload.to_string()).expect("qr encode");

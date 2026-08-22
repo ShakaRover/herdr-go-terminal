@@ -153,6 +153,7 @@ mod tests {
     #[test]
     fn pairing_payload_shape() {
         let _g = crate::config::tests_lock();
+        crate::config::tests::clear();
         std::env::set_var(
             "HERDR_BRIDGE_STATE_DIR",
             std::env::temp_dir().join(format!("herdr-qr-{}", uuid::Uuid::new_v4())),
@@ -160,7 +161,7 @@ mod tests {
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", "s3cret");
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERVER", "tcp://et.example.com:11010");
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
-        let cfg = crate::config::Config::from_env();
+        let cfg = crate::config::Config::from_cli(&crate::config::Cli::from_process_env());
         let v = super::pairing_payload(&cfg).unwrap();
         assert_eq!(v["v"], 1);
         assert_eq!(v["server"], "tcp://et.example.com:11010");
@@ -175,8 +176,10 @@ mod tests {
         let _g = crate::config::tests_lock();
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", "s3cret");
         // 缺 server / virtual ip 时必须报错（避免打印 DHCP 之后才确定的错误地址）
-        assert!(super::pairing_payload(&crate::config::Config::from_env()).is_err());
+        assert!(super::pairing_payload(&crate::config::Config::from_cli(
+            &crate::config::Cli::from_process_env())).is_err());
         std::env::set_var("HERDR_BRIDGE_EASYTIERSERVER", "tcp://et.example.com:11010");
-        assert!(super::pairing_payload(&crate::config::Config::from_env()).is_err());
+        assert!(super::pairing_payload(&crate::config::Config::from_cli(
+            &crate::config::Cli::from_process_env())).is_err());
     }
 }

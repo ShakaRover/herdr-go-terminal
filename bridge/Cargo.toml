@@ -17,6 +17,7 @@ wyhash = "0.5"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive", "env"] }
 qrcode = { version = "0.14", default-features = false }
 url = "2"
 easytier = { git = "https://github.com/EasyTier/EasyTier.git", rev = "62e4fd15", default-features = false, features = [

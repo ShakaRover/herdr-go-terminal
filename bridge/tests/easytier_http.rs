@@ -29,7 +29,7 @@ async fn http_over_data_plane() {
     std::env::set_var("HERDR_BRIDGE_EASYTIERSERCRET", NETWORK_SECRET);
     std::env::set_var("HERDR_BRIDGE_EASYTIERSERVIRTUALIP", format!("{BRIDGE_IP}/24"));
     std::env::set_var("HERDR_BRIDGE_EASYTIERSER_TEST_LISTENERS", BRIDGE_LISTENER);
-    let cfg = herdr_bridge::config::Config::from_env();
+    let cfg = herdr_bridge::config::Config::from_cli(&herdr_bridge::config::Cli::from_process_env());
     let net = herdr_bridge::easytier_net::start_easytier(&cfg).await.unwrap();
     assert_eq!(net.virtual_addr.ip().to_string(), BRIDGE_IP);
     let listener = net.take_listener().unwrap();
