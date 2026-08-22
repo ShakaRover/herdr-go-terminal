@@ -1,15 +1,16 @@
-/// bridge 连接设置：baseUrl + 可选的自定义请求头（应对 collie 前置代理的
-/// device gate 部署）。持久化在 shared_preferences。
+/// bridge 连接设置：直填 DirectConfig 列表（label/baseUrl/可选自定义请求头/
+/// enabled）。持久化在 shared_preferences。
 library;
 
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../api/bridge_api.dart';
+import '../model/direct_config.dart';
 import '../model/remote_profile.dart';
-import 'easytier_runtime.dart';
 
 /// 在 main 里用已初始化的实例 override。
 final sharedPrefsProvider = Provider<SharedPreferences>(
@@ -17,64 +18,47 @@ final sharedPrefsProvider = Provider<SharedPreferences>(
 );
 
 class BridgeSettings {
-  const BridgeSettings({
-    this.baseUrl = '',
-    this.headerName = '',
-    this.headerValue = '',
-    this.profileId = '',
-  });
+  const BridgeSettings({this.directConfigs = const []});
 
-  /// 例：https://myhost.tail1234.ts.net（不带尾斜杠，api 层会再归一化）。
-  final String baseUrl;
+  final List<DirectConfig> directConfigs;
 
-  /// 可选自定义请求头（如 X-Device-Id）。两者都非空才生效。
-  final String headerName;
-  final String headerValue;
+  bool get isConfigured =>
+      directConfigs.any((c) => c.enabled && c.baseUrl.trim().isNotEmpty);
 
-  /// 当前 active 的 RemoteProfile id；空 = 旧的直填 baseUrl 模式（向后兼容）。
-  final String profileId;
-
-  bool get isConfigured => baseUrl.trim().isNotEmpty;
-
-  Map<String, String> get headers =>
-      headerName.trim().isEmpty ? const {} : {headerName.trim(): headerValue};
-
-  BridgeSettings copyWith(
-          {String? baseUrl,
-          String? headerName,
-          String? headerValue,
-          String? profileId}) =>
-      BridgeSettings(
-        baseUrl: baseUrl ?? this.baseUrl,
-        headerName: headerName ?? this.headerName,
-        headerValue: headerValue ?? this.headerValue,
-        profileId: profileId ?? this.profileId,
-      );
+  BridgeSettings copyWith({List<DirectConfig>? directConfigs}) =>
+      BridgeSettings(directConfigs: directConfigs ?? this.directConfigs);
 
   Map<String, dynamic> toJson() => {
-        'baseUrl': baseUrl,
-        'headerName': headerName,
-        'headerValue': headerValue,
-        'profileId': profileId,
+        'directConfigs':
+            directConfigs.map((c) => c.toJson()).toList(),
       };
 
-  factory BridgeSettings.fromJson(Map<String, dynamic> j) => BridgeSettings(
-        baseUrl: j['baseUrl'] is String ? j['baseUrl'] as String : '',
-        headerName: j['headerName'] is String ? j['headerName'] as String : '',
-        headerValue:
-            j['headerValue'] is String ? j['headerValue'] as String : '',
-        profileId: j['profileId'] is String ? j['profileId'] as String : '',
-      );
+  factory BridgeSettings.fromJson(Map<String, dynamic> j) {
+    final raw = j['directConfigs'];
+    if (raw is! List) return const BridgeSettings();
+    return BridgeSettings(
+      directConfigs: raw
+          .whereType<Map<String, dynamic>>()
+          .map(DirectConfig.fromJson)
+          .toList(),
+    );
+  }
 }
 
-/// shared_preferences 里 bridge 设置的键（前台与后台任务共用）。
-const bridgeSettingsPrefsKey = 'bridge_settings_v1';
+/// shared_preferences 键（v2：直连配置列表化、删 active profileId）。
+const bridgeSettingsPrefsKey = 'bridge_settings_v2';
+
+/// 仅迁移用：v2 缺失且 v1 存在时包成单条 DirectConfig 后删除。
+const _legacyBridgeSettingsPrefsKey = 'bridge_settings_v1';
 
 class SettingsNotifier extends Notifier<BridgeSettings> {
   @override
   BridgeSettings build() {
-    final raw = ref.watch(sharedPrefsProvider).getString(bridgeSettingsPrefsKey);
-    if (raw == null || raw.isEmpty) return const BridgeSettings();
+    final prefs = ref.watch(sharedPrefsProvider);
+    final raw = prefs.getString(bridgeSettingsPrefsKey);
+    if (raw == null || raw.isEmpty) {
+      return _migrateLegacy(prefs) ?? const BridgeSettings();
+    }
     try {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
@@ -84,6 +68,48 @@ class SettingsNotifier extends Notifier<BridgeSettings> {
       // 损坏的持久化数据按未配置处理。
     }
     return const BridgeSettings();
+  }
+
+  /// v1（单条 baseUrl/header + active profileId）迁移：baseUrl 非空则包成
+  /// 单条 enabled 的 DirectConfig（label 取 host），忽略旧 profileId（profile
+  /// 启用态改由 RemoteProfile.enabled 承载，旧数据默认 true = 保持旧行为）；
+  /// 随后删除 v1 键。
+  BridgeSettings? _migrateLegacy(SharedPreferences prefs) {
+    final legacy = prefs.getString(_legacyBridgeSettingsPrefsKey);
+    if (legacy == null) return null;
+    BridgeSettings? migrated;
+    try {
+      final decoded = jsonDecode(legacy);
+      if (decoded is Map<String, dynamic>) {
+        final baseUrl =
+            decoded['baseUrl'] is String ? decoded['baseUrl'] as String : '';
+        if (baseUrl.trim().isNotEmpty) {
+          final config = DirectConfig(
+            id: const Uuid().v4(),
+            label: _hostOf(baseUrl),
+            baseUrl: baseUrl,
+            headerName: decoded['headerName'] is String
+                ? decoded['headerName'] as String
+                : '',
+            headerValue: decoded['headerValue'] is String
+                ? decoded['headerValue'] as String
+                : '',
+          );
+          migrated = BridgeSettings(directConfigs: [config]);
+          prefs.setString(
+              bridgeSettingsPrefsKey, jsonEncode(migrated.toJson()));
+        }
+      }
+    } catch (_) {
+      // 损坏的 v1 数据按未配置处理，仍删除旧键。
+    }
+    prefs.remove(_legacyBridgeSettingsPrefsKey);
+    return migrated;
+  }
+
+  static String _hostOf(String baseUrl) {
+    final host = Uri.tryParse(baseUrl.trim())?.host ?? '';
+    return host.isNotEmpty ? host : baseUrl.trim();
   }
 
   Future<void> save(BridgeSettings settings) async {
@@ -103,17 +129,13 @@ final profileStoreProvider = Provider<ProfileStore>(
 );
 
 /// 已配置时为可用的 API 客户端，否则为 null（UI 据此跳设置页）。
-/// profileId 非空时忽略直填 baseUrl，改走 EasyTier 本地转发口：
-/// runtime Ready → `http://127.0.0.1:<localPort>`，其余状态 → null。
+/// 过渡实现：只取首条 enabled 直连配置，Task 7 迁移到 state/bridges.dart。
 final apiProvider = Provider<BridgeApi?>((ref) {
   final s = ref.watch(settingsProvider);
-  if (s.profileId.isNotEmpty) {
-    return switch (ref.watch(easytierRuntimeProvider)) {
-      EasyTierReady(:final localPort) => BridgeApi(
-          baseUrl: 'http://127.0.0.1:$localPort', headers: s.headers),
-      _ => null,
-    };
+  for (final c in s.directConfigs) {
+    if (c.enabled && c.baseUrl.trim().isNotEmpty) {
+      return BridgeApi(baseUrl: c.baseUrl, headers: c.headers);
+    }
   }
-  if (!s.isConfigured) return null;
-  return BridgeApi(baseUrl: s.baseUrl, headers: s.headers);
+  return null;
 });

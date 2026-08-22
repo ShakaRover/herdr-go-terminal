@@ -14,6 +14,7 @@ class RemoteProfile {
     required this.secret,
     required this.virtualIp,
     required this.port,
+    this.enabled = true,
   });
 
   /// 本地生成 uuid，仅在 app 侧标识这条配置。
@@ -33,6 +34,20 @@ class RemoteProfile {
   /// bridge data-plane 端口。
   final int port;
 
+  /// 是否参与多 bridge 连接；旧数据缺该字段视为 true。
+  final bool enabled;
+
+  RemoteProfile copyWith({String? label, bool? enabled}) => RemoteProfile(
+        id: id,
+        label: label ?? this.label,
+        server: server,
+        networkName: networkName,
+        secret: secret,
+        virtualIp: virtualIp,
+        port: port,
+        enabled: enabled ?? this.enabled,
+      );
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'label': label,
@@ -41,6 +56,7 @@ class RemoteProfile {
         'secret': secret,
         'virtualIp': virtualIp,
         'port': port,
+        'enabled': enabled,
       };
 
   factory RemoteProfile.fromJson(Map<String, dynamic> j) => RemoteProfile(
@@ -52,6 +68,7 @@ class RemoteProfile {
         secret: j['secret'] is String ? j['secret'] as String : '',
         virtualIp: j['virtualIp'] is String ? j['virtualIp'] as String : '',
         port: j['port'] is int ? j['port'] as int : 0,
+        enabled: j['enabled'] is bool ? j['enabled'] as bool : true,
       );
 
   /// 解析二维码载荷。要求 v==1，server/networkName/secret/virtualIp 为非空
@@ -137,6 +154,20 @@ class ProfileStore {
       if (p.id == id) return p;
     }
     return null;
+  }
+
+  /// 更新单条 profile 的 enabled 并重写列表。
+  Future<void> setEnabled(String id, bool enabled) async {
+    final all = await list();
+    var found = false;
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id == id) {
+        all[i] = all[i].copyWith(enabled: enabled);
+        found = true;
+        break;
+      }
+    }
+    if (found) await _save(all);
   }
 
   Future<void> _save(List<RemoteProfile> all) => _prefs.setString(

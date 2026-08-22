@@ -92,6 +92,47 @@ void main() {
     });
   });
 
+  group('RemoteProfile enabled', () {
+    test('fromJson 缺 enabled 字段默认为 true', () {
+      final p = RemoteProfile.fromJson(
+          RemoteProfile.fromPairingJson(validPairingJson()).toJson()
+            ..remove('enabled'));
+      expect(p.enabled, isTrue);
+    });
+
+    test('fromJson 显式 enabled: false 保留', () {
+      final p = RemoteProfile.fromJson(
+          RemoteProfile.fromPairingJson(validPairingJson()).toJson()
+            ..['enabled'] = false);
+      expect(p.enabled, isFalse);
+    });
+
+    test('fromPairingJson 默认 enabled 为 true', () {
+      expect(RemoteProfile.fromPairingJson(validPairingJson()).enabled, isTrue);
+    });
+
+    test('copyWith(enabled: false) 只改 enabled，其余字段不动', () {
+      final p = RemoteProfile.fromPairingJson(validPairingJson());
+      final updated = p.copyWith(enabled: false);
+      expect(updated.enabled, isFalse);
+      expect(updated.id, p.id);
+      expect(updated.label, p.label);
+      expect(updated.server, p.server);
+      expect(updated.networkName, p.networkName);
+      expect(updated.secret, p.secret);
+      expect(updated.virtualIp, p.virtualIp);
+      expect(updated.port, p.port);
+    });
+
+    test('copyWith(label: ...) 只改 label，enabled 不动', () {
+      final p = RemoteProfile.fromPairingJson(validPairingJson())
+          .copyWith(enabled: false);
+      final updated = p.copyWith(label: 'new');
+      expect(updated.label, 'new');
+      expect(updated.enabled, isFalse);
+    });
+  });
+
   group('RemoteProfile toJson/fromJson 往返', () {
     test('roundtrip 保持所有字段', () {
       final p = RemoteProfile.fromPairingJson(validPairingJson());
@@ -167,6 +208,32 @@ void main() {
       final got = await store2.getById(p.id);
       expect(got, isNotNull);
       expect(got!.virtualIp, '10.126.0.1');
+    });
+
+    test('setEnabled 翻转到 false 后持久生效，其余字段不变', () async {
+      final store = await freshStore();
+      final p = await store.add(RemoteProfile.fromPairingJson(validPairingJson()));
+      await store.setEnabled(p.id, false);
+      // 用新实例重读，验证已持久化。
+      final got = await (await freshStore()).getById(p.id);
+      expect(got, isNotNull);
+      expect(got!.enabled, isFalse);
+      expect(got.id, p.id);
+      expect(got.label, p.label);
+      expect(got.server, p.server);
+      expect(got.networkName, p.networkName);
+      expect(got.secret, p.secret);
+      expect(got.virtualIp, p.virtualIp);
+      expect(got.port, p.port);
+    });
+
+    test('setEnabled 不存在的 id 不报错', () async {
+      final store = await freshStore();
+      await store.add(RemoteProfile.fromPairingJson(validPairingJson()));
+      await store.setEnabled('no-such-id', false);
+      final list = await store.list();
+      expect(list, hasLength(1));
+      expect(list.single.enabled, isTrue);
     });
   });
 }
