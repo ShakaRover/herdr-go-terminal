@@ -8,6 +8,8 @@ bridge 连 herdr socket，对外提供 REST API（snapshot / pane 读写 / 历�
 
 设计文档：[`docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md`](docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md)
 
+> iOS 适配进行中，断点续作记录见 [`docs/ios-progress.md`](docs/ios-progress.md)。
+
 ## 功能
 
 - **Dashboard triage**：blocked 置顶（「需要你处理」），working 其次，其余沉底；
