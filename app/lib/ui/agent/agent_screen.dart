@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../ansi/ansi.dart';
 import '../../api/bridge_api.dart';
+import '../../blocks/prompt_action.dart';
 import '../../blocks/prompt_model.dart';
 import '../../blocks/prompt_select.dart';
 import '../../state/pane_read.dart';
@@ -146,38 +147,35 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
   }
 
-  /// 点按对话框按钮的防护链（对齐 collie dialog-guard 的 prompt-select 路径）：
-  /// 新鲜读取 → 重新派生模型 → 结构相等校验 → 带 expectedPrompt 发键。
-  /// bridge 端还会用 expectedPrompt 再校验一次（prompt-binding），
-  /// 屏幕已变则返回 promptChanged。
+  /// 点按对话框按钮走共用防护链 helper（对齐 collie dialog-guard 的
+  /// prompt-select 路径）：新鲜读取 → 重新派生模型 → 结构相等校验 →
+  /// 带 expectedPrompt 发键。这里只把结果映射成 toast 并触发刷新。
   Future<void> _tapPromptOption(PromptModel tapped, PromptOption opt) async {
     final api = ref.read(apiProvider);
     if (api == null || _sending) return;
     final session = ref.read(sessionFilterProvider);
     setState(() => _sending = true);
     try {
-      final fresh =
-          await api.readPane(widget.paneId, lines: 200, session: session);
-      final freshModel =
-          detectPromptSelect(splitLines(parseAnsi(fresh.text)));
-      if (freshModel == null || !promptsEqual(freshModel, tapped)) {
-        _toast('界面已变化，请查看最新输出后重试');
-        await _refreshAll();
-        return;
-      }
-      final res = await api.sendKeys(widget.paneId, opt.keys,
-          session: session, expectedPrompt: freshModel.signature);
+      final result = await tapPromptOption(
+        api: api,
+        paneId: widget.paneId,
+        session: session,
+        tapped: tapped,
+        opt: opt,
+      );
       if (!mounted) return;
-      if (res.success) {
-        _toast('已发送');
-      } else if (res.promptChanged) {
-        _toast('界面已变化，请重试');
-      } else {
-        _toast('发送失败：${res.error}');
+      switch (result.outcome) {
+        case PromptTapOutcome.sent:
+          _toast('已发送');
+        case PromptTapOutcome.changed:
+          _toast('界面已变化，请查看最新输出后重试');
+        case PromptTapOutcome.failed:
+          _toast('发送失败：${result.error}');
       }
-      await _refreshAll();
-    } on ApiException catch (e) {
-      _toast('发送失败：$e');
+      // failed（含 readPane 抛 ApiException）不刷新，与现状一致。
+      if (result.outcome != PromptTapOutcome.failed) {
+        await _refreshAll();
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
