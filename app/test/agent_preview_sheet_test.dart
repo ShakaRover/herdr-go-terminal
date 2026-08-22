@@ -17,6 +17,7 @@ import 'package:herdr_web/api/bridge_api.dart';
 import 'package:herdr_web/blocks/prompt_select.dart';
 import 'package:herdr_web/model/models.dart';
 import 'package:herdr_web/ansi/ansi.dart';
+import 'package:herdr_web/state/bridges.dart';
 import 'package:herdr_web/state/settings.dart';
 import 'package:herdr_web/ui/agent/agent_screen.dart';
 import 'package:herdr_web/ui/dashboard/agent_preview_sheet.dart';
@@ -76,7 +77,10 @@ const _pane = PaneInfo(
   tabLabel: 't0',
 );
 
-/// 以按钮形式弹出预览卡（ProviderScope 齐 prefs + api override）。
+/// 以按钮形式弹出预览卡（ProviderScope 齐 prefs + api family override）。
+///
+/// api 只对 bridgeId 'b1' 注入——sheet 若路由到别的 bridgeId 会拿到 null，
+/// 渲染/发键路径随即失败，从而断言 bridgeId 真的传进了取数链路。
 Future<void> _pumpSheet(
   WidgetTester tester,
   _FakeBridgeApi api, {
@@ -88,15 +92,16 @@ Future<void> _pumpSheet(
     ProviderScope(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
-        apiProvider.overrideWithValue(api),
+        apiProvider.overrideWith(
+            (ref, bridgeId) => bridgeId == 'b1' ? api : null),
       ],
       child: MaterialApp(
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
               child: const Text('open'),
-              onPressed: () =>
-                  AgentPreviewSheet.show(context, pane: _pane, pinned: pinned),
+              onPressed: () => AgentPreviewSheet.show(context,
+                  bridgeId: 'b1', pane: _pane, pinned: pinned),
             ),
           ),
         ),

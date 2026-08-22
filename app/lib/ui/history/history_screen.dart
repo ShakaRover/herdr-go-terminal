@@ -3,13 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/bridge_api.dart';
 import '../../model/history.dart';
-import '../../state/settings.dart';
+import '../../state/bridges.dart';
 import '../../state/snapshot.dart';
 
 /// 对话历史页：从 agent 自己的会话日志分页读取（非终端滚屏）。
 class HistoryScreen extends ConsumerStatefulWidget {
-  const HistoryScreen({super.key, required this.paneId, required this.title});
+  const HistoryScreen(
+      {super.key,
+      required this.bridgeId,
+      required this.paneId,
+      required this.title});
 
+  final String bridgeId;
   final String paneId;
   final String title;
 
@@ -33,7 +38,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   Future<void> _loadOlder() async {
     if (_loading) return;
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null) return;
     setState(() {
       _loading = true;
@@ -43,7 +48,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       final page = await api.fetchHistory(
         widget.paneId,
         before: _entries.isEmpty ? null : _entries.first.uuid,
-        session: ref.read(sessionFilterProvider),
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
       );
       if (!mounted) return;
       setState(() {

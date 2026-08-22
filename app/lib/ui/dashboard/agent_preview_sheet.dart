@@ -12,18 +12,23 @@ import '../../blocks/prompt_action.dart';
 import '../../blocks/prompt_model.dart';
 import '../../blocks/prompt_select.dart';
 import '../../model/models.dart';
+import '../../state/bridges.dart';
 import '../../state/pinned.dart';
-import '../../state/settings.dart';
 import '../../state/snapshot.dart';
 import '../agent/agent_screen.dart';
 import '../agent/ansi_span.dart';
-import 'dashboard_screen.dart';
+import '../status_style.dart';
 
 /// 长按弹出的预览卡：最近一屏 ANSI + 状态 + 上下文按钮/通用动作 + pin +
 /// 打开详情。
 class AgentPreviewSheet extends ConsumerStatefulWidget {
-  const AgentPreviewSheet({super.key, required this.pane, required this.pinned});
+  const AgentPreviewSheet(
+      {super.key,
+      required this.bridgeId,
+      required this.pane,
+      required this.pinned});
 
+  final String bridgeId;
   final PaneInfo pane;
 
   /// 弹出时是否已置顶（pin 图标与 SnackBar 文案据此取反）。
@@ -32,6 +37,7 @@ class AgentPreviewSheet extends ConsumerStatefulWidget {
   /// 便捷静态方法：showModalBottomSheet 弹出。
   static Future<void> show(
     BuildContext context, {
+    required String bridgeId,
     required PaneInfo pane,
     required bool pinned,
   }) =>
@@ -39,7 +45,8 @@ class AgentPreviewSheet extends ConsumerStatefulWidget {
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
-        builder: (_) => AgentPreviewSheet(pane: pane, pinned: pinned),
+        builder: (_) =>
+            AgentPreviewSheet(bridgeId: bridgeId, pane: pane, pinned: pinned),
       );
 
   @override
@@ -69,8 +76,8 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
   }
 
   void _reload() {
-    final api = ref.read(apiProvider);
-    final session = ref.read(sessionFilterProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
+    final session = ref.read(sessionFilterProvider(widget.bridgeId));
     setState(() {
       _future = api == null
           ? Future.error(const ApiException('未配置 bridge 连接'))
@@ -94,7 +101,7 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
 
   /// 上下文按钮：点选项走防护链（新鲜读取 → 结构相等 → 带 expectedPrompt 发键）。
   Future<void> _tapOption(PromptOption opt) async {
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
     final model = _model;
     if (api == null || model == null || _busy) return;
     setState(() => _busy = true);
@@ -102,7 +109,7 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
       final res = await tapPromptOption(
         api: api,
         paneId: widget.pane.paneId,
-        session: ref.read(sessionFilterProvider),
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
         tapped: model,
         opt: opt,
       );
@@ -124,12 +131,12 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
 
   /// 通用动作：盲发按键（不带 expectedPrompt），成功关卡。
   Future<void> _tapGeneric(List<String> keys) async {
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _busy) return;
     setState(() => _busy = true);
     try {
       final res = await api.sendKeys(widget.pane.paneId, keys,
-          session: ref.read(sessionFilterProvider));
+          session: ref.read(sessionFilterProvider(widget.bridgeId)));
       if (!mounted) return;
       if (res.success) {
         Navigator.of(context).pop();
@@ -146,16 +153,18 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
   void _openDetail() {
     Navigator.of(context).pop();
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => AgentScreen(paneId: widget.pane.paneId)),
+      MaterialPageRoute(
+          builder: (_) => AgentScreen(
+              bridgeId: widget.bridgeId, paneId: widget.pane.paneId)),
     );
   }
 
   /// 对齐 dashboard 的 _togglePinned：toggle + SnackBar。
   Future<void> _togglePinned() async {
-    final session = ref.read(sessionFilterProvider);
+    final session = ref.read(sessionFilterProvider(widget.bridgeId));
     await ref
         .read(pinnedPanesProvider.notifier)
-        .toggle(session, widget.pane.paneId);
+        .toggle(widget.bridgeId, session, widget.pane.paneId);
     if (mounted) _toast(widget.pinned ? '已取消置顶' : '已置顶');
   }
 

@@ -8,6 +8,7 @@ import '../../state/snapshot.dart';
 import '../../util/relative_time.dart';
 import '../agent/agent_screen.dart';
 import '../settings/settings_screen.dart';
+import '../status_style.dart';
 import 'agent_preview_sheet.dart';
 
 /// triage 首页：「已置顶」分组最顶，随后 blocked（需要你处理）、working、idle/done。
@@ -222,22 +223,6 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
-
-Color statusColor(ColorScheme scheme, AgentStatus status) => switch (status) {
-      AgentStatus.blocked => Colors.amber,
-      AgentStatus.working => Colors.lightBlue,
-      AgentStatus.done => Colors.green,
-      AgentStatus.idle => scheme.outline,
-      AgentStatus.unknown => scheme.outline,
-    };
-
-String statusLabel(AgentStatus status) => switch (status) {
-      AgentStatus.blocked => '待处理',
-      AgentStatus.working => '工作中',
-      AgentStatus.done => '已完成',
-      AgentStatus.idle => '空闲',
-      AgentStatus.unknown => '未知',
-    };
 
 class _AgentCard extends ConsumerWidget {
   const _AgentCard({required this.pane, required this.pinned});

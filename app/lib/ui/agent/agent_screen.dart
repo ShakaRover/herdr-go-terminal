@@ -7,17 +7,18 @@ import '../../api/bridge_api.dart';
 import '../../blocks/prompt_action.dart';
 import '../../blocks/prompt_model.dart';
 import '../../blocks/prompt_select.dart';
+import '../../state/bridges.dart';
 import '../../state/pane_read.dart';
-import '../../state/settings.dart';
 import '../../state/snapshot.dart';
-import '../dashboard/dashboard_screen.dart';
 import '../history/history_screen.dart';
+import '../status_style.dart';
 import 'ansi_span.dart';
 
 /// agent 详情：输出镜像 + 回复框 + 特殊按键条。
 class AgentScreen extends ConsumerStatefulWidget {
-  const AgentScreen({super.key, required this.paneId});
+  const AgentScreen({super.key, required this.bridgeId, required this.paneId});
 
+  final String bridgeId;
   final String paneId;
 
   @override
@@ -79,7 +80,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     // 发送前 trim（对齐 collie composer）：尾随换行会变成额外的 Enter 打进 PTY。
     final text = _replyController.text.trim();
     if (text.isEmpty || _sending) return;
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null) return;
     // 屏幕上有对话框时，reply 路径是「打字 + 盲发 Enter」——回车可能批准
     // 对话框高亮的默认选项（collie issue #34 类事故）。先确认；
@@ -108,7 +109,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     setState(() => _sending = true);
     try {
       final res = await api.sendReply(widget.paneId, text,
-          session: ref.read(sessionFilterProvider));
+          session: ref.read(sessionFilterProvider(widget.bridgeId)));
       if (!mounted) return;
       if (res.success) {
         _replyController.clear();
@@ -129,12 +130,12 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   }
 
   Future<void> _sendKeys(List<String> keys) async {
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _sending) return;
     setState(() => _sending = true);
     try {
       final res = await api.sendKeys(widget.paneId, keys,
-          session: ref.read(sessionFilterProvider));
+          session: ref.read(sessionFilterProvider(widget.bridgeId)));
       if (!mounted) return;
       if (!res.success) {
         _toast(res.promptChanged ? '界面已变化，请重试' : '按键失败：${res.error}');
@@ -151,9 +152,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   /// prompt-select 路径）：新鲜读取 → 重新派生模型 → 结构相等校验 →
   /// 带 expectedPrompt 发键。这里只把结果映射成 toast 并触发刷新。
   Future<void> _tapPromptOption(PromptModel tapped, PromptOption opt) async {
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _sending) return;
-    final session = ref.read(sessionFilterProvider);
+    final session = ref.read(sessionFilterProvider(widget.bridgeId));
     setState(() => _sending = true);
     try {
       final result = await tapPromptOption(
@@ -182,13 +183,16 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   }
 
   Future<void> _refreshAll() async {
-    await ref.read(paneReadProvider(widget.paneId).notifier).refresh();
-    await ref.read(snapshotProvider.notifier).refresh();
+    await ref
+        .read(paneReadProvider((bridgeId: widget.bridgeId, paneId: widget.paneId))
+            .notifier)
+        .refresh();
+    await ref.read(bridgeSnapshotProvider(widget.bridgeId).notifier).refresh();
   }
 
   /// 相册选图 → 上传到宿主机 → 返回的路径插进回复框（agent 按路径读图）。
   Future<void> _pickAndUpload() async {
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _sending) return;
     final picked = await ImagePicker()
         .pickImage(source: ImageSource.gallery, maxWidth: 2048);
@@ -196,7 +200,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     setState(() => _sending = true);
     try {
       final res = await api.uploadImage(widget.paneId, picked.path,
-          session: ref.read(sessionFilterProvider));
+          session: ref.read(sessionFilterProvider(widget.bridgeId)));
       if (!mounted) return;
       if (res.success && res.path != null) {
         final current = _replyController.text;
@@ -222,8 +226,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final readState = ref.watch(paneReadProvider(widget.paneId));
-    final snapshotState = ref.watch(snapshotProvider);
+    final paneKey = (bridgeId: widget.bridgeId, paneId: widget.paneId);
+    final readState = ref.watch(paneReadProvider(paneKey));
+    final snapshotState = ref.watch(bridgeSnapshotProvider(widget.bridgeId));
     final snap = snapshotState.data;
     final pane = snap?.agents
         .where((p) => p.paneId == widget.paneId)
@@ -231,7 +236,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final readOnly = snap?.readOnly ?? false;
 
     // 新内容到达且用户在底部 → 跟随。
-    ref.listen(paneReadProvider(widget.paneId), (prev, next) {
+    ref.listen(paneReadProvider(paneKey), (prev, next) {
       if (_stickToBottom && next.data != prev?.data) _scrollToBottom();
     });
 
@@ -285,6 +290,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => HistoryScreen(
+                    bridgeId: widget.bridgeId,
                     paneId: widget.paneId,
                     title: pane?.displayName ?? widget.paneId,
                   ),
