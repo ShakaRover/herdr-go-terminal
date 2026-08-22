@@ -1,0 +1,35 @@
+[package]
+name = "herdr-bridge"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync", "io-util"] }
+axum = { version = "0.8", features = ["multipart"] }
+tower-http = { version = "0.6", features = ["compression-gzip"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+regex = "1"
+uuid = { version = "1", features = ["v4"] }
+wyhash = "0.5"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+qrcode = { version = "0.14", default-features = false }
+url = "2"
+easytier = { git = "https://github.com/EasyTier/EasyTier.git", rev = "62e4fd15", default-features = false, features = [
+    "smoltcp", "aes-gcm", "dhcp-ipv4", "tracing-log",
+] }
+easytier-core = { git = "https://github.com/EasyTier/EasyTier.git", rev = "62e4fd15", default-features = false }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3"
+
+[profile.release]
+opt-level = 2
+lto = true
+strip = true
+codegen-units = 1

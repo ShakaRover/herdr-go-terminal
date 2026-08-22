@@ -1,0 +1,172 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:herdr_web/model/remote_profile.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+Map<String, dynamic> validPairingJson() => {
+      'v': 1,
+      'server': 'tcp://vpn.example.com:11010',
+      'networkName': 'abcdefgh-1234-5678-9abc-def012345678',
+      'secret': 's3cret',
+      'virtualIp': '10.126.0.1',
+      'port': 56001,
+    };
+
+void main() {
+  group('RemoteProfile.fromPairingJson', () {
+    test('正常解析：字段齐全，label 取 networkName 前 8 位', () {
+      final p = RemoteProfile.fromPairingJson(validPairingJson());
+      expect(p.server, 'tcp://vpn.example.com:11010');
+      expect(p.networkName,
+          'abcdefgh-1234-5678-9abc-def012345678');
+      expect(p.secret, 's3cret');
+      expect(p.virtualIp, '10.126.0.1');
+      expect(p.port, 56001);
+      expect(p.label, 'abcdefgh');
+      expect(p.id, isNotEmpty);
+    });
+
+    test('未知字段忽略', () {
+      final j = validPairingJson()
+        ..['extra'] = 'whatever'
+        ..['nested'] = {'a': 1};
+      final p = RemoteProfile.fromPairingJson(j);
+      expect(p.server, validPairingJson()['server']);
+    });
+
+    test('v != 1 抛 FormatException', () {
+      for (final v in [0, 2, '1']) {
+        expect(
+          () => RemoteProfile.fromPairingJson({...validPairingJson(), 'v': v}),
+          throwsA(isA<FormatException>()
+              .having((e) => e.message, 'message', contains('version'))),
+        );
+      }
+    });
+
+    test('必填字段缺失或非 String 抛 FormatException', () {
+      for (final key in ['server', 'networkName', 'secret', 'virtualIp']) {
+        // 缺失
+        final missing = validPairingJson()..remove(key);
+        expect(() => RemoteProfile.fromPairingJson(missing),
+            throwsA(isA<FormatException>()));
+        // 类型错误
+        expect(
+          () => RemoteProfile.fromPairingJson({...validPairingJson(), key: 42}),
+          throwsA(isA<FormatException>()),
+        );
+        // 空字符串
+        expect(
+          () => RemoteProfile.fromPairingJson({...validPairingJson(), key: ''}),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
+
+    test('port 缺失或非 int 或越界（0 / 65536）抛 FormatException', () {
+      final missing = validPairingJson()..remove('port');
+      expect(() => RemoteProfile.fromPairingJson(missing),
+          throwsA(isA<FormatException>()));
+      for (final port in ['56001', 0, 65536, -1, 1.5]) {
+        expect(
+          () => RemoteProfile.fromPairingJson(
+              {...validPairingJson(), 'port': port}),
+          throwsA(isA<FormatException>()),
+        );
+      }
+      // 边界合法值
+      expect(
+          RemoteProfile.fromPairingJson({...validPairingJson(), 'port': 1})
+              .port,
+          1);
+      expect(
+          RemoteProfile.fromPairingJson(
+                  {...validPairingJson(), 'port': 65535})
+              .port,
+          65535);
+    });
+
+    test('自定义 label 优先于默认', () {
+      final p = RemoteProfile.fromPairingJson(
+          {...validPairingJson(), 'label': 'home'});
+      expect(p.label, 'home');
+    });
+  });
+
+  group('RemoteProfile toJson/fromJson 往返', () {
+    test('roundtrip 保持所有字段', () {
+      final p = RemoteProfile.fromPairingJson(validPairingJson());
+      final restored = RemoteProfile.fromJson(p.toJson());
+      expect(restored.id, p.id);
+      expect(restored.label, p.label);
+      expect(restored.server, p.server);
+      expect(restored.networkName, p.networkName);
+      expect(restored.secret, p.secret);
+      expect(restored.virtualIp, p.virtualIp);
+      expect(restored.port, p.port);
+    });
+  });
+
+  group('ProfileStore', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    Future<ProfileStore> freshStore() async =>
+        ProfileStore(await SharedPreferences.getInstance());
+
+    test('空 store list 为空', () async {
+      expect(await (await freshStore()).list(), isEmpty);
+    });
+
+    test('add 后 list/getById 可见，id 自动生成', () async {
+      final store = await freshStore();
+      final p = await store.add(RemoteProfile.fromPairingJson(validPairingJson()));
+      final list = await store.list();
+      expect(list, hasLength(1));
+      expect(list.single.id, p.id);
+      final got = await store.getById(p.id);
+      expect(got, isNotNull);
+      expect(got!.secret, 's3cret');
+    });
+
+    test('add 多个按插入顺序保留', () async {
+      final store = await freshStore();
+      await store.add(RemoteProfile.fromPairingJson(validPairingJson()));
+      await store.add(RemoteProfile.fromPairingJson(
+          {...validPairingJson(), 'virtualIp': '10.126.0.2'}));
+      expect(await store.list(), hasLength(2));
+    });
+
+    test('remove 按 id 删除，剩余不受影响', () async {
+      final store = await freshStore();
+      final a = await store
+          .add(RemoteProfile.fromPairingJson(validPairingJson()));
+      final b = await store.add(RemoteProfile.fromPairingJson(
+          {...validPairingJson(), 'virtualIp': '10.126.0.2'}));
+      await store.remove(a.id);
+      final list = await store.list();
+      expect(list.single.id, b.id);
+      expect(await store.getById(a.id), isNull);
+    });
+
+    test('remove 不存在的 id 不报错', () async {
+      final store = await freshStore();
+      await store.remove('no-such-id');
+      expect(await store.list(), isEmpty);
+    });
+
+    test('损坏的持久化数据按空处理', () async {
+      SharedPreferences.setMockInitialValues(
+          {'bridge_profiles_v1': 'not json {{'});
+      expect(await (await freshStore()).list(), isEmpty);
+    });
+
+    test('新实例能读到之前写入的数据（持久化）', () async {
+      final store = await freshStore();
+      final p = await store.add(RemoteProfile.fromPairingJson(validPairingJson()));
+      // 模拟应用重启后用新的 store 实例重新读取。
+      final store2 = await freshStore();
+      final got = await store2.getById(p.id);
+      expect(got, isNotNull);
+      expect(got!.virtualIp, '10.126.0.1');
+    });
+  });
+}

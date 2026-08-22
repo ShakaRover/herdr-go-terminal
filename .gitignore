@@ -1,0 +1,25 @@
+# 工具链与构建产物
+.toolchain/
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/pubspec.lock.overrides
+*.iml
+.idea/
+.vscode/
+app/android/.gradle/
+app/android/local.properties
+app/android/key.properties
+*.keystore
+*.jks
+
+# 测试夹具（从 collie 仓库同步，注明来源后提交，勿删）
+# app/test/fixtures/
+
+# 系统
+.DS_Store
+
+# 本地配置（勿提交）
+.env

@@ -1,0 +1,19 @@
+[Unit]
+Description=herdr-bridge (Rust REST bridge for herdr)
+After=default.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/herdr-bridge
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+Environment=HERDR_SOCKET_PATH=%h/.config/herdr/herdr.sock
+Environment=HERDR_BRIDGE_PORT=8787
+Environment=HERDR_BRIDGE_STATE_DIR=%h/.local/state/herdr-bridge
+EnvironmentFile=-%h/.config/herdr-bridge/env
+
+[Install]
+WantedBy=default.target
