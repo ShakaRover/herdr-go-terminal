@@ -94,10 +94,10 @@ pub struct Cli {
     #[arg(long, env = "HERDR_BRIDGE_CODEX_ROOT")]
     pub codex_root: Option<PathBuf>,
     /// pi 日志 root
-    #[arg(long, env = "HERDR_PI_ROOT")]
+    #[arg(long, env = "HERDR_BRIDGE_PI_ROOT")]
     pub pi_root: Option<PathBuf>,
     /// opencode 数据目录
-    #[arg(long, env = "HERDR_OPENCODE_ROOT")]
+    #[arg(long, env = "HERDR_BRIDGE_OPENCODE_ROOT")]
     pub opencode_root: Option<PathBuf>,
     /// EasyTier 中继/发现服务器地址（可重复或逗号分隔，如 tcp://et.example.com:11010）
     #[arg(long, env = "HERDR_BRIDGE_EASYTIERSERVER", value_delimiter = ',')]
