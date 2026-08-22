@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# EasyTier JNI 动态库是构建产物，由 EasyTier 仓库的
+# easytier-contrib/easytier-android-jni 构建后拷入，不入库。
+/app/src/main/jniLibs/
