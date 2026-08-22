@@ -59,23 +59,24 @@ bridge 部署在 herdr 宿主机上：
 ```bash
 cd bridge
 cargo build --release
-# 产物：bridge/target/release/herdrgo-bridge，默认监听 127.0.0.1:8787
+# 产物：bridge/target/release/herdrgo-bridge
 ```
 
-常驻运行可用 `bridge/systemd/` 下的 systemd 单元。对外暴露有两种方式：
+常驻运行可用 `bridge/systemd/` 下的 systemd 单元。bridge **默认零配置即进入
+EasyTier 模式**：自动生成并持久化网络 secret，经默认中继
+`txt://herdrgo.et-link.cc` 组网，REST API 走 data plane 虚拟 TCP，不监听 OS
+端口、不需要 TUN/root。启动时打印配对二维码，app 扫码即连（app 侧同样经
+内嵌 EasyTier + 本地端口转发，不申请 VpnService）。常用选项只有
+`--secret` / `--server` / `--port`（`--help`），高级选项见 `--help-advance`。
+secret 即网络凭据，等同钥匙，只在宿主机终端就地展示、勿泄露。详见
+`bridge/README.md` 与设计文档
+[`docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md`](docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md)。
 
-1. **EasyTier 远程访问（推荐）**：bridge 内嵌 EasyTier，设置
-   `HERDRGO_BRIDGE_EASYTIERSERCRET`（+`HERDRGO_BRIDGE_EASYTIERSERVER` 中继、
-   `HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP` 静态虚拟 IP）后进入纯 EasyTier
-   模式，REST API 走 data plane 虚拟 TCP，不监听 OS 端口、不需要
-   TUN/root。`herdrgo-bridge --show-qr` 打印配对二维码，app 扫码即连
-   （app 侧同样经内嵌 EasyTier + 本地端口转发，不申请 VpnService）。
-   详见 `bridge/README.md` 的「EasyTier 模式」节与设计文档
-   [`docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md`](docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md)。
-   注意：二维码含完整网络凭据，等同钥匙，只在宿主机终端就地展示。
-2. **前置代理**：bridge 侧设 `HERDRGO_BRIDGE_DEVICE_HEADER`（+
-   `HERDRGO_BRIDGE_DEVICE_ALLOWLIST`），app 首次启动填 bridge 地址，并在
-   「自定义请求头」里填对应 header（否则为只读模式）。
+如需走 HTTP 直连（本机/前置代理调试），显式关闭 EasyTier：`herdrgo-bridge
+--secret ""`，此时监听 `--host`/`--http-port`（默认 `127.0.0.1:8787`），并可用
+`HERDRGO_BRIDGE_DEVICE_HEADER`（+`HERDRGO_BRIDGE_DEVICE_ALLOWLIST`）做 device
+gate，app 首次启动填 bridge 地址并在「自定义请求头」里填对应 header（否则
+为只读模式）。
 
 ## 已知限制
 

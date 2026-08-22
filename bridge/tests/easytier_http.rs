@@ -26,7 +26,7 @@ async fn http_over_data_plane() {
     // bridge 端：静态虚拟 IP + 测试 listener（Config::from_env 读取）
     let state_dir = tempfile::tempdir().unwrap();
     std::env::set_var("HERDRGO_BRIDGE_STATE_DIR", state_dir.path());
-    std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERCRET", NETWORK_SECRET);
+    std::env::set_var("HERDRGO_BRIDGE_SECRET", NETWORK_SECRET);
     std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", format!("{BRIDGE_IP}/24"));
     std::env::set_var("HERDRGO_BRIDGE_EASYTIERSER_TEST_LISTENERS", BRIDGE_LISTENER);
     let cfg = herdrgo_bridge::config::Config::from_cli(&herdrgo_bridge::config::Cli::from_process_env());

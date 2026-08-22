@@ -11,7 +11,6 @@ RestartSec=5
 NoNewPrivileges=yes
 PrivateTmp=yes
 Environment=HERDR_SOCKET_PATH=%h/.config/herdr/herdr.sock
-Environment=HERDRGO_BRIDGE_PORT=8787
 Environment=HERDRGO_BRIDGE_STATE_DIR=%h/.local/state/herdrgo-bridge
 EnvironmentFile=-%h/.config/herdrgo-bridge/env
 

@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use clap::Parser;
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -11,7 +9,7 @@ async fn main() {
         )
         .init();
     herdrgo_bridge::config::sanitize_env();
-    let cli = herdrgo_bridge::config::Cli::parse();
+    let cli = herdrgo_bridge::config::Cli::parse_cli();
     let cfg = Arc::new(herdrgo_bridge::config::Config::from_cli(&cli));
     std::fs::create_dir_all(&cfg.state_dir).expect("create state dir");
     {
@@ -93,7 +91,7 @@ async fn main() {
         axum::serve(listener, app.into_make_service()).await.expect("serve");
         drop(net);
     } else {
-        let addr = format!("{}:{}", cfg.host, cfg.port);
+        let addr = format!("{}:{}", cfg.host, cfg.http_port);
         let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
         tracing::info!(%addr, "listening");
         axum::serve(listener, app).await.expect("serve");

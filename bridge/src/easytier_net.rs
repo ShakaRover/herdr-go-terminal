@@ -128,7 +128,7 @@ pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
     let secret = cfg
         .easytier_secret
         .clone()
-        .context("easytier secret not set (HERDRGO_BRIDGE_EASYTIERSERCRET)")?;
+        .context("easytier secret not set (HERDRGO_BRIDGE_SECRET)")?;
     let virtual_ip = cfg
         .easytier_virtual_ip
         .as_deref()
@@ -142,7 +142,7 @@ pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
         "networkName": network_name,
         "secret": secret,
         "virtualIp": virtual_ip,
-        "port": cfg.port,
+        "port": cfg.http_port,
     }))
 }
 
@@ -157,7 +157,7 @@ pub fn lan_ipv4() -> Option<std::net::Ipv4Addr> {
     }
 }
 
-/// 启动内嵌 EasyTier 实例，并在虚拟网络上绑定 data-plane TCP `cfg.port`。
+/// 启动内嵌 EasyTier 实例，并在虚拟网络上绑定 data-plane TCP `cfg.http_port`。
 pub async fn start_easytier(cfg: &Config) -> anyhow::Result<EasyTierNet> {
     let secret = cfg.easytier_secret.clone().context("easytier secret not set")?;
     let network_name = cfg.easytier_network_id().context("load network id")?;
@@ -198,15 +198,15 @@ pub async fn start_easytier(cfg: &Config) -> anyhow::Result<EasyTierNet> {
     instance.start().await.context("start easytier instance")?;
 
     let listener = instance
-        .data_plane_tcp_bind(cfg.port, Duration::from_secs(15))
+        .data_plane_tcp_bind(cfg.http_port, Duration::from_secs(15))
         .await
-        .map_err(|e| anyhow::anyhow!("data-plane bind {}: {e}", cfg.port))?;
+        .map_err(|e| anyhow::anyhow!("data-plane bind {}: {e}", cfg.http_port))?;
     let virtual_addr = listener.local_addr();
 
     Ok(EasyTierNet {
         instance,
         first_listener: std::sync::Mutex::new(Some(listener)),
-        port: cfg.port,
+        port: cfg.http_port,
         virtual_addr,
         network_name,
     })
@@ -214,6 +214,8 @@ pub async fn start_easytier(cfg: &Config) -> anyhow::Result<EasyTierNet> {
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser as _;
+
     // 验证 DataPlaneListener 满足 axum Listener 约束（编译期）。
     #[test]
     fn listener_impl_is_object_safe_enough() {
@@ -221,17 +223,17 @@ mod tests {
         assert_listener::<super::DataPlaneListener>();
     }
 
-    /// 清环境后构建 Config；relays 非空时写入 HERDRGO_BRIDGE_EASYTIERSERVER。
+    /// 清环境后构建 Config；relays 非空时写入 HERDRGO_BRIDGE_SERVER。
     fn fresh_cfg(relays: &str) -> crate::config::Config {
         crate::config::tests::clear();
         if !relays.is_empty() {
-            std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVER", relays);
+            std::env::set_var("HERDRGO_BRIDGE_SERVER", relays);
         }
         std::env::set_var(
             "HERDRGO_BRIDGE_STATE_DIR",
             std::env::temp_dir().join(format!("herdr-qr-{}", uuid::Uuid::new_v4())),
         );
-        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERCRET", "s3cret");
+        std::env::set_var("HERDRGO_BRIDGE_SECRET", "s3cret");
         std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
         crate::config::Config::from_cli(&crate::config::Cli::from_process_env())
     }
@@ -257,26 +259,22 @@ mod tests {
         }
         assert_eq!(v["secret"], "s3cret");
         assert_eq!(v["virtualIp"], "10.126.0.1");
-        assert_eq!(v["port"], 8787);
-        assert!(uuid::Uuid::parse_str(v["networkName"].as_str().unwrap()).is_ok());
+        assert_eq!(v["port"], 8787);        assert!(uuid::Uuid::parse_str(v["networkName"].as_str().unwrap()).is_ok());
     }
 
     #[test]
     fn pairing_payload_server_list_variants() {
         let _g = crate::config::tests_lock();
-        // 无中继：server 数组只有内网 IP 项（探测失败则空数组）。
+        // 未显式指定中继：回落默认 txt://herdrgo.et-link.cc，追加在内网 IP 项后。
         let cfg = fresh_cfg("");
         let v = super::pairing_payload(&cfg).unwrap();
         let servers = v["server"].as_array().unwrap();
         let lan = super::lan_ipv4();
-        if let Some(ip) = lan {
-            assert_eq!(
-                *servers,
-                vec![serde_json::json!(format!("tcp://{ip}:22023"))]
-            );
-        } else {
-            assert!(servers.is_empty());
-        }
+        let mut expect: Vec<String> = lan
+            .map(|ip| vec![format!("tcp://{ip}:22023")])
+            .unwrap_or_default();
+        expect.push("txt://herdrgo.et-link.cc".to_string());
+        assert_eq!(*servers, expect);
         // 多个中继：全部追加在内网 IP 项之后。
         let cfg = fresh_cfg("tcp://et1.example.com:11010,tcp://et2.example.com:11010");
         let v = super::pairing_payload(&cfg).unwrap();
@@ -300,10 +298,10 @@ mod tests {
     fn pairing_payload_requires_explicit_secret_and_ip() {
         let _g = crate::config::tests_lock();
         crate::config::tests::clear();
-        // 缺 secret / virtual ip 时报错；easytier_server 已非必填。
-        assert!(super::pairing_payload(&crate::config::Config::from_cli(
-            &crate::config::Cli::from_process_env())).is_err());
-        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERCRET", "s3cret");
+        // 显式关闭 EasyTier（--secret ""）或缺 virtual ip 时报错；server 已非必填。
+        let off = crate::config::Cli::parse_from(["herdrgo-bridge", "--secret", ""]);
+        assert!(super::pairing_payload(&crate::config::Config::from_cli(&off)).is_err());
+        std::env::set_var("HERDRGO_BRIDGE_SECRET", "s3cret");
         assert!(super::pairing_payload(&crate::config::Config::from_cli(
             &crate::config::Cli::from_process_env())).is_err());
         std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
