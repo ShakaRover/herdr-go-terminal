@@ -84,6 +84,21 @@ class FocusedBridgeNotifier extends Notifier<String> {
 final focusedBridgeProvider =
     NotifierProvider<FocusedBridgeNotifier, String>(FocusedBridgeNotifier.new);
 
+/// app 是否在前台（RootGate 的 AppLifecycleListener 驱动，默认前台）。
+///
+/// 前台心跳只在「app 在前台且轮询成功」时写（见 bridgesProvider）：退后台
+/// 后轮询暂停（bridgeSnapshotProvider.setPaused）、心跳停写，超过
+/// foregroundFreshWindow 抑制自然解除，下一个快照到达即可发通知。
+class AppForegroundNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void setForeground(bool foreground) => state = foreground;
+}
+
+final appForegroundProvider =
+    NotifierProvider<AppForegroundNotifier, bool>(AppForegroundNotifier.new);
+
 /// 全部 enabled 连接的运行态列表（顺序 = profile 列表序）。
 ///
 /// 副作用：
@@ -91,10 +106,14 @@ final focusedBridgeProvider =
 ///   「状态驱动 connect 一次」的语义——仅在 Disconnected 时发起 connect，
 ///   失败不自动重试，断线靠 tab 重进/重选触发）；
 /// - Android 前台通知：listen 每条连接的 bridgeSnapshotProvider，快照刷新
-///   后 app 在后台（心跳不新鲜）时对新增 blocked 逐条发通知并写 seen——
-///   全 EasyTier 后这是唯一的通知路径（后台 isolate 无直连可轮询）；
-/// - 前台心跳：任一 bridge 快照刷新成功即节流写 foregroundHeartbeatKey
-///   （语义：app 活着且在轮询 = 用户在看，后台任务据此免打扰）。
+///   且心跳不新鲜（app 在后台/刚回前台）时对新增 blocked 逐条发通知并写
+///   seen——全 EasyTier 后这是唯一的通知路径（后台 isolate 无直连可轮询）。
+///   抑制检查必须先于心跳续写，否则心跳永远新鲜、通知永远发不出；
+/// - 前台心跳：任一 bridge 快照刷新成功且 app 在前台时节流写
+///   foregroundHeartbeatKey（语义：用户正在看 = 免打扰）。退后台后
+///   RootGate 暂停各 bridge 轮询（bridgeSnapshotProvider.setPaused），
+///   心跳停写，foregroundFreshWindow（60s）后抑制解除，退后台期间出现的
+///   blocked 在回前台（或后台偶发刷新）的第一个快照处补发。
 final bridgesProvider = Provider<List<BridgeConn>>((ref) {
   final profiles = ref.watch(enabledProfilesProvider);
   if (defaultTargetPlatform == TargetPlatform.android) {
@@ -105,22 +124,26 @@ final bridgesProvider = Provider<List<BridgeConn>>((ref) {
       ref.listen(bridgeSnapshotProvider(p.id), (prev, next) {
         final snap = next.data;
         if (snap == null || snap == prev?.data) return;
-        heartbeat.stamp(prefs);
         final nowMs = DateTime.now().millisecondsSinceEpoch;
-        if (shouldSuppress(prefs, nowMs: nowMs)) return;
-        final seen = readSeen(prefs);
-        final fresh = newlyBlocked(p.id, snap, seen);
-        for (final pane in fresh) {
-          unawaited(notifier.show(
-            p.id,
-            pane.paneId,
-            p.label,
-            '${pane.displayName} 需要你处理',
-            '${pane.workspaceLabel} · ${pane.agent}',
-          ));
+        // 先查抑制（心跳新鲜 = 用户正在前台看，免打扰），再按需续写心跳；
+        // 顺序反过来会让心跳永远新鲜、通知永远发不出。
+        if (!shouldSuppress(prefs, nowMs: nowMs)) {
+          final seen = readSeen(prefs);
+          final fresh = newlyBlocked(p.id, snap, seen);
+          for (final pane in fresh) {
+            unawaited(notifier.show(
+              p.id,
+              pane.paneId,
+              p.label,
+              '${pane.displayName} 需要你处理',
+              '${pane.workspaceLabel} · ${pane.agent}',
+            ));
+          }
+          unawaited(
+              writeSeen(prefs, updateSeen(p.id, seen, snap, nowMs: nowMs)));
         }
-        unawaited(
-            writeSeen(prefs, updateSeen(p.id, seen, snap, nowMs: nowMs)));
+        // 心跳只在「app 在前台且轮询成功」时写；退后台停写才会过期。
+        if (ref.read(appForegroundProvider)) heartbeat.stamp(prefs);
       });
     }
   }

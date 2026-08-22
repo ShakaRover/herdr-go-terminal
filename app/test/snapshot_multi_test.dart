@@ -24,24 +24,32 @@ class FakeBridgeApi extends BridgeApi {
   final String agentName;
   final seenSessions = <String?>[];
 
+  /// 非空时优先于 [agentName] 默认 pane 作为 agents 返回（脚本化场景）。
+  List<PaneInfo>? scriptedAgents;
+
+  /// getSnapshot 调用次数（轮询暂停/恢复断言用）。
+  int getSnapshotCount = 0;
+
   @override
   Future<Snapshot> getSnapshot({String? session}) async {
+    getSnapshotCount++;
     seenSessions.add(session);
     return Snapshot(
       bridgeConnected: true,
-      agents: [
-        PaneInfo(
-          paneId: 'w0',
-          workspaceId: 'w0',
-          workspaceLabel: 'ws0',
-          workspaceNumber: 0,
-          tabId: 'w0:t0',
-          agent: agentName,
-          status: AgentStatus.working,
-          cwd: '/repo',
-          focused: false,
-        ),
-      ],
+      agents: scriptedAgents ??
+          [
+            PaneInfo(
+              paneId: 'w0',
+              workspaceId: 'w0',
+              workspaceLabel: 'ws0',
+              workspaceNumber: 0,
+              tabId: 'w0:t0',
+              agent: agentName,
+              status: AgentStatus.working,
+              cwd: '/repo',
+              focused: false,
+            ),
+          ],
       shellPanes: const [],
       workspaces: const [],
       tabs: const [],

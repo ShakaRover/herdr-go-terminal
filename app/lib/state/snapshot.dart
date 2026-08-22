@@ -46,7 +46,8 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
   /// family 参数：bridgeId。
   SnapshotNotifier(this.bridgeId);
 
-  static const _interval = Duration(seconds: 3);
+  /// 轮询间隔（测试可覆盖；对齐 EasyTierRuntimeNotifier.pollInterval 的玩法）。
+  static Duration pollInterval = const Duration(seconds: 3);
 
   final String bridgeId;
   Timer? _timer;
@@ -60,7 +61,7 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
     ref.onDispose(() => _timer?.cancel());
     if (api == null) return const SnapshotState();
     _timer?.cancel();
-    _timer = Timer.periodic(_interval, (_) => refresh());
+    _timer = Timer.periodic(pollInterval, (_) => refresh());
     // build 期间不允许写 state，推迟到微任务。
     Future.microtask(refresh);
     return const SnapshotState();
@@ -71,7 +72,7 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
       _timer?.cancel();
       _timer = null;
     } else if (_timer == null) {
-      _timer = Timer.periodic(_interval, (_) => refresh());
+      _timer = Timer.periodic(pollInterval, (_) => refresh());
       Future.microtask(refresh);
     }
   }
