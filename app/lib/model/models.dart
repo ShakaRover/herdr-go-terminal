@@ -1,4 +1,4 @@
-/// herdr-bridge（Rust，见仓库 `bridge/`）的 REST 响应模型。
+/// herdrgo-bridge（Rust，见仓库 `bridge/`）的 REST 响应模型。
 ///
 /// bridge 的 API 仍在演进，因此这里全部做宽容解析：
 /// 未知字段忽略，可选字段缺失时给默认值，类型不符时回退默认。
