@@ -1,7 +1,8 @@
-/// snapshot 轮询与 triage 排序。
+/// snapshot 轮询与 triage 排序（per bridge）。
 ///
 /// 对齐 collie web 的拉取模型：定时轮询 `/api/snapshot`，失败保留旧数据
 /// 并在 UI 顶部露错误条，下一次成功自愈。app 退到后台时暂停轮询。
+/// 多 bridge 下每个 bridgeId 一条独立的 3s 轮询回路（family）。
 library;
 
 import 'dart:async';
@@ -10,10 +11,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../model/models.dart';
 import '../notify/blocked_watch.dart';
+import 'bridges.dart';
 import 'settings.dart';
 
-/// 多 session 部署下当前选中的 herdr session（null = primary）。
+/// 多 session 部署下当前选中的 herdr session（null = primary），per bridge。
 class SessionFilterNotifier extends Notifier<String?> {
+  /// family 参数：bridgeId。
+  SessionFilterNotifier(this.bridgeId);
+
+  final String bridgeId;
+
   @override
   String? build() => null;
 
@@ -21,7 +28,8 @@ class SessionFilterNotifier extends Notifier<String?> {
 }
 
 final sessionFilterProvider =
-    NotifierProvider<SessionFilterNotifier, String?>(SessionFilterNotifier.new);
+    NotifierProvider.family<SessionFilterNotifier, String?, String>(
+        SessionFilterNotifier.new);
 
 class SnapshotState {
   const SnapshotState({this.data, this.error, this.lastOk});
@@ -37,17 +45,21 @@ class SnapshotState {
 }
 
 class SnapshotNotifier extends Notifier<SnapshotState> {
+  /// family 参数：bridgeId。
+  SnapshotNotifier(this.bridgeId);
+
   static const _interval = Duration(seconds: 3);
 
+  final String bridgeId;
   Timer? _timer;
   bool _inFlight = false;
   DateTime? _lastHeartbeat;
 
   @override
   SnapshotState build() {
-    final api = ref.watch(apiProvider);
+    final api = ref.watch(apiProvider(bridgeId));
     // session 切换也触发重建（重新拉对应会话的数据）。
-    ref.watch(sessionFilterProvider);
+    ref.watch(sessionFilterProvider(bridgeId));
     ref.onDispose(() => _timer?.cancel());
     if (api == null) return const SnapshotState();
     _timer?.cancel();
@@ -68,12 +80,12 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
   }
 
   Future<void> refresh() async {
-    final api = ref.read(apiProvider);
+    final api = ref.read(apiProvider(bridgeId));
     if (api == null || _inFlight) return;
     _inFlight = true;
     try {
-      final snap =
-          await api.getSnapshot(session: ref.read(sessionFilterProvider));
+      final snap = await api.getSnapshot(
+          session: ref.read(sessionFilterProvider(bridgeId)));
       state = SnapshotState(data: snap, lastOk: DateTime.now());
       _stampForegroundHeartbeat();
     } catch (e) {
@@ -97,8 +109,10 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
   }
 }
 
-final snapshotProvider =
-    NotifierProvider<SnapshotNotifier, SnapshotState>(SnapshotNotifier.new);
+/// 单 bridge 的 snapshot 轮询（3s、stale-while-error、前台心跳）。
+final bridgeSnapshotProvider =
+    NotifierProvider.family<SnapshotNotifier, SnapshotState, String>(
+        SnapshotNotifier.new);
 
 // ---------------------------------------------------------------------------
 // triage 排序（纯函数，便于测试）
