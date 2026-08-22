@@ -1,8 +1,12 @@
 /// EasyTier Android JNI 的 MethodChannel 封装（`dev.herdr/easytier`）。
 ///
 /// Kotlin 侧（MainActivity）只做转发，参数校验与 JSON 解析都在本层：
+/// - 方法全量携带 instanceName（= RemoteProfile.id，见
+///   state/easytier_runtime.dart 的 buildInstanceToml），多实例由
+///   EasyTier 内核 registry 承载；
 /// - 转发器目标 IP 必须是合法 IPv4、端口 1..65535，否则抛 [ArgumentError]；
-/// - `currentVirtualIp` 从 collectNetworkInfos 的 JSON 里取
+/// - `currentVirtualIp` 从 Kotlin 侧已按实例过滤的 collectNetworkInfos
+///   JSON（`{"map": {"<name>": <info>}}`）里取
 ///   `map.*.my_node_info.virtual_ipv4.address.addr`（u32，网络序）转成点分十进制。
 ///
 /// 转发器用法：EasyTier 实例以无 TUN 模式嵌入 app，启动转发器后
@@ -15,33 +19,34 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class EasyTierChannel {
-  EasyTierChannel([
+  const EasyTierChannel([
     this._channel = const MethodChannel('dev.herdr/easytier'),
-    // EasyTier 配置不显式指定 instance_name 时的默认值。
-    this.instanceName = 'default',
   ]);
 
   final MethodChannel _channel;
-
-  /// 转发器作用的 EasyTier 实例名（须与启动配置里的 instance_name 一致）。
-  final String instanceName;
 
   /// 以 TOML 配置启动 EasyTier 实例。失败抛 [PlatformException]。
   Future<void> startInstance(String tomlConfig) =>
       _channel.invokeMethod<void>('startInstance', {'config': tomlConfig});
 
-  /// 停止所有 EasyTier 实例。
-  Future<void> stopInstance() => _channel.invokeMethod<void>('stopInstance');
+  /// 停止名为 [instanceName] 的 EasyTier 实例（Kotlin 侧按名 retain，
+  /// 不存在时为 no-op）。
+  Future<void> stopInstance(String instanceName) => _channel
+      .invokeMethod<void>('stopInstance', {'instanceName': instanceName});
 
-  /// 当前虚拟 IPv4（点分十进制）；无运行实例或未分配时返回 null。
-  Future<String?> currentVirtualIp() async {
-    final json = await _channel.invokeMethod<String>('currentVirtualIp');
+  /// [instanceName] 实例的当前虚拟 IPv4（点分十进制）；
+  /// 实例未运行或未分配时返回 null。
+  Future<String?> currentVirtualIp(String instanceName) async {
+    final json = await _channel.invokeMethod<String>(
+        'currentVirtualIp', {'instanceName': instanceName});
     if (json == null || json.isEmpty) return null;
     return _parseVirtualIp(json);
   }
 
-  /// 启动本地 TCP 转发器，返回实际监听的本地端口（127.0.0.1:port）。
-  Future<int> startForwarder(String targetIp, int targetPort) async {
+  /// 在 [instanceName] 实例上启动本地 TCP 转发器，
+  /// 返回实际监听的本地端口（127.0.0.1:port）。
+  Future<int> startForwarder(
+      String instanceName, String targetIp, int targetPort) async {
     _checkIPv4(targetIp, 'targetIp');
     _checkPort(targetPort, 'targetPort');
     final port = await _channel.invokeMethod<int>('startForwarder', {

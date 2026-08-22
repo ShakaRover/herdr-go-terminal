@@ -1,8 +1,9 @@
 /// easytier_channel 的 MethodChannel 契约测试。
 ///
 /// 用 TestDefaultBinaryMessenger mock `dev.herdr/easytier` 通道，断言：
-/// - 每个方法发出的调用名与参数 map；
-/// - currentVirtualIp 从 collectNetworkInfos JSON 解析出点分十进制虚拟 IP；
+/// - 每个方法发出的调用名与参数 map（instanceName 全量携带）；
+/// - currentVirtualIp 从已过滤实例的 collectNetworkInfos JSON 解析出
+///   点分十进制虚拟 IP；
 /// - targetIp/端口的非法参数在 Dart 侧抛 ArgumentError（不触达原生）；
 /// - 原生侧 PlatformException 原样传播。
 library;
@@ -31,8 +32,8 @@ class _Harness {
   Object? nextResult;
   PlatformException? nextError;
 
-  EasyTierChannel create({String instanceName = 'default'}) =>
-      EasyTierChannel(const MethodChannel('dev.herdr/easytier'), instanceName);
+  EasyTierChannel create() =>
+      EasyTierChannel(const MethodChannel('dev.herdr/easytier'));
 
   void dispose() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -40,9 +41,9 @@ class _Harness {
   }
 }
 
-/// collectNetworkInfos 的真实 JSON 形状（pbjson，snake_case），
+/// collectNetworkInfos 过滤后的真实 JSON 形状（pbjson，snake_case），
 /// addr = 0x0A0A403E = 10.10.64.62。以真机 JSON 为准。
-const _infosJson = '{"map":{"default":{"running":true,"my_node_info":{'
+const _infosJson = '{"map":{"inst1":{"running":true,"my_node_info":{'
     '"virtual_ipv4":{"address":{"addr":168443966},"network_length":24}}}}}';
 
 void main() {
@@ -53,41 +54,42 @@ void main() {
   tearDown(() => h.dispose());
 
   test('startInstance 发 startInstance 与 config 参数', () async {
-    await h.create().startInstance('instance_name = "default"');
+    await h.create().startInstance('instance_name = "inst1"');
     expect(h.calls, hasLength(1));
     expect(h.calls.single.method, 'startInstance');
     expect(h.calls.single.arguments,
-        {'config': 'instance_name = "default"'});
+        {'config': 'instance_name = "inst1"'});
   });
 
-  test('stopInstance 发 stopInstance，无参数', () async {
-    await h.create().stopInstance();
+  test('stopInstance 发 stopInstance 与 instanceName 参数', () async {
+    await h.create().stopInstance('inst1');
     expect(h.calls.single.method, 'stopInstance');
-    expect(h.calls.single.arguments, isNull);
+    expect(h.calls.single.arguments, {'instanceName': 'inst1'});
   });
 
   test('currentVirtualIp 解析 my_node_info.virtual_ipv4 为点分十进制', () async {
     h.nextResult = _infosJson;
-    expect(await h.create().currentVirtualIp(), '10.10.64.62');
+    expect(await h.create().currentVirtualIp('inst1'), '10.10.64.62');
     expect(h.calls.single.method, 'currentVirtualIp');
+    expect(h.calls.single.arguments, {'instanceName': 'inst1'});
   });
 
   test('currentVirtualIp：null/空 map/未 running 都返回 null', () async {
     h.nextResult = null;
-    expect(await h.create().currentVirtualIp(), isNull);
+    expect(await h.create().currentVirtualIp('inst1'), isNull);
 
     h.nextResult = '{"map":{}}';
-    expect(await h.create().currentVirtualIp(), isNull);
+    expect(await h.create().currentVirtualIp('inst1'), isNull);
 
-    h.nextResult = '{"map":{"default":{"running":false,"my_node_info":{'
+    h.nextResult = '{"map":{"inst1":{"running":false,"my_node_info":{'
         '"virtual_ipv4":{"address":{"addr":168443966}}}}}}';
-    expect(await h.create().currentVirtualIp(), isNull);
+    expect(await h.create().currentVirtualIp('inst1'), isNull);
   });
 
   test('startForwarder 发实例名/目标/端口，返回本地端口', () async {
     h.nextResult = 40001;
-    final port = await h.create(instanceName: 'inst1')
-        .startForwarder('10.10.64.62', 8080);
+    final port =
+        await h.create().startForwarder('inst1', '10.10.64.62', 8080);
     expect(port, 40001);
     expect(h.calls.single.method, 'startForwarder');
     expect(h.calls.single.arguments, {
@@ -97,19 +99,14 @@ void main() {
     });
   });
 
-  test('startForwarder 默认实例名为 default', () async {
-    h.nextResult = 1;
-    await h.create().startForwarder('10.0.0.1', 80);
-    expect(h.calls.single.arguments, containsPair('instanceName', 'default'));
-  });
-
   test('startForwarder：非法 IP/端口抛 ArgumentError 且不触达通道', () async {
     final api = h.create();
     for (final badIp in ['', 'abc', '999.1.2.3', '::1', '10.0.0.256']) {
-      expect(() => api.startForwarder(badIp, 80), throwsArgumentError);
+      expect(() => api.startForwarder('inst1', badIp, 80),
+          throwsArgumentError);
     }
     for (final badPort in [0, -1, 65536]) {
-      expect(() => api.startForwarder('10.0.0.1', badPort),
+      expect(() => api.startForwarder('inst1', '10.0.0.1', badPort),
           throwsArgumentError);
     }
     expect(h.calls, isEmpty);
@@ -117,10 +114,10 @@ void main() {
 
   test('startForwarder：原生返回非法端口抛 PlatformException', () async {
     h.nextResult = null;
-    expect(() => h.create().startForwarder('10.0.0.1', 80),
+    expect(() => h.create().startForwarder('inst1', '10.0.0.1', 80),
         throwsA(isA<PlatformException>()));
     h.nextResult = -1;
-    expect(() => h.create().startForwarder('10.0.0.1', 80),
+    expect(() => h.create().startForwarder('inst1', '10.0.0.1', 80),
         throwsA(isA<PlatformException>()));
   });
 

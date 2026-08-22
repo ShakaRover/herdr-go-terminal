@@ -23,8 +23,9 @@ class RemoteProfile {
   /// 展示名；缺省取 networkName 前 8 位。
   final String label;
 
-  /// EasyTier 入口，例 tcp://vpn.example.com:11010。
-  final String server;
+  /// EasyTier 入口列表（多 peer：内网监听地址 + 公网中继），
+  /// 例 [tcp://10.0.0.2:22023, tcp://vpn.example.com:11010]。
+  final List<String> server;
   final String networkName;
   final String secret;
 
@@ -62,7 +63,7 @@ class RemoteProfile {
   factory RemoteProfile.fromJson(Map<String, dynamic> j) => RemoteProfile(
         id: j['id'] is String ? j['id'] as String : '',
         label: j['label'] is String ? j['label'] as String : '',
-        server: j['server'] is String ? j['server'] as String : '',
+        server: _serverFromJson(j['server']),
         networkName:
             j['networkName'] is String ? j['networkName'] as String : '',
         secret: j['secret'] is String ? j['secret'] as String : '',
@@ -71,14 +72,22 @@ class RemoteProfile {
         enabled: j['enabled'] is bool ? j['enabled'] as bool : true,
       );
 
-  /// 解析二维码载荷。要求 v==1，server/networkName/secret/virtualIp 为非空
+  /// 兼容旧格式：server 曾是单值字符串，读到时包成单元素数组。
+  static List<String> _serverFromJson(Object? v) {
+    if (v is String) return v.isEmpty ? const [] : [v];
+    if (v is List) return v.whereType<String>().toList();
+    return const [];
+  }
+
+  /// 解析二维码载荷。要求 v==1，server 为非空字符串数组（兼容旧版二维码的
+  /// 单值字符串，包成单元素数组），networkName/secret/virtualIp 为非空
   /// String，port 为 1..65535 的 int；未知字段忽略。校验失败抛
   /// [FormatException]。
   factory RemoteProfile.fromPairingJson(Map<String, dynamic> j) {
     if (j['v'] != 1) {
       throw const FormatException('unsupported version');
     }
-    final server = _requiredString(j, 'server');
+    final server = _requiredServerList(j, 'server');
     final networkName = _requiredString(j, 'networkName');
     final secret = _requiredString(j, 'secret');
     final virtualIp = _requiredString(j, 'virtualIp');
@@ -107,6 +116,21 @@ class RemoteProfile {
       throw FormatException('missing or invalid $key');
     }
     return v;
+  }
+
+  /// 二维码里的 server：非空字符串数组；兼容旧版二维码的单值字符串。
+  static List<String> _requiredServerList(Map<String, dynamic> j, String key) {
+    final v = j[key];
+    if (v is String) {
+      if (v.isEmpty) throw FormatException('missing or invalid $key');
+      return [v];
+    }
+    if (v is List &&
+        v.isNotEmpty &&
+        v.every((e) => e is String && e.isNotEmpty)) {
+      return v.cast<String>().toList();
+    }
+    throw FormatException('missing or invalid $key');
   }
 }
 

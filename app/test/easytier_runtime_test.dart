@@ -1,12 +1,14 @@
 /// easytier_runtime 状态机与 TOML 生成的测试。
 ///
 /// 用 fake EasyTierChannel（easytierChannelProvider override）验证：
-/// - buildInstanceToml 的内容与字符串转义；
-/// - connect 调用序列：stopForwarder → stopInstance → startInstance →
-///   轮询 currentVirtualIp → startForwarder → Ready；
+/// - buildInstanceToml 显式写 instance_name = profile.id，全部 server 写入
+///   `[[peer]]` 数组，字段与转义行为；
+/// - connect 调用序列：startInstance → 轮询 currentVirtualIp(profileId) →
+///   startForwarder(profileId, ip, port) → Ready（无 teardown 性质的
+///   stopInstance）；
 /// - virtualIp 轮询超时 → Failed；startInstance 抛错 → Failed；
-/// - profileId 置空 / 找不到 profile → disconnect 清理；
-/// - apiProvider 在 Ready 时指向本地转发口，其余状态为 null。
+/// - disconnect → stopForwarder(localPort) + stopInstance(profileId)；
+/// - family(profileId) 的两个实例各自独立 connect，调用序列互不影响。
 library;
 
 import 'dart:async';
@@ -17,13 +19,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:herdr_web/api/easytier_channel.dart';
 import 'package:herdr_web/model/remote_profile.dart';
 import 'package:herdr_web/state/easytier_runtime.dart';
-import 'package:herdr_web/state/settings.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// 脚本化的 EasyTierChannel：记录调用顺序，按队列吐出 virtualIp 结果。
+/// 脚本化的 EasyTierChannel：记录调用顺序（含 instanceName），
+/// 按队列吐出 virtualIp 结果。
 class FakeEasyTierChannel extends EasyTierChannel {
   FakeEasyTierChannel()
-      : super(const MethodChannel('dev.herdr/easytier-test'), 'default');
+      : super(const MethodChannel('dev.herdr/easytier-test'));
 
   final calls = <String>[];
   final startedConfigs = <String>[];
@@ -31,7 +32,6 @@ class FakeEasyTierChannel extends EasyTierChannel {
   /// 每次 currentVirtualIp 弹一个；取空后反复吐最后一个，永不超时。
   final virtualIpResults = <String?>[null, '10.10.64.62'];
   Object? startInstanceError;
-  Object? stopInstanceError;
   int nextForwarderPort = 40001;
 
   @override
@@ -43,22 +43,21 @@ class FakeEasyTierChannel extends EasyTierChannel {
   }
 
   @override
-  Future<void> stopInstance() async {
-    calls.add('stopInstance');
-    final e = stopInstanceError;
-    if (e != null) throw e;
+  Future<void> stopInstance(String instanceName) async {
+    calls.add('stopInstance($instanceName)');
   }
 
   @override
-  Future<String?> currentVirtualIp() async {
-    calls.add('currentVirtualIp');
+  Future<String?> currentVirtualIp(String instanceName) async {
+    calls.add('currentVirtualIp($instanceName)');
     if (virtualIpResults.length > 1) return virtualIpResults.removeAt(0);
     return virtualIpResults.single;
   }
 
   @override
-  Future<int> startForwarder(String targetIp, int targetPort) async {
-    calls.add('startForwarder($targetIp:$targetPort)');
+  Future<int> startForwarder(
+      String instanceName, String targetIp, int targetPort) async {
+    calls.add('startForwarder($instanceName,$targetIp:$targetPort)');
     return nextForwarderPort;
   }
 
@@ -71,59 +70,55 @@ class FakeEasyTierChannel extends EasyTierChannel {
 const profile = RemoteProfile(
   id: 'abcdefgh-1234-5678-9abc-def012345678',
   label: 'devbox',
-  server: 'tcp://vpn.example.com:11010',
+  server: ['tcp://10.0.0.2:22023', 'tcp://vpn.example.com:11010'],
   networkName: 'mynet',
   secret: 's3cr3t',
   virtualIp: '10.10.64.62',
   port: 46810,
 );
 
-/// 建好 container 并把 profile 落盘、settings.profileId 指过去。
-/// [withProfile] 为 false 时 profileId 指向不存在的 id。
-Future<ProviderContainer> makeContainer(
-  FakeEasyTierChannel channel, {
-  bool withProfile = true,
-}) async {
-  SharedPreferences.setMockInitialValues({});
-  final prefs = await SharedPreferences.getInstance();
-  if (withProfile) await ProfileStore(prefs).add(profile);
+/// 另一条 profile：id 不同 ⇒ 独立的 family 实例，端口也不同。
+const profile2 = RemoteProfile(
+  id: '12345678-0000-0000-0000-000000000000',
+  label: 'buildbox',
+  server: ['tcp://vpn2.example.com:11010'],
+  networkName: 'othernet',
+  secret: 'hunter2',
+  virtualIp: '10.10.64.99',
+  port: 46811,
+);
+
+ProviderContainer makeContainer(FakeEasyTierChannel channel) {
   final container = ProviderContainer(overrides: [
-    sharedPrefsProvider.overrideWithValue(prefs),
     easytierChannelProvider.overrideWithValue(channel),
   ]);
   addTearDown(container.dispose);
-  await container.read(settingsProvider.notifier).save(
-      BridgeSettings(profileId: withProfile ? profile.id : 'missing-id'));
   return container;
 }
 
-/// 等 runtime 状态满足条件（依赖 ref.listen，超时即失败）。
+/// 等某条 profile 的 runtime 状态满足条件（依赖 listen，超时即失败）。
 Future<EasyTierRuntimeState> waitRuntime(
   ProviderContainer container,
+  String profileId,
   bool Function(EasyTierRuntimeState) test,
 ) {
   final c = Completer<EasyTierRuntimeState>();
-  final sub = container.listen(easytierRuntimeProvider, (_, next) {
+  final sub = container.listen(easytierRuntimeProvider(profileId), (_, next) {
     if (test(next) && !c.isCompleted) c.complete(next);
   });
   addTearDown(sub.close);
   return c.future.timeout(const Duration(seconds: 5));
 }
 
-/// 轮等条件成立（用于 identical 状态不触发监听的场景），5s 不成立即失败。
-Future<void> pumpUntil(bool Function() test) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 5));
-  while (!test()) {
-    if (DateTime.now().isAfter(deadline)) {
-      fail('pumpUntil 超时：条件 5s 内未成立');
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-  }
+/// 常驻监听并等首帧状态（autoDispose 的 family 实例在无监听时会被销毁；
+/// 先 listen 再 pump 一帧可保证读取 notifier 时实例已就绪）。
+Future<void> keepAlive(ProviderContainer container, String profileId) async {
+  final sub = container.listen(easytierRuntimeProvider(profileId), (_, _) {});
+  addTearDown(sub.close);
+  await pumpEventQueue();
 }
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
   setUp(() {
     // 测试不真等 500ms 一拍。
     EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 10);
@@ -134,72 +129,73 @@ void main() {
   });
 
   group('buildInstanceToml', () {
-    test('字段齐全：默认实例名（与转发器默认对齐），no_tun 转发模式', () {
+    test('首行显式 instance_name = profile.id，全部 server 写入 [[peer]]，'
+        'no_tun 转发模式', () {
       final toml = buildInstanceToml(profile);
       expect(toml, '''
+instance_name = "abcdefgh-1234-5678-9abc-def012345678"
 hostname = "herdr-app"
 network_name = "mynet"
 network_secret = "s3cr3t"
 dhcp = true
-peers = ["tcp://vpn.example.com:11010"]
 listeners = []
+[[peer]]
+uri = "tcp://10.0.0.2:22023"
+[[peer]]
+uri = "tcp://vpn.example.com:11010"
 [flags]
 no_tun = true
 disable_upnp = true
 ''');
-      expect(toml, isNot(contains('instance_name')));
     });
 
-    test(r'networkName/secret/server 中的 \ 和 " 被转义', () {
+    test(r'instance_name 与其他字段中的 \ 和 " 被转义', () {
       const p = RemoteProfile(
-        id: '12345678-xxxx',
+        id: '12345678-xxx"x',
         label: 'l',
-        server: 'tcp://a"b\\c:11010',
+        server: ['tcp://a"b\\c:11010', 'tcp://plain:11010'],
         networkName: 'net\\"x"',
         secret: 'sec\\"ret"',
         virtualIp: '10.0.0.1',
         port: 80,
       );
       final toml = buildInstanceToml(p);
+      expect(toml, contains(r'instance_name = "12345678-xxx\"x"'));
       expect(toml, contains(r'network_name = "net\\\"x\""'));
       expect(toml, contains(r'network_secret = "sec\\\"ret\""'));
-      expect(toml, contains(r'peers = ["tcp://a\"b\\c:11010"]'));
+      expect(toml, contains(r'uri = "tcp://a\"b\\c:11010"'));
+      expect(toml, contains(r'uri = "tcp://plain:11010"'));
     });
   });
 
   group('connect', () {
-    test('成功序列：stopInstance → startInstance → 轮询 → forward → Ready',
-        () async {
+    test('成功序列：startInstance → 轮询 → startForwarder → Ready，'
+        '无 teardown 性质的 stopInstance', () async {
       final channel = FakeEasyTierChannel();
-      final container = await makeContainer(channel);
+      final container = makeContainer(channel);
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
       final states = <EasyTierRuntimeState>[];
-      final sub = container
-          .listen(easytierRuntimeProvider, (_, s) => states.add(s));
+      final sub = container.listen(
+          easytierRuntimeProvider(profile.id), (_, s) => states.add(s));
       addTearDown(sub.close);
 
-      final s = await waitRuntime(
-          container, (s) => s is EasyTierReady || s is EasyTierFailed);
+      final ready = waitRuntime(
+          container, profile.id, (s) => s is EasyTierReady || s is EasyTierFailed);
+      await notifier.connect(profile);
+      final s = await ready;
 
       expect(states.first, isA<EasyTierConnecting>());
       expect(s, isA<EasyTierReady>().having(
           (s) => s.localPort, 'localPort', 40001));
       expect(channel.calls, [
-        'stopInstance',
         'startInstance',
-        'currentVirtualIp', // 第一次 null
-        'currentVirtualIp', // 第二次拿到 10.10.64.62
-        'startForwarder(10.10.64.62:46810)',
+        'currentVirtualIp(${profile.id})', // 第一次 null
+        'currentVirtualIp(${profile.id})', // 第二次拿到 10.10.64.62
+        'startForwarder(${profile.id},10.10.64.62:46810)',
       ]);
+      expect(channel.calls.where((c) => c.startsWith('stop')), isEmpty);
       expect(channel.startedConfigs, [buildInstanceToml(profile)]);
-    });
-
-    test('stopInstance 的残留错误被忽略，不影响 connect', () async {
-      final channel = FakeEasyTierChannel()
-        ..stopInstanceError = PlatformException(code: 'x', message: '残留');
-      final container = await makeContainer(channel);
-      final s = await waitRuntime(
-          container, (s) => s is EasyTierReady || s is EasyTierFailed);
-      expect(s, isA<EasyTierReady>());
     });
 
     test('virtualIp 轮询超时 → Failed(等待虚拟 IP 超时)，不再启动转发器', () async {
@@ -208,20 +204,56 @@ disable_upnp = true
       final channel = FakeEasyTierChannel()
         ..virtualIpResults.clear()
         ..virtualIpResults.add(null); // 永远拿不到虚拟 IP，必超时
-      final container = await makeContainer(channel);
+      final container = makeContainer(channel);
 
-      final s = await waitRuntime(container, (s) => s is EasyTierFailed);
+      final failed = waitRuntime(container, profile.id, (s) => s is EasyTierFailed);
+      await container
+          .read(easytierRuntimeProvider(profile.id).notifier)
+          .connect(profile);
+      final s = await failed;
+
       expect((s as EasyTierFailed).message, contains('等待虚拟 IP 超时'));
       expect(
           channel.calls.where((c) => c.startsWith('startForwarder')), isEmpty);
     });
 
+    test('超时失败后容错停本实例，重试 connect 可再次 startInstance', () async {
+      EasyTierRuntimeNotifier.virtualIpTimeout =
+          const Duration(milliseconds: 100);
+      final channel = FakeEasyTierChannel()
+        ..virtualIpResults.clear()
+        ..virtualIpResults.add(null); // 永远拿不到虚拟 IP，必超时
+      final container = makeContainer(channel);
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+
+      final failed = waitRuntime(container, profile.id, (s) => s is EasyTierFailed);
+      await notifier.connect(profile);
+      await failed;
+
+      // startInstance 成功后的失败必须把原生实例停掉，否则同名实例残留，
+      // 重试会被 EasyTier 内核以 "instance name already exists" 拒绝。
+      expect(channel.calls.last, 'stopInstance(${profile.id})');
+
+      // 恢复虚拟 IP 后重试成功：再次 startInstance 不会被拒绝。
+      channel.virtualIpResults.add('10.10.64.62');
+      final ready = waitRuntime(container, profile.id, (s) => s is EasyTierReady);
+      await notifier.connect(profile);
+      await ready;
+      expect(channel.startedConfigs, hasLength(2));
+    });
+
     test('startInstance 抛错 → Failed，不轮询不转发', () async {
       final channel = FakeEasyTierChannel()
         ..startInstanceError = PlatformException(code: 'easytier', message: 'boom');
-      final container = await makeContainer(channel);
+      final container = makeContainer(channel);
 
-      final s = await waitRuntime(container, (s) => s is EasyTierFailed);
+      final failed = waitRuntime(container, profile.id, (s) => s is EasyTierFailed);
+      await container
+          .read(easytierRuntimeProvider(profile.id).notifier)
+          .connect(profile);
+      final s = await failed;
+
       expect((s as EasyTierFailed).message, contains('boom'));
       expect(channel.calls,
           isNot(contains(startsWith('currentVirtualIp'))));
@@ -231,65 +263,91 @@ disable_upnp = true
   });
 
   group('disconnect', () {
-    test('profileId 置空 → stopForwarder + stopInstance → Disconnected',
-        () async {
+    test('connect 后 disconnect → stopForwarder + stopInstance(id) → '
+        'Disconnected', () async {
       final channel = FakeEasyTierChannel();
-      final container = await makeContainer(channel);
-      await waitRuntime(container, (s) => s is EasyTierReady);
+      final container = makeContainer(channel);
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+
+      final ready = waitRuntime(container, profile.id, (s) => s is EasyTierReady);
+      await notifier.connect(profile);
+      await ready;
       channel.calls.clear();
 
-      final disconnected =
-          waitRuntime(container, (s) => s is EasyTierDisconnected);
-      await container
-          .read(settingsProvider.notifier)
-          .save(const BridgeSettings());
-      await disconnected;
+      await notifier.disconnect();
 
-      expect(channel.calls, ['stopForwarder(40001)', 'stopInstance']);
-    });
-
-    test('profileId 指向不存在的 profile → Disconnected，不启动实例', () async {
-      final channel = FakeEasyTierChannel();
-      final container =
-          await makeContainer(channel, withProfile: false);
-      container.read(easytierRuntimeProvider); // 触发初始 connect 流程
-      // disconnect 前后都是 const EasyTierDisconnected()（identical，不触发
-      // 监听），改为等 teardown 的副作用：stopInstance 被调用。
-      await pumpUntil(() => channel.calls.isNotEmpty);
-
-      expect(container.read(easytierRuntimeProvider),
+      expect(container.read(easytierRuntimeProvider(profile.id)),
           isA<EasyTierDisconnected>());
       expect(channel.calls,
-          ['stopInstance']); // 只做容错 teardown，不 startInstance
+          ['stopForwarder(40001)', 'stopInstance(${profile.id})']);
+    });
+
+    test('重复 disconnect 幂等，不再触达通道', () async {
+      final channel = FakeEasyTierChannel();
+      final container = makeContainer(channel);
+      await keepAlive(container, profile.id);
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+
+      final ready = waitRuntime(container, profile.id, (s) => s is EasyTierReady);
+      await notifier.connect(profile);
+      await ready;
+      await notifier.disconnect();
+      channel.calls.clear();
+
+      await notifier.disconnect();
+
+      expect(channel.calls, isEmpty);
+      expect(container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierDisconnected>());
     });
   });
 
-  group('apiProvider', () {
-    test('Ready → baseUrl 指向本地转发口；其余状态 → null', () async {
+  group('family', () {
+    test('两个 profileId 的 family 实例各自独立 connect，互不影响', () async {
       final channel = FakeEasyTierChannel();
-      final container = await makeContainer(channel);
+      final container = makeContainer(channel);
+      final notifier1 =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+      final notifier2 =
+          container.read(easytierRuntimeProvider(profile2.id).notifier);
 
-      expect(container.read(apiProvider), isNull);
-      await waitRuntime(container, (s) => s is EasyTierReady);
-      final api = container.read(apiProvider);
-      expect(api, isNotNull);
-      expect(api!.baseUrl, 'http://127.0.0.1:40001');
-    });
+      final ready1 =
+          waitRuntime(container, profile.id, (s) => s is EasyTierReady);
+      final ready2 =
+          waitRuntime(container, profile2.id, (s) => s is EasyTierReady);
+      await notifier1.connect(profile);
+      await notifier2.connect(profile2);
+      await Future.wait([ready1, ready2]);
 
-    test('profileId 为空时保持旧的直填 baseUrl 行为', () async {
-      SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
-      final container = ProviderContainer(overrides: [
-        sharedPrefsProvider.overrideWithValue(prefs),
-        easytierChannelProvider.overrideWithValue(FakeEasyTierChannel()),
-      ]);
-      addTearDown(container.dispose);
-      await container.read(settingsProvider.notifier).save(
-          const BridgeSettings(baseUrl: 'https://myhost.ts.net'));
+      expect(
+          container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierReady>());
+      expect(
+          container.read(easytierRuntimeProvider(profile2.id)),
+          isA<EasyTierReady>());
+      expect(channel.startedConfigs,
+          [buildInstanceToml(profile), buildInstanceToml(profile2)]);
+      expect(
+          channel.calls
+              .where((c) => c.startsWith('startForwarder(${profile.id},')),
+          ['startForwarder(${profile.id},10.10.64.62:46810)']);
+      expect(
+          channel.calls
+              .where((c) => c.startsWith('startForwarder(${profile2.id},')),
+          ['startForwarder(${profile2.id},10.10.64.62:46811)']);
 
-      final api = container.read(apiProvider);
-      expect(api, isNotNull);
-      expect(api!.baseUrl, 'https://myhost.ts.net');
+      // disconnect 一个实例，另一个保持 Ready 且只停本实例。
+      channel.calls.clear();
+      await notifier1.disconnect();
+
+      expect(container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierDisconnected>());
+      expect(container.read(easytierRuntimeProvider(profile2.id)),
+          isA<EasyTierReady>());
+      expect(channel.calls,
+          ['stopForwarder(40001)', 'stopInstance(${profile.id})']);
     });
   });
 }

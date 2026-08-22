@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Map<String, dynamic> validPairingJson() => {
       'v': 1,
-      'server': 'tcp://vpn.example.com:11010',
+      'server': ['tcp://10.0.0.2:22023', 'tcp://vpn.example.com:11010'],
       'networkName': 'abcdefgh-1234-5678-9abc-def012345678',
       'secret': 's3cret',
       'virtualIp': '10.126.0.1',
@@ -15,7 +15,8 @@ void main() {
   group('RemoteProfile.fromPairingJson', () {
     test('正常解析：字段齐全，label 取 networkName 前 8 位', () {
       final p = RemoteProfile.fromPairingJson(validPairingJson());
-      expect(p.server, 'tcp://vpn.example.com:11010');
+      expect(p.server,
+          ['tcp://10.0.0.2:22023', 'tcp://vpn.example.com:11010']);
       expect(p.networkName,
           'abcdefgh-1234-5678-9abc-def012345678');
       expect(p.secret, 's3cret');
@@ -33,6 +34,12 @@ void main() {
       expect(p.server, validPairingJson()['server']);
     });
 
+    test('server 兼容旧版二维码的单值字符串（包成单元素数组）', () {
+      final p = RemoteProfile.fromPairingJson(
+          {...validPairingJson(), 'server': 'tcp://vpn.example.com:11010'});
+      expect(p.server, ['tcp://vpn.example.com:11010']);
+    });
+
     test('v != 1 抛 FormatException', () {
       for (final v in [0, 2, '1']) {
         expect(
@@ -43,7 +50,7 @@ void main() {
       }
     });
 
-    test('必填字段缺失或非 String 抛 FormatException', () {
+    test('必填字段缺失或类型错误抛 FormatException', () {
       for (final key in ['server', 'networkName', 'secret', 'virtualIp']) {
         // 缺失
         final missing = validPairingJson()..remove(key);
@@ -54,9 +61,26 @@ void main() {
           () => RemoteProfile.fromPairingJson({...validPairingJson(), key: 42}),
           throwsA(isA<FormatException>()),
         );
+      }
+      for (final key in ['networkName', 'secret', 'virtualIp']) {
         // 空字符串
         expect(
           () => RemoteProfile.fromPairingJson({...validPairingJson(), key: ''}),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
+
+    test('server 为空数组或含空/非 String 元素抛 FormatException', () {
+      for (final bad in [
+        <String>[],
+        [''],
+        ['tcp://a:11010', 42],
+        ['tcp://a:11010', ''],
+      ]) {
+        expect(
+          () => RemoteProfile.fromPairingJson(
+              {...validPairingJson(), 'server': bad}),
           throwsA(isA<FormatException>()),
         );
       }
@@ -144,6 +168,34 @@ void main() {
       expect(restored.secret, p.secret);
       expect(restored.virtualIp, p.virtualIp);
       expect(restored.port, p.port);
+    });
+
+    test('toJson 把 server 写成数组，fromJson 读回一致', () {
+      final p = RemoteProfile.fromPairingJson(validPairingJson());
+      final j = p.toJson();
+      expect(j['server'], isA<List>());
+      expect(j['server'],
+          ['tcp://10.0.0.2:22023', 'tcp://vpn.example.com:11010']);
+      expect(RemoteProfile.fromJson(j).server, p.server);
+    });
+
+    test('fromJson 迁移旧格式：server 单值字符串包成单元素数组', () {
+      final j = RemoteProfile.fromPairingJson(validPairingJson()).toJson()
+        ..['server'] = 'tcp://vpn.example.com:11010';
+      expect(RemoteProfile.fromJson(j).server,
+          ['tcp://vpn.example.com:11010']);
+    });
+
+    test('fromJson 缺失或非法 server 得空数组', () {
+      final base =
+          RemoteProfile.fromPairingJson(validPairingJson()).toJson();
+      expect(RemoteProfile.fromJson(base..remove('server')).server, isEmpty);
+      expect(
+          RemoteProfile.fromJson(
+                  RemoteProfile.fromPairingJson(validPairingJson()).toJson()
+                    ..['server'] = 42)
+              .server,
+          isEmpty);
     });
   });
 
