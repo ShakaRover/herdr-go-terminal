@@ -152,7 +152,7 @@ herdrgo-bridge --server tcp://et.example.com:11010 --port 23000
 | `HERDRGO_BRIDGE_PI_ROOT` | `$PI_CODING_AGENT_DIR/sessions` | pi 日志 root |
 | `HERDRGO_BRIDGE_OPENCODE_ROOT` | `$XDG_DATA_HOME/opencode` 或 `~/.local/share/opencode` | opencode 数据目录 |
 | `HERDRGO_BRIDGE_EASYTIERSERWORKNAME` | 空 | 覆盖网络名；缺省用 state 目录持久化的 uuid（`<state_dir>/easytier_network_id`，0600） |
-| `HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP` | 空 | 静态虚拟 IPv4（CIDR，如 `10.126.0.1/24`）；缺省 DHCP |
+| `HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP` | `10.126.0.1/24` | 静态虚拟 IPv4（CIDR）；缺省固定值，一般无需配置 |
 
 布尔值接受 `on/off`、`1/0`、`true/false`；CLI 侧同理（如 `--multi-session off`）。
 
@@ -168,9 +168,9 @@ EasyTier 被动监听 `--port`（默认 22023）用于 p2p 打洞与中继；中
 `http(s)` scheme 做 peer discovery）。
 
 ```bash
-# ~/.config/herdrgo-bridge/env 示例：固定 secret / 静态虚拟 IP / 自建中继
+# ~/.config/herdrgo-bridge/env 示例：固定 secret / 自建中继（虚拟 IP 有缺省值，
+# 一般无需配置）
 HERDRGO_BRIDGE_SECRET=你指定的secret
-HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP=10.126.0.1/24
 HERDRGO_BRIDGE_SERVER=tcp://et.example.com:11010
 ```
 
@@ -178,11 +178,11 @@ HERDRGO_BRIDGE_SERVER=tcp://et.example.com:11010
 port，app 扫码即连）。**secret 即网络钥匙，二维码等同凭据，只在宿主机终端
 就地展示，勿截图外泄。**
 
-注意：二维码要求 `virtualIp` 显式配置（DHCP 分配的地址无法在二维码生成前
-确定）；未配 `HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP` 时 bridge 正常运行但打印
-"pairing payload unavailable" 告警，不产生二维码。加密由 EasyTier 传输层
-承担（密钥从 network_name+secret 派生），中继服务器看不到明文；EasyTier
-模式下不设应用层 device gate（secret 即唯一凭据）。
+注意：bridge 是虚拟网内唯一静态节点（virtualIp 缺省 `10.126.0.1/24`，可用
+`HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP` 覆盖），手机端走 DHCP 自动避让，二维码
+里的拨号地址因此启动即确定。加密由 EasyTier 传输层承担（密钥从
+network_name+secret 派生），中继服务器看不到明文；EasyTier 模式下不设应用层
+device gate（secret 即唯一凭据）。
 
 ## 与 collie 的关系
 

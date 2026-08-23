@@ -75,7 +75,7 @@ async fn main() {
         let net = herdrgo_bridge::easytier_net::start_easytier(&cfg).await.expect("start easytier");
         tracing::info!(%net.virtual_addr, "listening on easytier data plane");
         // 启动即打印配对二维码 + 明文 JSON；载荷生成失败（缺
-        // secret/virtual_ip）只告警，不阻塞 bridge 启动。
+        // secret）只告警，不阻塞 bridge 启动。
         match herdrgo_bridge::easytier_net::pairing_payload(&cfg) {
             Ok(payload) => match qrcode::QrCode::new(payload.to_string()) {
                 Ok(code) => {

@@ -117,7 +117,7 @@ pub struct Cli {
     /// 覆盖网络名；缺省用 state 目录持久化的 uuid
     #[arg(long, env = "HERDRGO_BRIDGE_EASYTIERSERWORKNAME", hide = true)]
     pub easytier_network_name: Option<String>,
-    /// 静态虚拟 IPv4（CIDR，如 10.126.0.1/24）；缺省 DHCP（不指定则不打印配对二维码）
+    /// 静态虚拟 IPv4（CIDR，如 10.126.0.1/24）；缺省 10.126.0.1/24
     #[arg(long, env = "HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", hide = true)]
     pub easytier_virtual_ip: Option<String>,
     // 测试注入：在默认监听之外追加 passive listener（供对端实例直连回环端口）。
@@ -229,6 +229,12 @@ pub fn default_easytier_server() -> String {
     "txt://herdrgo.et-link.cc".to_string()
 }
 
+/// 默认静态虚拟 IPv4（未显式配置时用）。bridge 是虚拟网内唯一静态节点，
+/// 手机端走 DHCP 自动避让；二维码里的拨号地址因此启动即确定。
+pub fn default_easytier_virtual_ip() -> String {
+    "10.126.0.1/24".to_string()
+}
+
 /// 读 state 目录里持久化的值；缺失或为空时用 `gen` 生成并写回（0600）。
 /// 用于 secret / network id 这类"首次生成、之后稳定"的配置。
 /// 生成且写盘失败时返回 None（调用方按报错处理，避免用每次不同的随机值组网）。
@@ -302,7 +308,8 @@ impl Config {
             easytier_server,
             easytier_secret,
             easytier_network_name: cli.easytier_network_name.clone().and_then(norm_string),
-            easytier_virtual_ip: cli.easytier_virtual_ip.clone().and_then(norm_string),
+            easytier_virtual_ip: cli.easytier_virtual_ip.clone().and_then(norm_string)
+                .or_else(|| Some(default_easytier_virtual_ip())),
             easytier_listen_port: clamp_min(
                 cli.port.unwrap_or(22023).into(), 1, "port") as u16,
             easytier_test_listeners: norm_list(cli.easytier_test_listeners.clone()),
@@ -406,9 +413,21 @@ pub(crate) mod tests {
         let cli = Cli::parse_from(["herdrgo-bridge", "--secret", ""]);
         let c = Config::from_cli(&cli);
         assert!(!c.easytier_enabled());
-        assert!(c.easytier_virtual_ip.is_none());
         // HTTP 直连默认端口。
         assert_eq!(c.http_port, 8787);
+    }
+
+    #[test]
+    fn easytier_virtual_ip_defaults_to_static() {
+        let _g = tests_lock();
+        clear();
+        // 未显式配置时缺省固定静态地址，保证二维码里的拨号地址启动即确定。
+        let c = Config::from_cli(&Cli::from_process_env());
+        assert_eq!(c.easytier_virtual_ip.as_deref(), Some("10.126.0.1/24"));
+        // 显式配置优先。
+        env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.9/24");
+        let c = Config::from_cli(&Cli::from_process_env());
+        assert_eq!(c.easytier_virtual_ip.as_deref(), Some("10.126.0.9/24"));
     }
 
     #[test]

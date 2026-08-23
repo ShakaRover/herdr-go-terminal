@@ -115,8 +115,9 @@ impl axum::serve::Listener for DataPlaneListener {
 
 /// 扫码配对的凭据载荷。server 是地址数组：首项为本机内网监听地址
 /// `tcp://<内网IP>:<listen_port>`（UDP connect 探测失败时跳过该项），
-/// 其后追加全部 easytier_server 中继。secret/virtual_ip/network_id 仍必填
-///（二维码要求显式配置，避免打印 DHCP 之后才确定的错误地址）。
+/// 其后追加全部 easytier_server 中继。secret/virtual_ip/network_id 必填；
+/// virtual_ip 未显式配置时由 config 缺省为固定静态值（bridge 静态、app
+/// DHCP 避让），二维码里的拨号地址因此启动即确定。
 pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
     let mut servers: Vec<String> = Vec::new();
     if let Some(ip) = lan_ipv4() {
@@ -296,22 +297,28 @@ mod tests {
     }
 
     #[test]
-    fn pairing_payload_requires_explicit_secret_and_ip() {
+    fn pairing_payload_requires_secret_and_defaults_ip() {
         let _g = crate::config::tests_lock();
         crate::config::tests::clear();
-        // 显式关闭 EasyTier（--secret ""）或缺 virtual ip 时报错；server 已非必填。
-        let off = crate::config::Cli::parse_from(["herdrgo-bridge", "--secret", ""]);
-        assert!(super::pairing_payload(&crate::config::Config::from_cli(&off)).is_err());
-        std::env::set_var("HERDRGO_BRIDGE_SECRET", "s3cret");
-        assert!(super::pairing_payload(&crate::config::Config::from_cli(
-            &crate::config::Cli::from_process_env())).is_err());
-        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
         std::env::set_var(
             "HERDRGO_BRIDGE_STATE_DIR",
             std::env::temp_dir().join(format!("herdr-qr-{}", uuid::Uuid::new_v4())),
         );
-        assert!(super::pairing_payload(&crate::config::Config::from_cli(
-            &crate::config::Cli::from_process_env())).is_ok());
+        // 显式关闭 EasyTier（--secret ""）时报错。
+        let off = crate::config::Cli::parse_from(["herdrgo-bridge", "--secret", ""]);
+        assert!(super::pairing_payload(&crate::config::Config::from_cli(&off)).is_err());
+        // 缺 virtual ip 时回退默认静态值，不再报错。
+        std::env::set_var("HERDRGO_BRIDGE_SECRET", "s3cret");
+        let v = super::pairing_payload(&crate::config::Config::from_cli(
+            &crate::config::Cli::from_process_env()))
+        .unwrap();
+        assert_eq!(v["virtualIp"], "10.126.0.1");
+        // 显式配置优先。
+        std::env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.9/24");
+        let v = super::pairing_payload(&crate::config::Config::from_cli(
+            &crate::config::Cli::from_process_env()))
+        .unwrap();
+        assert_eq!(v["virtualIp"], "10.126.0.9");
     }
 
     #[test]
