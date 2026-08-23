@@ -1,8 +1,7 @@
 /// settings 层：shared_preferences 实例、profile 列表仓库、enabled profile
 /// 列表的常驻视图。
 ///
-/// 全 EasyTier 后连接配置只剩扫码 profile 一种（见
-/// docs/superpowers/specs/2026-08-21-multi-bridge-dashboard-design.md），
+/// 全 EasyTier 后连接配置只剩扫码 profile 一种，
 /// 直填配置（DirectConfig / bridge_settings_v2）已删除——遗留的
 /// bridge_settings_v1/v2 键检测到即删，不做迁移。
 library;

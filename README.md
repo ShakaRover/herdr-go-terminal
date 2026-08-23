@@ -28,11 +28,11 @@ automatically, so it works out of the box with zero arguments.
 ## Screenshots
 
 <p>
-  <img src="docs/screenshots/readme/dashboard.png" width="260" alt="Dashboard: blocked agents pinned to the top">
+  <img src="assets/readme/dashboard.png" width="260" alt="Dashboard: blocked agents pinned to the top">
   &nbsp;
-  <img src="docs/screenshots/readme/agent-detail.png" width="260" alt="Agent conversation: ANSI mirror + key bar">
+  <img src="assets/readme/agent-detail.png" width="260" alt="Agent conversation: ANSI mirror + key bar">
   &nbsp;
-  <img src="docs/screenshots/readme/approval.png" width="260" alt="Approval menu rendered as native buttons">
+  <img src="assets/readme/approval.png" width="260" alt="Approval menu rendered as native buttons">
 </p>
 
 *Left: the dashboard pins agents that need you ("需要你处理" = needs your input)
@@ -77,10 +77,6 @@ the bridge. The bridge embeds EasyTier to expose its REST API on a virtual TCP
 data plane, and the app embeds EasyTier too to forward a local port — all in
 userspace, no TUN or root. The network secret is the only credential: keep the
 QR code private.
-
-Design doc: [`docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md`](docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md)
-
-> iOS support is in progress; see [`docs/ios-progress.md`](docs/ios-progress.md).
 
 ## Build
 
@@ -131,8 +127,7 @@ app to connect (the app likewise uses embedded EasyTier + a local port forward,
 no VpnService). The only common options are `--secret` / `--server` / `--port`
 (`--help`); advanced options are under `--help-advance`. The secret is the
 network credential — treat it like a key, show it only in the host terminal,
-never leak it. See `bridge/README.md` and the design doc
-[`docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md`](docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md).
+never leak it. See `bridge/README.md`.
 
 For plain HTTP direct mode (local / reverse-proxy debugging), disable EasyTier
 explicitly with `herdrgo-bridge --secret ""`; it then listens on

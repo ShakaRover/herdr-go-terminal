@@ -196,5 +196,3 @@ collie（`.toolchain/reference-collie/`）是 herdr 生态里更早的 Bun/TypeS
   `prompt_changed`；
 - 请求/响应字段全部 camelCase（如 `expectedPrompt`、`shellPanes`），
   seen 头为 `x-bridge-seen`。
-
-设计细节见 `docs/superpowers/specs/2026-08-16-herdr-bridge-rust-design.md`。

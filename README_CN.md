@@ -26,11 +26,11 @@ EasyTier 虚拟网直连——不用配 TUN、不用 root、不用申请 VPN 权
 ## 截图
 
 <p>
-  <img src="docs/screenshots/readme/dashboard.png" width="260" alt="Dashboard：待处理置顶">
+  <img src="assets/readme/dashboard.png" width="260" alt="Dashboard：待处理置顶">
   &nbsp;
-  <img src="docs/screenshots/readme/agent-detail.png" width="260" alt="agent 对话：ANSI 镜像 + 按键条">
+  <img src="assets/readme/agent-detail.png" width="260" alt="agent 对话：ANSI 镜像 + 按键条">
   &nbsp;
-  <img src="docs/screenshots/readme/approval.png" width="260" alt="审批菜单：原生按钮">
+  <img src="assets/readme/approval.png" width="260" alt="审批菜单：原生按钮">
 </p>
 
 *左：Dashboard 把卡住等你处理的 agent 置顶（「需要你处理」），其余按状态分组。
@@ -65,10 +65,6 @@ EasyTier 虚拟网直连——不用配 TUN、不用 root、不用申请 VPN 权
 
 app 不直接连 herdr socket，一切读写都经过 bridge；bridge 内嵌 EasyTier 把
 REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 做本地端口转发，全程用户态。
-
-设计文档：[`docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md`](docs/superpowers/specs/2026-08-13-herdr-flutter-client-design.md)
-
-> iOS 适配进行中，断点续作记录见 [`docs/ios-progress.md`](docs/ios-progress.md)。
 
 ## 构建
 
@@ -116,8 +112,7 @@ EasyTier 模式**：自动生成并持久化网络 secret，经默认中继
 内嵌 EasyTier + 本地端口转发，不申请 VpnService）。常用选项只有
 `--secret` / `--server` / `--port`（`--help`），高级选项见 `--help-advance`。
 secret 即网络凭据，等同钥匙，只在宿主机终端就地展示、勿泄露。详见
-`bridge/README.md` 与设计文档
-[`docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md`](docs/superpowers/specs/2026-08-20-easytier-remote-access-design.md)。
+`bridge/README.md`。
 
 如需走 HTTP 直连（本机/前置代理调试），显式关闭 EasyTier：`herdrgo-bridge
 --secret ""`，此时监听 `--host`/`--http-port`（默认 `127.0.0.1:8787`），并可用
