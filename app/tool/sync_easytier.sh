@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 从 EasyTier 仓库构建 easytier-android-jni 并把产物同步进 app 的 Android 源码树：
 #   - libeasytier_android_jni.so → app/android/app/src/main/jniLibs/arm64-v8a/
-#   - EasyTierJNI.kt / EasyTierForwarder.kt → app/android/app/src/main/kotlin/com/easytier/jni/
+#   - EasyTierJNI.kt → app/android/app/src/main/kotlin/com/easytier/jni/
 #
 # 幂等：cargo 增量构建 + 覆盖拷贝，重复执行结果一致。
 #
@@ -41,7 +41,7 @@ cp "$SO_SRC/libeasytier_android_jni.so" "$SO_DST/"
 KT_SRC="$JNI_DIR/kotlin/com/easytier/jni"
 KT_DST="$APP_ROOT/android/app/src/main/kotlin/com/easytier/jni"
 mkdir -p "$KT_DST"
-cp "$KT_SRC/EasyTierJNI.kt" "$KT_SRC/EasyTierForwarder.kt" "$KT_DST/"
+cp "$KT_SRC/EasyTierJNI.kt" "$KT_DST/"
 
 echo "== 同步完成"
 ls -l "$SO_DST" "$KT_DST"

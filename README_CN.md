@@ -64,7 +64,8 @@ EasyTier 虚拟网直连——不用配 TUN、不用 root、不用申请 VPN 权
 ```
 
 app 不直接连 herdr socket，一切读写都经过 bridge；bridge 内嵌 EasyTier 把
-REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 做本地端口转发，全程用户态。
+REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 把本地端口转发进虚拟网络，
+全程用户态。
 
 ## 构建
 
@@ -83,8 +84,9 @@ debug 构建把 `app-debug.apk` 直接 `adb install` 到模拟器/手机即可�
 
 ### EasyTier JNI 同步
 
-app 内嵌 EasyTier（无 TUN，经本地 127.0.0.1 端口转发访问虚拟网络内的
-bridge）。原生产物（`libeasytier_android_jni.so` + Kotlin 绑定）由
+app 内嵌 EasyTier（无 TUN，经 EasyTier 自带管理 RPC `PatchConfig`
+端口转发 patch 把 `127.0.0.1:<port>` 转发到虚拟网络内的 bridge）。
+原生产物（`libeasytier_android_jni.so` + Kotlin 绑定）由
 `app/tool/sync_easytier.sh` 从 EasyTier 仓库构建并拷入
 `app/android/app/src/main/`（jniLibs 与 `kotlin/com/easytier/jni/`）：
 
@@ -94,6 +96,9 @@ app/tool/sync_easytier.sh   # 幂等；EASYTIER_REPO 可覆盖 EasyTier 仓库�
 
 `EasyTierManager.kt`/`EasyTierVpnService.t.kt` 依赖 VpnService 与 moshi，
 不同步。Dart 侧封装见 `app/lib/api/easytier_channel.dart`。
+
+iOS 侧由 `app/tool/build_ios_easytier.sh`（仅 macOS）从同一 EasyTier 分支
+构建薄的 `easytier-ios` C ABI 静态库，拷入 `app/ios/Frameworks/`。
 
 ## 部署 bridge
 

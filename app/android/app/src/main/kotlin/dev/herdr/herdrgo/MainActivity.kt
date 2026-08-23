@@ -1,6 +1,5 @@
 package dev.herdr.herdrgo
 
-import com.easytier.jni.EasyTierForwarder
 import com.easytier.jni.EasyTierJNI
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -40,22 +39,16 @@ class MainActivity : FlutterActivity() {
                                 ?: throw IllegalArgumentException("missing instanceName")
                             result.success(collectInstanceInfo(instanceName))
                         }
-                        "startForwarder" -> {
-                            val instanceName = call.argument<String>("instanceName")
-                                ?: throw IllegalArgumentException("missing instanceName")
-                            val targetIp = call.argument<String>("targetIp")
-                                ?: throw IllegalArgumentException("missing targetIp")
-                            val targetPort = call.argument<Int>("targetPort")
-                                ?: throw IllegalArgumentException("missing targetPort")
-                            result.success(
-                                EasyTierForwarder.start(instanceName, targetIp, targetPort)
-                            )
-                        }
-                        "stopForwarder" -> {
-                            val localPort = call.argument<Int>("localPort")
-                                ?: throw IllegalArgumentException("missing localPort")
-                            EasyTierForwarder.stop(localPort)
-                            result.success(null)
+                        "callJsonRpc" -> {
+                            val service = call.argument<String>("service")
+                                ?: throw IllegalArgumentException("missing service")
+                            val method = call.argument<String>("method")
+                                ?: throw IllegalArgumentException("missing method")
+                            val payload = call.argument<String>("payload")
+                                ?: throw IllegalArgumentException("missing payload")
+                            // 失败时 JNI 抛 RuntimeException，由外层转成
+                            // PlatformException；响应原样回传给 Dart 解析。
+                            result.success(EasyTierJNI.callJsonRpc(service, method, payload))
                         }
                         else -> result.notImplemented()
                     }

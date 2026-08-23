@@ -74,9 +74,9 @@ Claude-style approval menu recognized as native buttons — one tap to approve.*
 
 The app never talks to the herdr socket directly; every read/write goes through
 the bridge. The bridge embeds EasyTier to expose its REST API on a virtual TCP
-data plane, and the app embeds EasyTier too to forward a local port — all in
-userspace, no TUN or root. The network secret is the only credential: keep the
-QR code private.
+data plane, and the app embeds EasyTier too to forward a local port into the
+virtual network — all in userspace, no TUN or root. The network secret is the
+only credential: keep the QR code private.
 
 ## Build
 
@@ -96,7 +96,8 @@ For a debug build, `adb install` the `app-debug.apk` onto an emulator/phone.
 ### EasyTier JNI sync
 
 The app embeds EasyTier (no TUN; it reaches the bridge inside the virtual
-network via a local 127.0.0.1 port forward). The native artifacts
+network via a 127.0.0.1 port forward driven by EasyTier's own management RPC
+`PatchConfig` port-forward patches). The native artifacts
 (`libeasytier_android_jni.so` + Kotlin bindings) are built from the EasyTier
 repo and copied into `app/android/app/src/main/` (jniLibs and
 `kotlin/com/easytier/jni/`) by `app/tool/sync_easytier.sh`:
@@ -107,6 +108,10 @@ app/tool/sync_easytier.sh   # idempotent; EASYTIER_REPO overrides the repo path
 
 `EasyTierManager.kt`/`EasyTierVpnService.t.kt` depend on VpnService and moshi
 and are not synced. The Dart wrapper lives in `app/lib/api/easytier_channel.dart`.
+
+On iOS, `app/tool/build_ios_easytier.sh` (run on macOS) builds the thin
+`easytier-ios` C ABI static library from the same EasyTier repo branch and
+copies it into `app/ios/Frameworks/`.
 
 ## Deploy the bridge
 

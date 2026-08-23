@@ -1,16 +1,21 @@
-/// EasyTier Android JNI 的 MethodChannel 封装（`dev.herdr/easytier`）。
+/// EasyTier Android JNI / iOS C ABI 的 MethodChannel 封装（`dev.herdr/easytier`）。
 ///
-/// Kotlin 侧（MainActivity）只做转发，参数校验与 JSON 解析都在本层：
+/// 原生侧（MainActivity.kt / AppDelegate.swift）只做转发，参数校验与 JSON
+/// 解析都在本层：
 /// - 方法全量携带 instanceName（= RemoteProfile.id，见
 ///   state/easytier_runtime.dart 的 buildInstanceToml），多实例由
 ///   EasyTier 内核 registry 承载；
-/// - 转发器目标 IP 必须是合法 IPv4、端口 1..65535，否则抛 [ArgumentError]；
-/// - `currentVirtualIp` 从 Kotlin 侧已按实例过滤的 collectNetworkInfos
+/// - 端口转发的 bind/dst IP 必须是合法 IPv4、端口 1..65535，否则抛
+///   [ArgumentError]；
+/// - `currentVirtualIp` 从原生侧已按实例过滤的 collectNetworkInfos
 ///   JSON（`{"map": {"<name>": <info>}}`）里取
 ///   `map.*.my_node_info.virtual_ipv4.address.addr`（u32，网络序）转成点分十进制。
 ///
-/// 转发器用法：EasyTier 实例以无 TUN 模式嵌入 app，启动转发器后
-/// `127.0.0.1:<返回的本地端口>` 即桥接到虚拟网络内的 targetIp:targetPort。
+/// 端口转发用法：EasyTier 实例以无 TUN 模式嵌入 app，通过管理 RPC
+/// `api.config.ConfigRpc/PatchConfig` 给运行中的实例打 port_forward patch
+/// （EasyTier 主线自带能力，内核 socket 监听 + data-plane 拨出），patch 生效后
+/// `127.0.0.1:<bindPort>` 即桥接到虚拟网络内的 dstIp:dstPort；REMOVE patch 按
+/// bind_addr + proto 匹配即可撤销。
 library;
 
 import 'dart:convert';
@@ -25,11 +30,16 @@ class EasyTierChannel {
 
   final MethodChannel _channel;
 
+  /// 管理 RPC 的服务/方法名（proto 名；rust 侧 snake_case 同名方法亦兼容，
+  /// 见 easytier-android-jni 的 callJsonRpc 注释）。
+  static const _configRpcService = 'api.config.ConfigRpc';
+  static const _patchConfigMethod = 'PatchConfig';
+
   /// 以 TOML 配置启动 EasyTier 实例。失败抛 [PlatformException]。
   Future<void> startInstance(String tomlConfig) =>
       _channel.invokeMethod<void>('startInstance', {'config': tomlConfig});
 
-  /// 停止名为 [instanceName] 的 EasyTier 实例（Kotlin 侧按名 retain，
+  /// 停止名为 [instanceName] 的 EasyTier 实例（原生侧按名 retain，
   /// 不存在时为 no-op）。
   Future<void> stopInstance(String instanceName) => _channel
       .invokeMethod<void>('stopInstance', {'instanceName': instanceName});
@@ -48,28 +58,78 @@ class EasyTierChannel {
       _channel.invokeMethod<String>(
           'currentVirtualIp', {'instanceName': instanceName});
 
-  /// 在 [instanceName] 实例上启动本地 TCP 转发器，
-  /// 返回实际监听的本地端口（127.0.0.1:port）。
-  Future<int> startForwarder(
-      String instanceName, String targetIp, int targetPort) async {
-    _checkIPv4(targetIp, 'targetIp');
-    _checkPort(targetPort, 'targetPort');
-    final port = await _channel.invokeMethod<int>('startForwarder', {
-      'instanceName': instanceName,
-      'targetIp': targetIp,
-      'targetPort': targetPort,
+  /// 在 [instanceName] 实例上打 ADD patch：`127.0.0.1:bindPort` 转发到
+  /// 虚拟网络内的 `dstIp:dstPort`（TCP）。失败抛 [PlatformException]。
+  Future<void> addPortForward(String instanceName,
+      {required String bindIp,
+      required int bindPort,
+      required String dstIp,
+      required int dstPort}) async {
+    _checkIPv4(bindIp, 'bindIp');
+    _checkIPv4(dstIp, 'dstIp');
+    _checkPort(bindPort, 'bindPort');
+    _checkPort(dstPort, 'dstPort');
+    await _patchConfig(instanceName, {
+      'action': 'ADD',
+      'cfg': {
+        'bind_addr': _socketAddr(bindIp, bindPort),
+        'dst_addr': _socketAddr(dstIp, dstPort),
+        'socket_type': 'TCP',
+      },
     });
-    if (port == null || port <= 0) {
-      throw PlatformException(
-          code: 'easytier', message: 'startForwarder 返回非法端口: $port');
-    }
-    return port;
   }
 
-  /// 停止 [startForwarder] 返回的本地端口对应的转发器。
-  Future<void> stopForwarder(int localPort) {
-    _checkPort(localPort, 'localPort');
-    return _channel.invokeMethod<void>('stopForwarder', {'localPort': localPort});
+  /// 撤销 [addPortForward] 加的转发。REMOVE 按整条 PortForwardConfig 相等
+  /// 匹配（core `patch_vec` 的语义），因此必须带上与 ADD 相同的 dst。
+  Future<void> removePortForward(String instanceName,
+      {required String bindIp,
+      required int bindPort,
+      required String dstIp,
+      required int dstPort}) async {
+    _checkIPv4(bindIp, 'bindIp');
+    _checkIPv4(dstIp, 'dstIp');
+    _checkPort(bindPort, 'bindPort');
+    _checkPort(dstPort, 'dstPort');
+    await _patchConfig(instanceName, {
+      'action': 'REMOVE',
+      'cfg': {
+        'bind_addr': _socketAddr(bindIp, bindPort),
+        'dst_addr': _socketAddr(dstIp, dstPort),
+        'socket_type': 'TCP',
+      },
+    });
+  }
+
+  Future<void> _patchConfig(
+      String instanceName, Map<String, Object?> portForwardPatch) async {
+    final response = await _channel.invokeMethod<String>('callJsonRpc', {
+      'service': _configRpcService,
+      'method': _patchConfigMethod,
+      'payload': jsonEncode({
+        'patch': {
+          'port_forwards': [portForwardPatch],
+        },
+        'instance': {
+          'instance_selector': {'name': instanceName},
+        },
+      }),
+    });
+    if (response == null) {
+      throw PlatformException(
+          code: 'easytier', message: 'callJsonRpc 返回空响应');
+    }
+  }
+
+  /// `{"ipv4": {"addr": <网络序 u32>}, "port": port}` 的 SocketAddr pbjson。
+  static Map<String, Object?> _socketAddr(String ip, int port) => {
+        'ipv4': {'addr': _ipv4ToU32(ip)},
+        'port': port,
+      };
+
+  /// 点分十进制 → 网络序 u32（`_u32ToIPv4` 的逆运算）。
+  static int _ipv4ToU32(String ip) {
+    final parts = ip.split('.').map(int.parse).toList();
+    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
   }
 
   static void _checkIPv4(String ip, String name) {

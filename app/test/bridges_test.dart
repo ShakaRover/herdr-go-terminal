@@ -166,9 +166,10 @@ void main() {
       final conn = await ready;
       expect(conn.status, ConnStatus.ready);
       expect(conn.api, isNotNull);
-      expect(conn.api!.baseUrl, 'http://127.0.0.1:40001');
+      // localPort 是 runtime 真实抢占的回环端口，与 fake 记录的 bind 一致。
+      expect(conn.api!.baseUrl, 'http://127.0.0.1:${channel.lastBindPort}');
       expect(container.read(apiProvider('pa'))!.baseUrl,
-          'http://127.0.0.1:40001');
+          'http://127.0.0.1:${channel.lastBindPort}');
       // 生命周期由 bridgesProvider 驱动：channel 确实 startInstance。
       expect(channel.calls, contains('startInstance'));
       expect(channel.startedConfigs, hasLength(1));

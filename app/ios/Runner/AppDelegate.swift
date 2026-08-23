@@ -58,19 +58,16 @@ final class EasyTierChannel {
           let filtered = try JSONSerialization.data(
             withJSONObject: ["map": [instanceName: info]])
           result(String(data: filtered, encoding: .utf8))
-        case "startForwarder":
-          let instanceName = try Self.arg(call, "instanceName")
-          let targetIp = try Self.arg(call, "targetIp")
-          let targetPort = try Self.intArg(call, "targetPort")
-          let port = easytier_ios_start_tcp_forwarder(
-            instanceName, targetIp, UInt16(clamping: targetPort), 0)
-          if port <= 0 { throw Self.lastError("startForwarder failed: \(port)") }
-          result(Int(port))
-        case "stopForwarder":
-          let localPort = try Self.intArg(call, "localPort")
-          // 与 Android 一致：stop 的返回码不当作错误（转发器可能已随实例消失）。
-          _ = easytier_ios_stop_tcp_forwarder(Int32(clamping: localPort))
-          result(nil)
+        case "callJsonRpc":
+          let service = try Self.arg(call, "service")
+          let method = try Self.arg(call, "method")
+          let payload = try Self.arg(call, "payload")
+          // 失败时 C ABI 返回 NULL，转成 FlutterError；响应原样回传给 Dart 解析。
+          guard let response = Self.takeOwnedString(
+            easytier_ios_call_json_rpc(service, method, payload)) else {
+            throw Self.lastError("callJsonRpc failed")
+          }
+          result(response)
         default:
           result(FlutterMethodNotImplemented)
         }
@@ -82,15 +79,6 @@ final class EasyTierChannel {
 
   private static func arg(_ call: FlutterMethodCall, _ name: String) throws -> String {
     guard let value = (call.arguments as? [String: Any])?[name] as? String, !value.isEmpty else {
-      throw NSError(domain: "easytier", code: 1, userInfo: [
-        NSLocalizedDescriptionKey: "missing \(name)"
-      ])
-    }
-    return value
-  }
-
-  private static func intArg(_ call: FlutterMethodCall, _ name: String) throws -> Int {
-    guard let value = (call.arguments as? [String: Any])?[name] as? Int else {
       throw NSError(domain: "easytier", code: 1, userInfo: [
         NSLocalizedDescriptionKey: "missing \(name)"
       ])

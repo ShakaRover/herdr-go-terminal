@@ -8,6 +8,8 @@
 /// - 原生侧 PlatformException 原样传播。
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herdrgo/api/easytier_channel.dart';
@@ -86,48 +88,96 @@ void main() {
     expect(await h.create().currentVirtualIp('inst1'), isNull);
   });
 
-  test('startForwarder 发实例名/目标/端口，返回本地端口', () async {
-    h.nextResult = 40001;
-    final port =
-        await h.create().startForwarder('inst1', '10.10.64.62', 8080);
-    expect(port, 40001);
-    expect(h.calls.single.method, 'startForwarder');
-    expect(h.calls.single.arguments, {
-      'instanceName': 'inst1',
-      'targetIp': '10.10.64.62',
-      'targetPort': 8080,
+  test('addPortForward 发 PatchConfig ADD，IPv4 编码为网络序 u32', () async {
+    h.nextResult = '{}'; // callJsonRpc 的空 JSON 响应
+    await h.create().addPortForward('inst1',
+        bindIp: '127.0.0.1',
+        bindPort: 45678,
+        dstIp: '10.10.64.62',
+        dstPort: 8787);
+    expect(h.calls.single.method, 'callJsonRpc');
+    expect(h.calls.single.arguments['service'], 'api.config.ConfigRpc');
+    expect(h.calls.single.arguments['method'], 'PatchConfig');
+    expect(jsonDecode(h.calls.single.arguments['payload'] as String), {
+      'patch': {
+        'port_forwards': [
+          {
+            'action': 'ADD',
+            'cfg': {
+              // 0x7F000001 = 127.0.0.1，0x0A0A403E = 10.10.64.62。
+              'bind_addr': {
+                'ipv4': {'addr': 0x7F000001},
+                'port': 45678,
+              },
+              'dst_addr': {
+                'ipv4': {'addr': 0x0A0A403E},
+                'port': 8787,
+              },
+              'socket_type': 'TCP',
+            },
+          }
+        ],
+      },
+      'instance': {
+        'instance_selector': {'name': 'inst1'},
+      },
     });
   });
 
-  test('startForwarder：非法 IP/端口抛 ArgumentError 且不触达通道', () async {
+  test('removePortForward 发 REMOVE，cfg 必须复现 ADD 的 bind+dst', () async {
+    h.nextResult = '{}';
+    await h.create().removePortForward('inst1',
+        bindIp: '127.0.0.1',
+        bindPort: 45678,
+        dstIp: '10.10.64.62',
+        dstPort: 8787);
+    final payload =
+        jsonDecode(h.calls.single.arguments['payload'] as String) as Map<String, Object?>;
+    expect(
+        ((payload['patch'] as Map)['port_forwards'] as List)
+            .single['action'],
+        'REMOVE');
+  });
+
+  test('端口转发：非法 IP/端口抛 ArgumentError 且不触达通道', () async {
     final api = h.create();
     for (final badIp in ['', 'abc', '999.1.2.3', '::1', '10.0.0.256']) {
-      expect(() => api.startForwarder('inst1', badIp, 80),
+      expect(
+          () => api.addPortForward('inst1',
+              bindIp: badIp,
+              bindPort: 80,
+              dstIp: '10.0.0.1',
+              dstPort: 80),
+          throwsArgumentError);
+      expect(
+          () => api.removePortForward('inst1',
+              bindIp: '10.0.0.1',
+              bindPort: 80,
+              dstIp: badIp,
+              dstPort: 80),
           throwsArgumentError);
     }
     for (final badPort in [0, -1, 65536]) {
-      expect(() => api.startForwarder('inst1', '10.0.0.1', badPort),
+      expect(
+          () => api.addPortForward('inst1',
+              bindIp: '127.0.0.1',
+              bindPort: badPort,
+              dstIp: '10.0.0.1',
+              dstPort: 80),
           throwsArgumentError);
     }
     expect(h.calls, isEmpty);
   });
 
-  test('startForwarder：原生返回非法端口抛 PlatformException', () async {
+  test('callJsonRpc：原生返回空响应抛 PlatformException', () async {
     h.nextResult = null;
-    expect(() => h.create().startForwarder('inst1', '10.0.0.1', 80),
+    expect(
+        () => h.create().addPortForward('inst1',
+            bindIp: '127.0.0.1',
+            bindPort: 80,
+            dstIp: '10.0.0.1',
+            dstPort: 80),
         throwsA(isA<PlatformException>()));
-    h.nextResult = -1;
-    expect(() => h.create().startForwarder('inst1', '10.0.0.1', 80),
-        throwsA(isA<PlatformException>()));
-  });
-
-  test('stopForwarder 发 localPort；非法端口抛 ArgumentError', () async {
-    await h.create().stopForwarder(40001);
-    expect(h.calls.single.method, 'stopForwarder');
-    expect(h.calls.single.arguments, {'localPort': 40001});
-
-    expect(() => h.create().stopForwarder(0), throwsArgumentError);
-    expect(() => h.create().stopForwarder(70000), throwsArgumentError);
   });
 
   test('原生 PlatformException 原样传播', () async {

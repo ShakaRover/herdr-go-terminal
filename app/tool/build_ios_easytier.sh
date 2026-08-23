@@ -20,17 +20,16 @@ EASYTIER_REPO="${EASYTIER_REPO:-$HOME/et-rs}"
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRAMEWORKS="$APP_ROOT/ios/Frameworks"
 
-echo "==> 构建 easytier_ios.xcframework（含 device + simulator slices）"
+echo "==> 构建 easytier-ios 静态库（device + simulator slices）"
 "$EASYTIER_REPO/easytier-contrib/easytier-ios/build-xcframework.sh"
 
 TARGET_DIR="$EASYTIER_REPO/target"
-XCF="$EASYTIER_REPO/easytier-contrib/easytier-ios/xcframework/easytier_ios.xcframework"
+SIM_SLICE="$EASYTIER_REPO/easytier-contrib/easytier-ios/xcframework/sim/libeasytier_ios.a"
 
 echo "==> 同步库到 $FRAMEWORKS"
 mkdir -p "$FRAMEWORKS/iphoneos" "$FRAMEWORKS/iphonesimulator"
 cp "$TARGET_DIR/aarch64-apple-ios/release/libeasytier_ios.a" "$FRAMEWORKS/iphoneos/"
-# simulator slice 是 lipo 合并 arm64+x86_64 后的版本，从 xcframework 里取
-SIM_SLICE="$(find "$XCF" -path '*simulator*' -name 'libeasytier_ios.a' | head -1)"
+# simulator slice 是 lipo 合并 arm64+x86_64 后的版本
 cp "$SIM_SLICE" "$FRAMEWORKS/iphonesimulator/"
 
 echo "==> 完成"

@@ -3,11 +3,14 @@
  * @brief iOS-facing C ABI for EasyTier.
  *
  * This library embeds EasyTier into an iOS app without a TUN device or
- * NEPacketTunnel: it manages EasyTier instances and forwards local loopback
- * TCP connections into the virtual network through the data plane.
+ * NEPacketTunnel: it manages EasyTier instances and bridges to the EasyTier
+ * management RPC surface. Loopback port forwarding into the virtual network
+ * is configured through easytier_ios_call_json_rpc() with
+ * api.config.ConfigRpcService/PatchConfig port-forward patches; there is no
+ * built-in forwarder.
  *
- * Error handling: functions returning `int` return 0 on success (or a
- * non-negative value such as a bound port) and -1 on failure. Call
+ * Error handling: functions returning `int` return 0 on success and -1 on
+ * failure; functions returning `char *` return NULL on failure. Call
  * easytier_ios_last_error() on the same thread to retrieve details.
  *
  * Threading: all functions are safe to call from any thread. The last-error
@@ -28,9 +31,7 @@ extern "C" {
  * @brief Start one EasyTier network instance from a TOML config string.
  *
  * The config's `instance_name` must be unique among instances started
- * through this library. The instance returns before its data-plane runtime
- * is fully up; starting a forwarder right away may briefly fail and should
- * be retried by the caller.
+ * through this library.
  *
  * @param toml Non-null pointer to a NUL-terminated UTF-8 TOML config string.
  * @return 0 on success, -1 on failure.
@@ -62,39 +63,33 @@ int easytier_ios_retain_instances(const char *names_json);
 char *easytier_ios_collect_network_infos(int max_length);
 
 /**
- * @brief Start a loopback TCP forwarder into the virtual network.
+ * @brief Call an exposed EasyTier management RPC method using protobuf JSON.
  *
- * Listens on 127.0.0.1:`listen_port` (0 = auto-assign) and relays every
- * accepted connection to `target_ip`:`target_port` through the data plane
- * of the instance named `inst_name`.
+ * `service_name` is the protobuf service name (e.g.
+ * "api.config.ConfigRpcService"), `method_name` the RPC method name (e.g.
+ * "PatchConfig"). `payload_json` must contain the protobuf JSON request,
+ * including any `instance` selector required by the target RPC.
  *
- * One instance admits a single native data-plane session, so only one
- * forwarder may be active per instance; starting a second one fails.
+ * Port forwarding into the virtual network is driven through this bridge
+ * with api.config.ConfigRpcService/PatchConfig port-forward patches.
  *
- * @param inst_name   Non-null NUL-terminated instance name.
- * @param target_ip   Non-null NUL-terminated IPv4 address (virtual network).
- * @param target_port Target port in the virtual network.
- * @param listen_port Loopback port to bind; 0 picks a free port.
- * @return The bound local port (> 0) on success, -1 on failure.
+ * @param service_name Non-null NUL-terminated RPC service name.
+ * @param method_name  Non-null NUL-terminated RPC method name.
+ * @param payload_json Non-null NUL-terminated protobuf JSON request body.
+ * @return A newly allocated NUL-terminated JSON response string on success,
+ *         NULL on failure.
+ *
+ * @ownership The caller owns the returned string and must release it with
+ *            easytier_ios_free_string().
  */
-int easytier_ios_start_tcp_forwarder(const char *inst_name,
-                                     const char *target_ip,
-                                     uint16_t target_port,
-                                     uint16_t listen_port);
-
-/**
- * @brief Stop the TCP forwarder bound to `local_port`.
- *
- * @param local_port Port previously returned by
- *                   easytier_ios_start_tcp_forwarder().
- * @return 0 on success, -1 when no forwarder is registered on that port.
- */
-int easytier_ios_stop_tcp_forwarder(int local_port);
+char *easytier_ios_call_json_rpc(const char *service_name,
+                                 const char *method_name,
+                                 const char *payload_json);
 
 /**
  * @brief Return the last error message on this thread.
  *
- * Combines forwarder-side errors recorded by this library with the
+ * Combines wrapper-side errors recorded by this library with the
  * easytier-ffi last FFI error.
  *
  * @return A newly allocated NUL-terminated string, or NULL when there is no
@@ -108,9 +103,9 @@ char *easytier_ios_last_error(void);
 /**
  * @brief Release a string returned by this library.
  *
- * Use this for strings returned by easytier_ios_collect_network_infos() and
- * easytier_ios_last_error(). Passing NULL is a no-op. The string must not
- * be used after this call.
+ * Use this for strings returned by easytier_ios_collect_network_infos(),
+ * easytier_ios_call_json_rpc() and easytier_ios_last_error(). Passing NULL
+ * is a no-op. The string must not be used after this call.
  *
  * @param s NULL, or a string previously returned by this library.
  */

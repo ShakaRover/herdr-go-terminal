@@ -4,10 +4,11 @@
 /// - buildInstanceToml 显式写 instance_name = profile.id，全部 server 写入
 ///   `[[peer]]` 数组，字段与转义行为；
 /// - connect 调用序列：startInstance → 轮询 currentVirtualIp(profileId) →
-///   startForwarder(profileId, ip, port) → Ready（无 teardown 性质的
-///   stopInstance）；
+///   addPortForward(profileId, `127.0.0.1:<picked>` → virtualIp:port) →
+///   Ready（无 teardown 性质的 stopInstance）；
 /// - virtualIp 轮询超时 → Failed；startInstance 抛错 → Failed；
-/// - disconnect → stopForwarder(localPort) + stopInstance(profileId)；
+/// - disconnect → removePortForward(ADD 时的完整 cfg) +
+///   stopInstance(profileId)；
 /// - family(profileId) 的两个实例各自独立 connect，调用序列互不影响。
 library;
 
@@ -21,7 +22,7 @@ import 'package:herdrgo/model/remote_profile.dart';
 import 'package:herdrgo/state/easytier_runtime.dart';
 
 /// 脚本化的 EasyTierChannel：记录调用顺序（含 instanceName），
-/// 按队列吐出 virtualIp 结果。
+/// 按队列吐出 virtualIp 结果。bind 端口由 runtime 真实抢占，fake 只记录。
 class FakeEasyTierChannel extends EasyTierChannel {
   FakeEasyTierChannel()
       : super(const MethodChannel('dev.herdr/easytier-test'));
@@ -32,7 +33,12 @@ class FakeEasyTierChannel extends EasyTierChannel {
   /// 每次 currentVirtualIp 弹一个；取空后反复吐最后一个，永不超时。
   final virtualIpResults = <String?>[null, '10.10.64.62'];
   Object? startInstanceError;
-  int nextForwarderPort = 40001;
+
+  /// 最近一次 ADD 的 bind 端口（= Ready.localPort）。
+  int? lastBindPort;
+
+  /// 每个实例最近一次 ADD 的 bind 端口（family 多实例断言用）。
+  final bindPorts = <String, int>{};
 
   @override
   Future<void> startInstance(String tomlConfig) async {
@@ -55,15 +61,28 @@ class FakeEasyTierChannel extends EasyTierChannel {
   }
 
   @override
-  Future<int> startForwarder(
-      String instanceName, String targetIp, int targetPort) async {
-    calls.add('startForwarder($instanceName,$targetIp:$targetPort)');
-    return nextForwarderPort;
+  Future<String?> currentVirtualIpRaw(String instanceName) =>
+      currentVirtualIp(instanceName);
+
+  @override
+  Future<void> addPortForward(String instanceName,
+      {required String bindIp,
+      required int bindPort,
+      required String dstIp,
+      required int dstPort}) async {
+    calls.add('addPortForward($instanceName,$bindIp:$bindPort->$dstIp:$dstPort)');
+    lastBindPort = bindPort;
+    bindPorts[instanceName] = bindPort;
   }
 
   @override
-  Future<void> stopForwarder(int localPort) async {
-    calls.add('stopForwarder($localPort)');
+  Future<void> removePortForward(String instanceName,
+      {required String bindIp,
+      required int bindPort,
+      required String dstIp,
+      required int dstPort}) async {
+    calls.add(
+        'removePortForward($instanceName,$bindIp:$bindPort->$dstIp:$dstPort)');
   }
 }
 
@@ -119,6 +138,7 @@ Future<void> keepAlive(ProviderContainer container, String profileId) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     // 测试不真等 500ms 一拍。
     EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 10);
@@ -172,7 +192,7 @@ disable_upnp = true
   });
 
   group('connect', () {
-    test('成功序列：startInstance → 轮询 → startForwarder → Ready，'
+    test('成功序列：startInstance → 轮询 → addPortForward → Ready，'
         '无 teardown 性质的 stopInstance', () async {
       final channel = FakeEasyTierChannel();
       final container = makeContainer(channel);
@@ -189,19 +209,22 @@ disable_upnp = true
       final s = await ready;
 
       expect(states.first, isA<EasyTierConnecting>());
-      expect(s, isA<EasyTierReady>().having(
-          (s) => s.localPort, 'localPort', 40001));
-      expect(channel.calls, [
-        'startInstance',
-        'currentVirtualIp(${profile.id})', // 第一次 null
-        'currentVirtualIp(${profile.id})', // 第二次拿到 10.10.64.62
-        'startForwarder(${profile.id},10.10.64.62:46810)',
-      ]);
+      expect(s, isA<EasyTierReady>());
+      // Ready 的 localPort 就是 runtime 抢占后交给 PatchConfig bind 的端口。
+      expect((s as EasyTierReady).localPort, channel.lastBindPort);
+      expect(channel.calls.length, 4);
+      expect(channel.calls[0], 'startInstance');
+      expect(channel.calls[1], 'currentVirtualIp(${profile.id})'); // 第一次 null
+      expect(channel.calls[2], 'currentVirtualIp(${profile.id})'); // 第二次拿到 IP
+      // bind 在 127.0.0.1 随机端口，dst 是 pairing 里的虚拟 IP:port。
+      expect(channel.calls[3],
+          'addPortForward(${profile.id},127.0.0.1:${channel.lastBindPort}'
+          '->${profile.virtualIp}:${profile.port})');
       expect(channel.calls.where((c) => c.startsWith('stop')), isEmpty);
       expect(channel.startedConfigs, [buildInstanceToml(profile)]);
     });
 
-    test('virtualIp 轮询超时 → Failed(等待虚拟 IP 超时)，不再启动转发器', () async {
+    test('virtualIp 轮询超时 → Failed(等待虚拟 IP 超时)，不再打转发 patch', () async {
       EasyTierRuntimeNotifier.virtualIpTimeout =
           const Duration(milliseconds: 100);
       final channel = FakeEasyTierChannel()
@@ -217,7 +240,7 @@ disable_upnp = true
 
       expect((s as EasyTierFailed).message, contains('等待虚拟 IP 超时'));
       expect(
-          channel.calls.where((c) => c.startsWith('startForwarder')), isEmpty);
+          channel.calls.where((c) => c.startsWith('addPortForward')), isEmpty);
     });
 
     test('超时失败后容错停本实例，重试 connect 可再次 startInstance', () async {
@@ -261,12 +284,12 @@ disable_upnp = true
       expect(channel.calls,
           isNot(contains(startsWith('currentVirtualIp'))));
       expect(
-          channel.calls.where((c) => c.startsWith('startForwarder')), isEmpty);
+          channel.calls.where((c) => c.startsWith('addPortForward')), isEmpty);
     });
   });
 
   group('disconnect', () {
-    test('connect 后 disconnect → stopForwarder + stopInstance(id) → '
+    test('connect 后 disconnect → removePortForward + stopInstance(id) → '
         'Disconnected', () async {
       final channel = FakeEasyTierChannel();
       final container = makeContainer(channel);
@@ -282,8 +305,12 @@ disable_upnp = true
 
       expect(container.read(easytierRuntimeProvider(profile.id)),
           isA<EasyTierDisconnected>());
-      expect(channel.calls,
-          ['stopForwarder(40001)', 'stopInstance(${profile.id})']);
+      // REMOVE 必须复现 ADD 时的完整 cfg（bind+dst）。
+      expect(channel.calls, [
+        'removePortForward(${profile.id},127.0.0.1:${channel.lastBindPort}'
+            '->${profile.virtualIp}:${profile.port})',
+        'stopInstance(${profile.id})',
+      ]);
     });
 
     test('重复 disconnect 幂等，不再触达通道', () async {
@@ -323,6 +350,7 @@ disable_upnp = true
       await notifier1.connect(profile);
       await notifier2.connect(profile2);
       await Future.wait([ready1, ready2]);
+      final notifier1Port = channel.bindPorts[profile.id];
 
       expect(
           container.read(easytierRuntimeProvider(profile.id)),
@@ -334,12 +362,17 @@ disable_upnp = true
           [buildInstanceToml(profile), buildInstanceToml(profile2)]);
       expect(
           channel.calls
-              .where((c) => c.startsWith('startForwarder(${profile.id},')),
-          ['startForwarder(${profile.id},10.10.64.62:46810)']);
-      expect(
-          channel.calls
-              .where((c) => c.startsWith('startForwarder(${profile2.id},')),
-          ['startForwarder(${profile2.id},10.10.64.99:46811)']);
+              .where((c) => c.startsWith('addPortForward(${profile.id},')),
+          ['addPortForward(${profile.id},127.0.0.1:${channel.bindPorts[profile.id]}'
+              '->${profile.virtualIp}:${profile.port})']);
+      // profile2 的转发 dst 不同，且 bind 端口独立。
+      final p2Calls = channel.calls
+          .where((c) => c.startsWith('addPortForward(${profile2.id},'))
+          .toList();
+      expect(p2Calls, hasLength(1));
+      expect(p2Calls.single, contains('->${profile2.virtualIp}:${profile2.port})'));
+      expect(channel.bindPorts[profile2.id],
+          isNot(equals(channel.bindPorts[profile.id])));
 
       // disconnect 一个实例，另一个保持 Ready 且只停本实例。
       channel.calls.clear();
@@ -349,8 +382,11 @@ disable_upnp = true
           isA<EasyTierDisconnected>());
       expect(container.read(easytierRuntimeProvider(profile2.id)),
           isA<EasyTierReady>());
-      expect(channel.calls,
-          ['stopForwarder(40001)', 'stopInstance(${profile.id})']);
+      expect(channel.calls, [
+        'removePortForward(${profile.id},127.0.0.1:$notifier1Port'
+            '->${profile.virtualIp}:${profile.port})',
+        'stopInstance(${profile.id})',
+      ]);
     });
   });
 }
