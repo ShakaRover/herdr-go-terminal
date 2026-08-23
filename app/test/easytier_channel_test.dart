@@ -96,7 +96,7 @@ void main() {
         dstIp: '10.10.64.62',
         dstPort: 8787);
     expect(h.calls.single.method, 'callJsonRpc');
-    expect(h.calls.single.arguments['service'], 'api.config.ConfigRpc');
+    expect(h.calls.single.arguments['service'], 'api.config.ConfigRpcService');
     expect(h.calls.single.arguments['method'], 'PatchConfig');
     expect(jsonDecode(h.calls.single.arguments['payload'] as String), {
       'patch': {

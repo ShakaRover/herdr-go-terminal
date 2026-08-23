@@ -12,7 +12,7 @@
 ///   `map.*.my_node_info.virtual_ipv4.address.addr`（u32，网络序）转成点分十进制。
 ///
 /// 端口转发用法：EasyTier 实例以无 TUN 模式嵌入 app，通过管理 RPC
-/// `api.config.ConfigRpc/PatchConfig` 给运行中的实例打 port_forward patch
+/// `api.config.ConfigRpcService/PatchConfig` 给运行中的实例打 port_forward patch
 /// （EasyTier 主线自带能力，内核 socket 监听 + data-plane 拨出），patch 生效后
 /// `127.0.0.1:<bindPort>` 即桥接到虚拟网络内的 dstIp:dstPort；REMOVE patch 按
 /// bind_addr + proto 匹配即可撤销。
@@ -30,9 +30,9 @@ class EasyTierChannel {
 
   final MethodChannel _channel;
 
-  /// 管理 RPC 的服务/方法名（proto 名；rust 侧 snake_case 同名方法亦兼容，
-  /// 见 easytier-android-jni 的 callJsonRpc 注释）。
-  static const _configRpcService = 'api.config.ConfigRpc';
+  /// 管理 RPC 的服务/方法名（lib.rs 的 dispatch 键；rust 侧 snake_case
+  /// 同名方法亦兼容，见 easytier-android-jni 的 callJsonRpc 注释）。
+  static const _configRpcService = 'api.config.ConfigRpcService';
   static const _patchConfigMethod = 'PatchConfig';
 
   /// 以 TOML 配置启动 EasyTier 实例。失败抛 [PlatformException]。
