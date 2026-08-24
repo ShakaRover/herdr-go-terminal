@@ -35,6 +35,7 @@ class FakeEasyTierChannel extends EasyTierChannel {
   Object? startInstanceError;
   Completer<void>? addPortForwardGate;
   Completer<void>? removePortForwardGate;
+  final addPortForwardErrors = <Object>[];
 
   /// 最近一次 ADD 的 bind 端口（= Ready.localPort）。
   int? lastBindPort;
@@ -74,6 +75,9 @@ class FakeEasyTierChannel extends EasyTierChannel {
       required int dstPort}) async {
     calls.add('addPortForward($instanceName,$bindIp:$bindPort->$dstIp:$dstPort)');
     await addPortForwardGate?.future;
+    if (addPortForwardErrors.isNotEmpty) {
+      throw addPortForwardErrors.removeAt(0);
+    }
     lastBindPort = bindPort;
     bindPorts[instanceName] = bindPort;
   }
@@ -436,6 +440,29 @@ disable_upnp = true
       expect(channel.calls[1], startsWith('addPortForward'));
       expect(container.read(easytierRuntimeProvider(profile.id)),
           isA<EasyTierReady>());
+    });
+
+    test('回前台 ADD 瞬时失败后短周期重试，不进入永久 Failed', () async {
+      final channel = FakeEasyTierChannel();
+      final container = makeContainer(channel);
+      await keepAlive(container, profile.id);
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+      await notifier.connect(profile);
+      await notifier.suspendPortForward();
+      channel.calls.clear();
+      channel.addPortForwardErrors.add(StateError('temporary ADD failure'));
+
+      await notifier.resumePortForward();
+
+      expect(container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierReady>());
+      expect(channel.calls.where((c) => c.startsWith('addPortForward')),
+          hasLength(2));
+      expect(channel.calls.where((c) => c.startsWith('removePortForward')),
+          hasLength(1),
+          reason: '首次 ADD 可能已生效，重试前应按原配置容错撤销');
+      expect(channel.calls.where((c) => c.startsWith('stopInstance')), isEmpty);
     });
   });
 

@@ -246,7 +246,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
         }
         _instanceHasVirtualIp = true;
       }
-      final port = await _installForward(channel, profile, gen);
+      final port = await _waitForwardInstalled(channel, profile, gen);
       if (gen != _generation) return;
       if (port == null) {
         state = const EasyTierForwardSuspended();
@@ -322,11 +322,26 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       // ignore: avoid_print
       print('[easytier] instance $profileId forwarding '
           '127.0.0.1:$port to ${profile.virtualIp}:${profile.port}');
-      await channel.addPortForward(profileId,
-          bindIp: '127.0.0.1',
-          bindPort: port,
-          dstIp: profile.virtualIp,
-          dstPort: profile.port);
+      try {
+        await channel.addPortForward(profileId,
+            bindIp: '127.0.0.1',
+            bindPort: port,
+            dstIp: profile.virtualIp,
+            dstPort: profile.port);
+      } catch (e) {
+        // RPC 可能在配置已生效、响应却丢失后报错；先按完整配置撤销，避免
+        // 下一次短周期重试留下重复 listener。
+        try {
+          await channel.removePortForward(profileId,
+              bindIp: '127.0.0.1',
+              bindPort: port,
+              dstIp: profile.virtualIp,
+              dstPort: profile.port);
+        } catch (_) {
+          // ADD 未生效或实例同时消失时 REMOVE 失败，保留原始 ADD 错误。
+        }
+        rethrow;
+      }
       if (gen != _generation || _forwardSuspended) {
         try {
           await channel.removePortForward(profileId,
@@ -345,6 +360,23 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       installed = true;
     });
     return installed ? port : null;
+  }
+
+  /// 前台恢复不能因一次瞬时 bind/RPC 错误永久进入 Failed；按现有 bridge
+  /// 探测的短周期继续安装，新的后台事件会通过 generation 立即终止等待。
+  Future<int?> _waitForwardInstalled(
+      EasyTierChannel channel, RemoteProfile profile, int gen) async {
+    for (;;) {
+      try {
+        final port = await _installForward(channel, profile, gen);
+        if (port != null) return port;
+      } catch (e) {
+        // ignore: avoid_print
+        print('[easytier] instance $profileId forward install failed: $e');
+      }
+      if (gen != _generation || _forwardSuspended) return null;
+      await Future<void>.delayed(bridgeProbeInterval);
+    }
   }
 
   Future<void> _enqueueForwardOperation(

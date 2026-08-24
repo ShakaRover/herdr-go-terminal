@@ -142,12 +142,12 @@ class _RootGateState extends ConsumerState<RootGate> {
     }
 
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      await Future.wait([
-        for (final conn in connections)
-          ref
-              .read(easytierRuntimeProvider(conn.id).notifier)
-              .resumePortForward(),
-      ]);
+      // 每条 bridge 独立恢复：某个远端不可达时，其可达性探测会继续等待，
+      // 但不能阻塞其他 bridge 已经恢复的快照轮询。
+      for (final conn in connections) {
+        unawaited(_resumeBridge(conn.id, generation));
+      }
+      return;
     }
     if (!mounted || generation != _lifecycleGeneration) return;
     for (final conn in connections) {
@@ -155,6 +155,15 @@ class _RootGateState extends ConsumerState<RootGate> {
           .read(bridgeSnapshotProvider(conn.id).notifier)
           .setPaused(false);
     }
+  }
+
+  Future<void> _resumeBridge(String bridgeId, int generation) async {
+    await ref
+        .read(easytierRuntimeProvider(bridgeId).notifier)
+        .resumePortForward();
+    if (!mounted || generation != _lifecycleGeneration) return;
+    if (ref.read(easytierRuntimeProvider(bridgeId)) is! EasyTierReady) return;
+    ref.read(bridgeSnapshotProvider(bridgeId).notifier).setPaused(false);
   }
 
   @override

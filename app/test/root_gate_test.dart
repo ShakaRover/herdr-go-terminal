@@ -29,7 +29,7 @@ import 'package:herdrgo/ui/dashboard/dashboard_screen.dart';
 import 'package:herdrgo/ui/settings/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'bridges_test.dart' show profileA, RecordingBlockedNotifier;
+import 'bridges_test.dart' show profileA, profileB, RecordingBlockedNotifier;
 import 'easytier_runtime_test.dart' show FakeEasyTierChannel;
 
 /// 最简 fake api：getSnapshot/readPane 各返回固定内容，记录 getSnapshot
@@ -70,10 +70,11 @@ Future<void> _pumpFrames(WidgetTester tester,
 }
 
 Future<void> _waitEasyTierReady(
-    WidgetTester tester, ProviderContainer container) async {
+    WidgetTester tester, ProviderContainer container,
+    [String bridgeId = 'pa']) async {
   for (var i = 0; i < 200; i++) {
     await tester.pump(const Duration(milliseconds: 10));
-    if (container.read(easytierRuntimeProvider('pa')) is EasyTierReady) {
+    if (container.read(easytierRuntimeProvider(bridgeId)) is EasyTierReady) {
       return;
     }
   }
@@ -85,6 +86,7 @@ Future<void> _pumpApp(
   _FakeBridgeApi api, {
   (String, String)? launchTarget,
   FakeEasyTierChannel? easyTierChannel,
+  BridgeReachabilityProbe? reachabilityProbe,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
@@ -95,7 +97,8 @@ Future<void> _pumpApp(
         sharedPrefsProvider.overrideWithValue(prefs),
         easytierChannelProvider
             .overrideWithValue(easyTierChannel ?? FakeEasyTierChannel()),
-        bridgeReachabilityProbeProvider.overrideWithValue((_, _) async => true),
+        bridgeReachabilityProbeProvider.overrideWithValue(
+            reachabilityProbe ?? (_, _) async => true),
         loopbackPortPickerProvider
             .overrideWithValue(() async => nextLoopbackPort++),
         blockedNotifierProvider.overrideWithValue(RecordingBlockedNotifier()),
@@ -205,6 +208,62 @@ void main() {
         hasLength(1));
     expect(api.getSnapshotCount, greaterThan(countAtPause),
         reason: '回前台后轮询应恢复');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('iOS 各 bridge 独立恢复，离线 bridge 不阻塞可达 bridge 轮询',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final api = _FakeBridgeApi();
+    final channel = FakeEasyTierChannel()..virtualIpResults.removeAt(0);
+    var blockProfileB = false;
+    await _pumpApp(tester, api,
+        easyTierChannel: channel,
+        reachabilityProbe: (port, _) async =>
+            !blockProfileB || port == channel.bindPorts['pa']);
+    final container = ProviderScope.containerOf(
+        tester.element(find.byType(RootGate)),
+        listen: false);
+    await container.read(profileStoreProvider).add(profileA);
+    await container.read(profileStoreProvider).add(profileB);
+    await container.read(enabledProfilesProvider.notifier).reload();
+    await _waitEasyTierReady(tester, container, 'pa');
+    await _waitEasyTierReady(tester, container, 'pb');
+
+    for (final s in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(s);
+      await tester.pump();
+    }
+    await _pumpFrames(tester, 2);
+    final countAtPause = api.getSnapshotCount;
+    blockProfileB = true;
+
+    for (final s in [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(s);
+      await tester.pump();
+    }
+    await _waitEasyTierReady(tester, container, 'pa');
+    await _pumpFrames(tester, 5, const Duration(seconds: 1));
+
+    expect(container.read(easytierRuntimeProvider('pa')),
+        isA<EasyTierReady>());
+    expect(container.read(easytierRuntimeProvider('pb')),
+        isA<EasyTierConnecting>());
+    expect(api.getSnapshotCount, greaterThan(countAtPause),
+        reason: 'pb 持续不可达时，pa 的轮询仍应独立恢复');
+    // 结束前再次进入后台，用 generation 取消 pb 的无限可达性探测，避免
+    // widget 测试把有意保留的 300ms retry timer 视为泄漏。
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump(const Duration(seconds: 1));
     debugDefaultTargetPlatformOverride = null;
   });
 }
