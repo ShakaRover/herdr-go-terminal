@@ -57,6 +57,8 @@ class AgentPreviewSheet extends ConsumerStatefulWidget {
 class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
   /// 当前展示的最近 30 行；changed 后重新拉取时换掉 future。
   Future<List<StyledLine>>? _future;
+  final _scrollController = ScrollController();
+  bool _scrollPending = false;
 
   /// 识别出的对话框（null = 未识别 → 通用动作行）。
   PromptModel? _model;
@@ -76,10 +78,26 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
     _reload();
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottomAfterBuild() {
+    if (!_scrollPending) return;
+    _scrollPending = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
+
   void _reload() {
     final api = ref.read(apiProvider(widget.bridgeId));
     final session = ref.read(sessionFilterProvider(widget.bridgeId));
     setState(() {
+      _scrollPending = true;
       _future = api == null
           ? Future.error(const ApiException('未配置 bridge 连接'))
           : api
@@ -265,11 +283,13 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
                         child: CircularProgressIndicator(),
                       ));
                     }
+                    _scrollToBottomAfterBuild();
                     return Container(
                       width: double.infinity,
                       color: mirrorBackground,
                       padding: const EdgeInsets.all(8),
                       child: SingleChildScrollView(
+                        controller: _scrollController,
                         child: AnsiSpan(lines: snap.data!),
                       ),
                     );

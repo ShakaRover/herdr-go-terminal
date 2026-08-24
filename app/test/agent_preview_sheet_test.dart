@@ -131,6 +131,25 @@ void main() {
     expect(find.text('↓'), findsOneWidget);
   });
 
+  testWidgets('长内容首次打开时定位到最新输出', (tester) async {
+    final api = _FakeBridgeApi()
+      ..readPaneText = List.generate(60, (i) => 'output line $i').join('\n');
+    await _pumpSheet(tester, api);
+
+    final preview = find.descendant(
+      of: find.byType(AgentPreviewSheet),
+      matching: find.byType(SingleChildScrollView),
+    );
+    final scrollView = tester.widget<SingleChildScrollView>(preview);
+    expect(scrollView.controller, isNotNull);
+    final position = scrollView.controller!.position;
+    expect(position.maxScrollExtent, greaterThan(0));
+    expect(position.pixels, moreOrLessEquals(
+      position.maxScrollExtent,
+      epsilon: 0.1,
+    ));
+  });
+
   testWidgets('点选项 → 防护链发键 → 关卡 + 「已发送」', (tester) async {
     final api = _FakeBridgeApi();
     await _pumpSheet(tester, api);

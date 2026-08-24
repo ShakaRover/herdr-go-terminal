@@ -24,6 +24,7 @@ class HistoryScreen extends ConsumerStatefulWidget {
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   final List<TranscriptEntry> _entries = [];
+  final _scrollController = ScrollController();
   bool _hasMore = false;
   bool _fileTruncated = false;
   bool _loading = false;
@@ -36,10 +37,42 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     _loadOlder();
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
+
+  void _preserveViewport(double oldPixels, double oldMaxExtent) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      final addedExtent = position.maxScrollExtent - oldMaxExtent;
+      final target = (oldPixels + addedExtent)
+          .clamp(0.0, position.maxScrollExtent)
+          .toDouble();
+      _scrollController.jumpTo(target);
+    });
+  }
+
   Future<void> _loadOlder() async {
     if (_loading) return;
     final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null) return;
+    final initialLoad = _entries.isEmpty;
+    final oldPixels = _scrollController.hasClients
+        ? _scrollController.position.pixels
+        : null;
+    final oldMaxExtent = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : null;
     setState(() {
       _loading = true;
       _error = null;
@@ -65,6 +98,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             _fileTruncated = fileTruncated;
         }
       });
+      if (initialLoad) {
+        _scrollToBottom();
+      } else if (oldPixels != null && oldMaxExtent != null) {
+        _preserveViewport(oldPixels, oldMaxExtent);
+      }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -98,6 +136,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       return Center(child: Text('加载失败：$_error'));
     }
     return ListView(
+      controller: _scrollController,
       padding: const EdgeInsets.all(12),
       children: [
         if (_hasMore)
