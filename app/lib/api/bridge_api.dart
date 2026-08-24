@@ -72,7 +72,7 @@ class BridgeApi {
             'Origin': _originOf(baseUrl),
             ...headers,
           },
-          connectTimeout: const Duration(seconds: 8),
+          connectTimeout: const Duration(seconds: 2),
           receiveTimeout: const Duration(seconds: 20),
         ));
 
@@ -85,7 +85,7 @@ class BridgeApi {
   /// 与 web 端一致：只在 body 完整解析后记录，容量 20，FIFO 淘汰。
   final Map<String, (String, PaneRead)> _paneCache = {};
 
-  static const _getTimeout = Duration(seconds: 10);
+  static const _getTimeout = Duration(seconds: 5);
   static const _mutationTimeout = Duration(seconds: 20);
   static const _uploadTimeout = Duration(seconds: 60);
 

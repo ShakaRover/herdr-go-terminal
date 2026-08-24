@@ -143,4 +143,38 @@ void main() {
     expect(s.data, isNull);
     expect(s.error, isNull);
   });
+
+  test('snapshot 失败后按快速重试间隔恢复，不等待正常轮询周期', () async {
+    SnapshotNotifier.pollInterval = const Duration(seconds: 1);
+    SnapshotNotifier.retryInterval = const Duration(milliseconds: 10);
+    addTearDown(() {
+      SnapshotNotifier.pollInterval = const Duration(seconds: 3);
+      SnapshotNotifier.retryInterval = const Duration(milliseconds: 500);
+    });
+    final flaky = _FlakyBridgeApi();
+    final container = await buildContainer(flaky, FakeBridgeApi('b2'));
+
+    final snapshot = waitSnapshot(container, 'b1');
+    container.listen(bridgeSnapshotProvider('b1'), (_, _) {});
+    await snapshot;
+
+    expect(flaky.getSnapshotCount, 2);
+  });
+}
+
+class _FlakyBridgeApi extends FakeBridgeApi {
+  _FlakyBridgeApi() : super('recovered');
+
+  bool _failed = false;
+
+  @override
+  Future<Snapshot> getSnapshot({String? session}) {
+    if (!_failed) {
+      _failed = true;
+      getSnapshotCount++;
+      seenSessions.add(session);
+      return Future.error(const ApiException('暂时不可达'));
+    }
+    return super.getSnapshot(session: session);
+  }
 }

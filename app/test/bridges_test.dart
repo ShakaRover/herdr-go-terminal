@@ -64,6 +64,7 @@ Future<ProviderContainer> buildContainer(
   final container = ProviderContainer(overrides: [
     sharedPrefsProvider.overrideWithValue(prefs),
     easytierChannelProvider.overrideWithValue(channel),
+    bridgeReachabilityProbeProvider.overrideWithValue((_, _) async => true),
     // bridgesProvider 的 Android 通知副作用会 listen bridgeSnapshotProvider；
     // 本文件不测通知，发信口 override 成 no-op 避免触碰 method channel。
     blockedNotifierProvider.overrideWithValue(_NoopBlockedNotifier()),
@@ -129,7 +130,7 @@ void main() {
     EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 10);
   });
   tearDown(() {
-    EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 500);
+    EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 250);
     EasyTierRuntimeNotifier.virtualIpTimeout = const Duration(seconds: 15);
   });
 

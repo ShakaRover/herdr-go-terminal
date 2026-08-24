@@ -5,7 +5,7 @@
 ///   `[[peer]]` 数组，字段与转义行为；
 /// - connect 调用序列：startInstance → 轮询 currentVirtualIp(profileId) →
 ///   addPortForward(profileId, `127.0.0.1:<picked>` → virtualIp:port) →
-///   Ready（无 teardown 性质的 stopInstance）；
+///   bridge API 可达 → Ready（无 teardown 性质的 stopInstance）；
 /// - virtualIp 轮询超时 → Failed；startInstance 抛错 → Failed；
 /// - disconnect → removePortForward(ADD 时的完整 cfg) +
 ///   stopInstance(profileId)；
@@ -110,6 +110,7 @@ const profile2 = RemoteProfile(
 ProviderContainer makeContainer(FakeEasyTierChannel channel) {
   final container = ProviderContainer(overrides: [
     easytierChannelProvider.overrideWithValue(channel),
+    bridgeReachabilityProbeProvider.overrideWithValue((_, _) async => true),
   ]);
   addTearDown(container.dispose);
   return container;
@@ -140,12 +141,17 @@ Future<void> keepAlive(ProviderContainer container, String profileId) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
-    // 测试不真等 500ms 一拍。
+    // 测试不真等生产间隔。
     EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 10);
+    EasyTierRuntimeNotifier.bridgeProbeInterval =
+        const Duration(milliseconds: 10);
   });
   tearDown(() {
-    EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 500);
+    EasyTierRuntimeNotifier.pollInterval = const Duration(milliseconds: 250);
     EasyTierRuntimeNotifier.virtualIpTimeout = const Duration(seconds: 15);
+    EasyTierRuntimeNotifier.bridgeProbeInterval =
+        const Duration(milliseconds: 300);
+    EasyTierRuntimeNotifier.bridgeProbeTimeout = const Duration(seconds: 1);
   });
 
   group('buildInstanceToml', () {
@@ -222,6 +228,34 @@ disable_upnp = true
           '->${profile.virtualIp}:${profile.port})');
       expect(channel.calls.where((c) => c.startsWith('stop')), isEmpty);
       expect(channel.startedConfigs, [buildInstanceToml(profile)]);
+    });
+
+    test('端口转发后持续探测 bridge，实际可达才进入 Ready', () async {
+      final channel = FakeEasyTierChannel();
+      final probeResults = <bool>[false, false, true];
+      final probedPorts = <int>[];
+      final container = ProviderContainer(overrides: [
+        easytierChannelProvider.overrideWithValue(channel),
+        bridgeReachabilityProbeProvider.overrideWithValue((port, _) async {
+          probedPorts.add(port);
+          return probeResults.removeAt(0);
+        }),
+      ]);
+      addTearDown(container.dispose);
+
+      final ready =
+          waitRuntime(container, profile.id, (s) => s is EasyTierReady);
+      await container
+          .read(easytierRuntimeProvider(profile.id).notifier)
+          .connect(profile);
+      final state = await ready;
+
+      expect(probedPorts, [
+        channel.lastBindPort,
+        channel.lastBindPort,
+        channel.lastBindPort,
+      ]);
+      expect((state as EasyTierReady).localPort, channel.lastBindPort);
     });
 
     test('virtualIp 轮询超时 → Failed(等待虚拟 IP 超时)，不再打转发 patch', () async {

@@ -21,6 +21,38 @@ import '../model/remote_profile.dart';
 final easytierChannelProvider =
     Provider<EasyTierChannel>((_) => const EasyTierChannel());
 
+/// 端口转发建立后，从本地回环端口探测 bridge API 是否已端到端可达。
+typedef BridgeReachabilityProbe = Future<bool> Function(
+    int localPort, Duration timeout);
+
+final bridgeReachabilityProbeProvider = Provider<BridgeReachabilityProbe>(
+    (_) => _probeBridgeReachability);
+
+Future<bool> _probeBridgeReachability(
+    int localPort, Duration timeout) async {
+  final client = HttpClient()..connectionTimeout = timeout;
+  try {
+    return await (() async {
+      final origin = 'http://127.0.0.1:$localPort';
+      final request = await client.getUrl(Uri.parse('$origin/api/v1/config'));
+      request.headers.set('x-requested-with', 'XMLHttpRequest');
+      request.headers.set('Origin', origin);
+      final response = await request.close();
+      await response.drain<void>();
+      return response.statusCode == HttpStatus.ok;
+    })()
+        .timeout(timeout);
+  } on SocketException {
+    return false;
+  } on HttpException {
+    return false;
+  } on TimeoutException {
+    return false;
+  } finally {
+    client.close(force: true);
+  }
+}
+
 sealed class EasyTierRuntimeState {
   const EasyTierRuntimeState();
 }
@@ -35,7 +67,8 @@ class EasyTierConnecting extends EasyTierRuntimeState {
   const EasyTierConnecting();
 }
 
-/// 转发器已就绪：`127.0.0.1:localPort` 即桥接到 profile 的 bridge。
+/// 转发器已就绪且 bridge API 可达：`127.0.0.1:localPort` 即桥接到
+/// profile 的 bridge。
 class EasyTierReady extends EasyTierRuntimeState {
   const EasyTierReady(this.localPort);
 
@@ -87,9 +120,13 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
 
   /// 虚拟 IP 轮询节奏与总超时；测试里可缩短避免等真时间。
   @visibleForTesting
-  static Duration pollInterval = const Duration(milliseconds: 500);
+  static Duration pollInterval = const Duration(milliseconds: 250);
   @visibleForTesting
   static Duration virtualIpTimeout = const Duration(seconds: 15);
+  @visibleForTesting
+  static Duration bridgeProbeInterval = const Duration(milliseconds: 300);
+  @visibleForTesting
+  static Duration bridgeProbeTimeout = const Duration(seconds: 1);
 
   int _localPort = 0;
   /// 与 [_localPort] 同生命周期：REMOVE patch 按「整条 PortForwardConfig
@@ -105,7 +142,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   EasyTierRuntimeState build() => const EasyTierDisconnected();
 
   /// 启动本实例：生成 TOML → startInstance → 轮询 currentVirtualIp
-  /// （500ms × 15s）→ 选回环端口 → PatchConfig ADD port_forward → Ready。
+  /// → 选回环端口 → PatchConfig ADD port_forward → 探测 bridge API → Ready。
   ///
   /// 多实例下不做 teardown 性质的「先 stopInstance」残留清理，只停本实例
   /// 已有的转发（重连时防端口泄漏）；失败时回滚本实例（转发 + 容错
@@ -139,6 +176,8 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       _localPort = port;
       _dstIp = profile.virtualIp;
       _dstPort = profile.port;
+      await _waitBridgeReachable(port, gen);
+      if (gen != _generation) return;
       // ignore: avoid_print
       print('[easytier] instance $profileId forward on :$_localPort');
       state = EasyTierReady(_localPort);
@@ -213,6 +252,15 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       if (gen != _generation) return null;
       if (DateTime.now().isAfter(deadline)) return null;
       await Future<void>.delayed(pollInterval);
+    }
+  }
+
+  Future<void> _waitBridgeReachable(int localPort, int gen) async {
+    final probe = ref.read(bridgeReachabilityProbeProvider);
+    for (;;) {
+      if (await probe(localPort, bridgeProbeTimeout)) return;
+      if (gen != _generation) return;
+      await Future<void>.delayed(bridgeProbeInterval);
     }
   }
 }

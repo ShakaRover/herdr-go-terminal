@@ -48,17 +48,23 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
 
   /// 轮询间隔（测试可覆盖；对齐 EasyTierRuntimeNotifier.pollInterval 的玩法）。
   static Duration pollInterval = const Duration(seconds: 3);
+  static Duration retryInterval = const Duration(milliseconds: 500);
 
   final String bridgeId;
   Timer? _timer;
+  Timer? _retryTimer;
   bool _inFlight = false;
+  bool _paused = false;
 
   @override
   SnapshotState build() {
     final api = ref.watch(apiProvider(bridgeId));
     // session 切换也触发重建（重新拉对应会话的数据）。
     ref.watch(sessionFilterProvider(bridgeId));
-    ref.onDispose(() => _timer?.cancel());
+    ref.onDispose(() {
+      _timer?.cancel();
+      _retryTimer?.cancel();
+    });
     if (api == null) return const SnapshotState();
     _timer?.cancel();
     _timer = Timer.periodic(pollInterval, (_) => refresh());
@@ -69,9 +75,13 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
 
   void setPaused(bool paused) {
     if (paused) {
+      _paused = true;
       _timer?.cancel();
       _timer = null;
+      _retryTimer?.cancel();
+      _retryTimer = null;
     } else if (_timer == null) {
+      _paused = false;
       _timer = Timer.periodic(pollInterval, (_) => refresh());
       Future.microtask(refresh);
     }
@@ -86,10 +96,16 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
           session: ref.read(sessionFilterProvider(bridgeId)));
       // await 后 provider 可能已随 bridgesProvider 重建被销毁。
       if (!ref.mounted) return;
+      _retryTimer?.cancel();
+      _retryTimer = null;
       state = SnapshotState(data: snap, lastOk: DateTime.now());
     } catch (e) {
       if (!ref.mounted) return;
       state = SnapshotState(data: state.data, error: e, lastOk: state.lastOk);
+      if (!_paused) {
+        _retryTimer?.cancel();
+        _retryTimer = Timer(retryInterval, refresh);
+      }
     } finally {
       _inFlight = false;
     }
