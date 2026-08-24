@@ -1,14 +1,14 @@
 /// easytier_runtime 状态机与 TOML 生成的测试。
 ///
 /// 用 fake EasyTierChannel（easytierChannelProvider override）验证：
-/// - buildInstanceToml 显式写 instance_name = profile.id，全部 server 写入
+/// - buildInstanceToml 显式写本代原生 instance_name，全部 server 写入
 ///   `[[peer]]` 数组，字段与转义行为；
-/// - connect 调用序列：startInstance → 轮询 currentVirtualIp(profileId) →
-///   addPortForward(profileId, `127.0.0.1:<picked>` → virtualIp:port) →
+/// - connect 调用序列：startInstance → 轮询 currentVirtualIp(instanceName) →
+///   addPortForward(instanceName, `127.0.0.1:<picked>` → virtualIp:port) →
 ///   bridge API 可达 → Ready（无 teardown 性质的 stopInstance）；
 /// - virtualIp 轮询超时 → Failed；startInstance 抛错 → Failed；
 /// - disconnect → removePortForward(ADD 时的完整 cfg) +
-///   stopInstance(profileId)；
+///   stopInstance(instanceName)；
 /// - family(profileId) 的两个实例各自独立 connect，调用序列互不影响。
 library;
 
@@ -175,11 +175,11 @@ void main() {
   });
 
   group('buildInstanceToml', () {
-    test('首行显式 instance_name = profile.id，全部 server 写入 [[peer]]，'
+    test('首行显式写入本代 instance_name，全部 server 写入 [[peer]]，'
         'no_tun 转发模式', () {
-      final toml = buildInstanceToml(profile);
+      final toml = buildInstanceToml(profile, instanceName: 'runtime-a');
       expect(toml, '''
-instance_name = "abcdefgh-1234-5678-9abc-def012345678"
+instance_name = "runtime-a"
 hostname = "herdr-app"
 dhcp = true
 listeners = []
@@ -208,8 +208,8 @@ disable_upnp = true
         virtualIp: '10.0.0.1',
         port: 80,
       );
-      final toml = buildInstanceToml(p);
-      expect(toml, contains(r'instance_name = "12345678-xxx\"x"'));
+      final toml = buildInstanceToml(p, instanceName: 'runtime"x');
+      expect(toml, contains(r'instance_name = "runtime\"x"'));
       expect(toml, contains(r'network_name = "net\\\"x\""'));
       expect(toml, contains(r'network_secret = "sec\\\"ret\""'));
       expect(toml, contains(r'uri = "tcp://a\"b\\c:11010"'));
@@ -224,6 +224,7 @@ disable_upnp = true
       final container = makeContainer(channel);
       final notifier =
           container.read(easytierRuntimeProvider(profile.id).notifier);
+      final instanceName = notifier.nativeInstanceName;
       final states = <EasyTierRuntimeState>[];
       final sub = container.listen(
           easytierRuntimeProvider(profile.id), (_, s) => states.add(s));
@@ -240,14 +241,15 @@ disable_upnp = true
       expect((s as EasyTierReady).localPort, channel.lastBindPort);
       expect(channel.calls.length, 4);
       expect(channel.calls[0], 'startInstance');
-      expect(channel.calls[1], 'currentVirtualIp(${profile.id})'); // 第一次 null
-      expect(channel.calls[2], 'currentVirtualIp(${profile.id})'); // 第二次拿到 IP
+      expect(channel.calls[1], 'currentVirtualIp($instanceName)'); // 第一次 null
+      expect(channel.calls[2], 'currentVirtualIp($instanceName)'); // 第二次拿到 IP
       // bind 在 127.0.0.1 随机端口，dst 是 pairing 里的虚拟 IP:port。
       expect(channel.calls[3],
-          'addPortForward(${profile.id},127.0.0.1:${channel.lastBindPort}'
+          'addPortForward($instanceName,127.0.0.1:${channel.lastBindPort}'
           '->${profile.virtualIp}:${profile.port})');
       expect(channel.calls.where((c) => c.startsWith('stop')), isEmpty);
-      expect(channel.startedConfigs, [buildInstanceToml(profile)]);
+      expect(channel.startedConfigs,
+          [buildInstanceToml(profile, instanceName: instanceName)]);
     });
 
     test('端口转发后持续探测 bridge，实际可达才进入 Ready', () async {
@@ -306,6 +308,7 @@ disable_upnp = true
       final container = makeContainer(channel);
       final notifier =
           container.read(easytierRuntimeProvider(profile.id).notifier);
+      final instanceName = notifier.nativeInstanceName;
 
       final failed = waitRuntime(container, profile.id, (s) => s is EasyTierFailed);
       await notifier.connect(profile);
@@ -313,7 +316,7 @@ disable_upnp = true
 
       // startInstance 成功后的失败必须把原生实例停掉，否则同名实例残留，
       // 重试会被 EasyTier 内核以 "instance name already exists" 拒绝。
-      expect(channel.calls.last, 'stopInstance(${profile.id})');
+      expect(channel.calls.last, 'stopInstance($instanceName)');
 
       // 恢复虚拟 IP 后重试成功：再次 startInstance 不会被拒绝。
       channel.virtualIpResults.add('10.10.64.62');
@@ -349,6 +352,7 @@ disable_upnp = true
       final container = makeContainer(channel);
       final notifier =
           container.read(easytierRuntimeProvider(profile.id).notifier);
+      final instanceName = notifier.nativeInstanceName;
 
       final ready = waitRuntime(container, profile.id, (s) => s is EasyTierReady);
       await notifier.connect(profile);
@@ -361,9 +365,9 @@ disable_upnp = true
           isA<EasyTierDisconnected>());
       // REMOVE 必须复现 ADD 时的完整 cfg（bind+dst）。
       expect(channel.calls, [
-        'removePortForward(${profile.id},127.0.0.1:${channel.lastBindPort}'
+        'removePortForward($instanceName,127.0.0.1:${channel.lastBindPort}'
             '->${profile.virtualIp}:${profile.port})',
-        'stopInstance(${profile.id})',
+        'stopInstance($instanceName)',
       ]);
     });
 
@@ -396,6 +400,7 @@ disable_upnp = true
       await keepAlive(container, profile.id);
       final notifier =
           container.read(easytierRuntimeProvider(profile.id).notifier);
+      final instanceName = notifier.nativeInstanceName;
 
       await notifier.connect(profile);
       final firstPort =
@@ -408,7 +413,7 @@ disable_upnp = true
       expect(container.read(easytierRuntimeProvider(profile.id)),
           isA<EasyTierForwardSuspended>());
       expect(channel.calls, [
-        'removePortForward(${profile.id},127.0.0.1:$firstPort'
+        'removePortForward($instanceName,127.0.0.1:$firstPort'
             '->${profile.virtualIp}:${profile.port})',
       ]);
 
@@ -418,7 +423,7 @@ disable_upnp = true
       final resumed = container.read(easytierRuntimeProvider(profile.id));
       expect(resumed, isA<EasyTierReady>());
       expect(channel.calls, [
-        startsWith('addPortForward(${profile.id},127.0.0.1:'),
+        startsWith('addPortForward($instanceName,127.0.0.1:'),
       ]);
       expect(channel.calls.single,
           endsWith('->${profile.virtualIp}:${profile.port})'));
@@ -487,6 +492,7 @@ disable_upnp = true
       await pumpEventQueue();
       final notifier =
           container.read(easytierRuntimeProvider(profile.id).notifier);
+      final instanceName = notifier.nativeInstanceName;
       final startGate = Completer<void>();
       channel.startInstanceGate = startGate;
       final connect = notifier.connect(profile);
@@ -500,9 +506,9 @@ disable_upnp = true
       startGate.complete();
       await connect;
       await waitUntil(() => channel.calls
-          .contains('stopInstance(${profile.id})'));
+          .contains('stopInstance($instanceName)'));
       expect(channel.calls.first, 'startInstance');
-      expect(channel.calls.last, 'stopInstance(${profile.id})');
+      expect(channel.calls.last, 'stopInstance($instanceName)');
     });
 
     test('恢复探测中销毁 provider：取消探测、撤销 listener 并 stop', () async {
@@ -522,6 +528,7 @@ disable_upnp = true
       await pumpEventQueue();
       final notifier =
           container.read(easytierRuntimeProvider(profile.id).notifier);
+      final instanceName = notifier.nativeInstanceName;
       await notifier.connect(profile);
       await notifier.suspendPortForward();
       reachable = false;
@@ -532,7 +539,7 @@ disable_upnp = true
       await pumpEventQueue();
       await resume;
       await waitUntil(() => channel.calls
-          .contains('stopInstance(${profile.id})'));
+          .contains('stopInstance($instanceName)'));
 
       expect(channel.calls.where((c) => c.startsWith('removePortForward')),
           hasLength(2),
@@ -541,6 +548,45 @@ disable_upnp = true
       await Future<void>.delayed(const Duration(milliseconds: 30));
       expect(probeCount, countAfterDispose,
           reason: 'provider 销毁后不能继续可达性探测');
+    });
+
+    test('同 ID runtime 重建时，旧 cleanup 只停止自己拥有的原生实例', () async {
+      final channel = FakeEasyTierChannel();
+      final container = makeContainer(channel);
+      final oldSub = container.listen(
+          easytierRuntimeProvider(profile.id), (_, _) {});
+      await pumpEventQueue();
+      final oldNotifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+      final oldInstanceName = oldNotifier.nativeInstanceName;
+      await oldNotifier.connect(profile);
+
+      final removeGate = Completer<void>();
+      channel.removePortForwardGate = removeGate;
+      oldSub.close();
+      await pumpEventQueue();
+      await waitUntil(() => channel.calls.any((c) =>
+          c.startsWith('removePortForward($oldInstanceName,')));
+
+      final newSub = container.listen(
+          easytierRuntimeProvider(profile.id), (_, _) {});
+      addTearDown(newSub.close);
+      await pumpEventQueue();
+      final newNotifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+      final newInstanceName = newNotifier.nativeInstanceName;
+      expect(newInstanceName, isNot(oldInstanceName));
+
+      await newNotifier.connect(profile);
+      expect(container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierReady>());
+
+      removeGate.complete();
+      await waitUntil(
+          () => channel.calls.contains('stopInstance($oldInstanceName)'));
+      expect(channel.calls, isNot(contains('stopInstance($newInstanceName)')));
+      expect(container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierReady>());
     });
   });
 
@@ -552,6 +598,8 @@ disable_upnp = true
           container.read(easytierRuntimeProvider(profile.id).notifier);
       final notifier2 =
           container.read(easytierRuntimeProvider(profile2.id).notifier);
+      final instanceName1 = notifier1.nativeInstanceName;
+      final instanceName2 = notifier2.nativeInstanceName;
 
       final ready1 =
           waitRuntime(container, profile.id, (s) => s is EasyTierReady);
@@ -560,7 +608,7 @@ disable_upnp = true
       await notifier1.connect(profile);
       await notifier2.connect(profile2);
       await Future.wait([ready1, ready2]);
-      final notifier1Port = channel.bindPorts[profile.id];
+      final notifier1Port = channel.bindPorts[instanceName1];
 
       expect(
           container.read(easytierRuntimeProvider(profile.id)),
@@ -568,21 +616,23 @@ disable_upnp = true
       expect(
           container.read(easytierRuntimeProvider(profile2.id)),
           isA<EasyTierReady>());
-      expect(channel.startedConfigs,
-          [buildInstanceToml(profile), buildInstanceToml(profile2)]);
+      expect(channel.startedConfigs, [
+        buildInstanceToml(profile, instanceName: instanceName1),
+        buildInstanceToml(profile2, instanceName: instanceName2),
+      ]);
       expect(
           channel.calls
-              .where((c) => c.startsWith('addPortForward(${profile.id},')),
-          ['addPortForward(${profile.id},127.0.0.1:${channel.bindPorts[profile.id]}'
+              .where((c) => c.startsWith('addPortForward($instanceName1,')),
+          ['addPortForward($instanceName1,127.0.0.1:${channel.bindPorts[instanceName1]}'
               '->${profile.virtualIp}:${profile.port})']);
       // profile2 的转发 dst 不同，且 bind 端口独立。
       final p2Calls = channel.calls
-          .where((c) => c.startsWith('addPortForward(${profile2.id},'))
+          .where((c) => c.startsWith('addPortForward($instanceName2,'))
           .toList();
       expect(p2Calls, hasLength(1));
       expect(p2Calls.single, contains('->${profile2.virtualIp}:${profile2.port})'));
-      expect(channel.bindPorts[profile2.id],
-          isNot(equals(channel.bindPorts[profile.id])));
+      expect(channel.bindPorts[instanceName2],
+          isNot(equals(channel.bindPorts[instanceName1])));
 
       // disconnect 一个实例，另一个保持 Ready 且只停本实例。
       channel.calls.clear();
@@ -593,9 +643,9 @@ disable_upnp = true
       expect(container.read(easytierRuntimeProvider(profile2.id)),
           isA<EasyTierReady>());
       expect(channel.calls, [
-        'removePortForward(${profile.id},127.0.0.1:$notifier1Port'
+        'removePortForward($instanceName1,127.0.0.1:$notifier1Port'
             '->${profile.virtualIp}:${profile.port})',
-        'stopInstance(${profile.id})',
+        'stopInstance($instanceName1)',
       ]);
     });
   });

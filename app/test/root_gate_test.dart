@@ -218,10 +218,12 @@ void main() {
     final api = _FakeBridgeApi();
     final channel = FakeEasyTierChannel()..virtualIpResults.removeAt(0);
     var blockProfileB = false;
+    String? profileAInstanceName;
     await _pumpApp(tester, api,
         easyTierChannel: channel,
         reachabilityProbe: (port, _) async =>
-            !blockProfileB || port == channel.bindPorts['pa']);
+            !blockProfileB ||
+            port == channel.bindPorts[profileAInstanceName]);
     final container = ProviderScope.containerOf(
         tester.element(find.byType(RootGate)),
         listen: false);
@@ -230,6 +232,9 @@ void main() {
     await container.read(enabledProfilesProvider.notifier).reload();
     await _waitEasyTierReady(tester, container, 'pa');
     await _waitEasyTierReady(tester, container, 'pb');
+    profileAInstanceName = container
+        .read(easytierRuntimeProvider('pa').notifier)
+        .nativeInstanceName;
 
     for (final s in [
       AppLifecycleState.inactive,

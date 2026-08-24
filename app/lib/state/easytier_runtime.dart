@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../api/easytier_channel.dart';
 import '../model/remote_profile.dart';
@@ -94,17 +95,19 @@ class EasyTierFailed extends EasyTierRuntimeState {
 
 /// RemoteProfile → EasyTier 实例 TOML 配置（无 TUN 转发模式，纯函数便于测试）。
 ///
-/// 显式 instance_name = profile.id：多实例由 EasyTier 内核 registry 承载，
-/// stopInstance/currentVirtualIp/端口转发 patch 均以该名字为 key。
+/// [instanceName] 是本次 runtime 独占的原生资源名：多实例由 EasyTier 内核
+/// registry 承载，stopInstance/currentVirtualIp/端口转发 patch 均以该名字
+/// 为 key。它不能复用 profile.id，否则旧 runtime 的迟到清理会误停同 ID 的
+/// 新 runtime。
 /// 全部 server（内网监听地址 + 公网中继）写入 `[[peer]]` 数组，
 /// 由 EasyTier 自己挑通的走。
-String buildInstanceToml(RemoteProfile p) {
+String buildInstanceToml(RemoteProfile p, {required String instanceName}) {
   final peers = StringBuffer();
   for (final s in p.server) {
     peers.writeln('[[peer]]\nuri = "${_esc(s)}"');
   }
   return '''
-instance_name = "${_esc(p.id)}"
+instance_name = "${_esc(instanceName)}"
 hostname = "herdr-app"
 dhcp = true
 listeners = []
@@ -123,10 +126,19 @@ disable_upnp = true
 String _esc(String s) => s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
 class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
-  /// family 参数：profileId（= EasyTier 实例名）。
-  EasyTierRuntimeNotifier(this.profileId);
+  /// family 参数：逻辑 profileId；原生实例另用每代唯一的 [_instanceName]。
+  EasyTierRuntimeNotifier(this.profileId)
+      : _instanceName = '$profileId-${const Uuid().v4()}';
 
   final String profileId;
+
+  /// 原生 EasyTier 资源属于 notifier 的这一代，而不是逻辑 profile。
+  /// autoDispose 后即使同一 profileId 立刻创建新 notifier，两代的异步
+  /// ADD/REMOVE/stop 也不会操作同一个实例。
+  final String _instanceName;
+
+  @visibleForTesting
+  String get nativeInstanceName => _instanceName;
 
   /// 虚拟 IP 轮询节奏与总超时；测试里可缩短避免等真时间。
   @visibleForTesting
@@ -187,7 +199,8 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     state = const EasyTierConnecting();
     final channel = ref.read(easytierChannelProvider);
     try {
-      final start = channel.startInstance(buildInstanceToml(profile));
+      final start = channel.startInstance(
+          buildInstanceToml(profile, instanceName: _instanceName));
       _instanceStarts.add(start);
       try {
         await start;
@@ -220,7 +233,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       if (gen != _generation) return;
       await _removeForward(channel);
       try {
-        await channel.stopInstance(profileId);
+        await channel.stopInstance(_instanceName);
       } catch (_) {
         // startInstance 本身失败时实例不存在，按已停处理。
       }
@@ -301,7 +314,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     final channel = ref.read(easytierChannelProvider);
     await _removeForward(channel);
     try {
-      await channel.stopInstance(profileId);
+      await channel.stopInstance(_instanceName);
     } catch (_) {
       // 实例可能已被原生侧停掉，按已停处理。
     }
@@ -324,7 +337,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     }
     await _removeForward(channel);
     try {
-      await channel.stopInstance(profileId);
+      await channel.stopInstance(_instanceName);
     } catch (_) {
       // 实例可能尚未创建或已被其他路径停掉，按已停处理。
     }
@@ -343,7 +356,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       _dstIp = '';
       _dstPort = 0;
       try {
-        await channel.removePortForward(profileId,
+        await channel.removePortForward(_instanceName,
             bindIp: '127.0.0.1',
             bindPort: port,
             dstIp: dstIp,
@@ -369,7 +382,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       print('[easytier] instance $profileId forwarding '
           '127.0.0.1:$port to ${profile.virtualIp}:${profile.port}');
       try {
-        await channel.addPortForward(profileId,
+        await channel.addPortForward(_instanceName,
             bindIp: '127.0.0.1',
             bindPort: port,
             dstIp: profile.virtualIp,
@@ -378,7 +391,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
         // RPC 可能在配置已生效、响应却丢失后报错；先按完整配置撤销，避免
         // 下一次短周期重试留下重复 listener。
         try {
-          await channel.removePortForward(profileId,
+          await channel.removePortForward(_instanceName,
               bindIp: '127.0.0.1',
               bindPort: port,
               dstIp: profile.virtualIp,
@@ -390,7 +403,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       }
       if (gen != _generation || _forwardSuspended) {
         try {
-          await channel.removePortForward(profileId,
+          await channel.removePortForward(_instanceName,
               bindIp: '127.0.0.1',
               bindPort: port,
               dstIp: profile.virtualIp,
@@ -440,7 +453,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     final deadline = DateTime.now().add(virtualIpTimeout);
     for (;;) {
       if (_disposed || gen != _generation) return null;
-      final raw = await channel.currentVirtualIpRaw(profileId);
+      final raw = await channel.currentVirtualIpRaw(_instanceName);
       // ignore: avoid_print
       print('[easytier] _waitVirtualIp $profileId raw=$raw');
       if (raw != null) return raw;
