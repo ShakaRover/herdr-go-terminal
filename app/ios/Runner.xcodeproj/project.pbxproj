@@ -349,7 +349,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = M2G6355ZK7;
-				PROVISIONING_PROFILE_SPECIFIER = "b8c6b407-db00-4df2-91d3-10502786cb3f";
+				PROVISIONING_PROFILE_SPECIFIER = "herdrWeb Development";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -386,7 +386,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.herdr.herdrgo;
+				/* The installed provisioning profile is historically bound to
+				 * dev.herdr.herdrWeb. Do not rename this ID with the project. */
+				PRODUCT_BUNDLE_IDENTIFIER = dev.herdr.herdrWeb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -531,7 +533,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = M2G6355ZK7;
-				PROVISIONING_PROFILE_SPECIFIER = "b8c6b407-db00-4df2-91d3-10502786cb3f";
+				PROVISIONING_PROFILE_SPECIFIER = "herdrWeb Development";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -570,7 +572,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.herdr.herdrgo;
+				/* The installed provisioning profile is historically bound to
+				 * dev.herdr.herdrWeb. Do not rename this ID with the project. */
+				PRODUCT_BUNDLE_IDENTIFIER = dev.herdr.herdrWeb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -592,7 +596,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.herdr.herdrgo;
+				/* The installed provisioning profile is historically bound to
+				 * dev.herdr.herdrWeb. Do not rename this ID with the project. */
+				PRODUCT_BUNDLE_IDENTIFIER = dev.herdr.herdrWeb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
