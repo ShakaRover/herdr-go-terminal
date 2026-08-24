@@ -35,18 +35,9 @@ final class EasyTierChannel {
           result(nil)
         case "stopInstance":
           let instanceName = try Self.arg(call, "instanceName")
-          // 保留除目标实例外的所有运行中实例（目标不存在时静默成功）。
-          let infosJson = Self.takeOwnedString(easytier_ios_collect_network_infos(10))
-          var names: [String] = []
-          if let infosJson,
-             let data = infosJson.data(using: .utf8),
-             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            names = Array(obj.keys)
-          }
-          names.removeAll { $0 == instanceName }
-          let retainJson = try JSONSerialization.data(withJSONObject: names)
-          try Self.checkRc(easytier_ios_retain_instances(
-            String(data: retainJson, encoding: .utf8)))
+          // 原生 exact-delete 不依赖有上限的实例枚举；否则
+          // >10 实例时用 retain 模拟删除会误停未枚举到的实例。
+          try Self.checkRc(easytier_ios_delete_instance(instanceName))
           result(nil)
         case "currentVirtualIp":
           let instanceName = try Self.arg(call, "instanceName")

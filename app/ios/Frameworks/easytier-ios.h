@@ -59,6 +59,16 @@ int easytier_ios_run_instance(const char *toml);
 int easytier_ios_retain_instances(const char *names_json);
 
 /**
+ * @brief Stop exactly one named instance without affecting other instances.
+ *
+ * An unknown name is a no-op.
+ *
+ * @param instance_name Non-null NUL-terminated instance name.
+ * @return 0 on success, -1 on failure.
+ */
+int easytier_ios_delete_instance(const char *instance_name);
+
+/**
  * @brief Collect running instance information as a JSON object.
  *
  * The result maps each instance name to its running info JSON object.

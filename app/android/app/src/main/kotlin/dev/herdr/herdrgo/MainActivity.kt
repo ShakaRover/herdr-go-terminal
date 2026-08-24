@@ -22,16 +22,9 @@ class MainActivity : FlutterActivity() {
                         "stopInstance" -> {
                             val instanceName = call.argument<String>("instanceName")
                                 ?: throw IllegalArgumentException("missing instanceName")
-                            val all = EasyTierJNI.listInstances(10)
-                                ?.let { JSONObject(it).keys().asSequence().toList() }
-                                .orEmpty()
-                            // 只停目标实例、retain 其余；目标不存在时 retain 全部，
-                            // 等价 no-op（静默成功）。
-                            checkRc(
-                                EasyTierJNI.retainNetworkInstance(
-                                    (all - instanceName).toTypedArray()
-                                )
-                            )
+                            // 原生 exact-delete 不依赖有上限的实例枚举；否则
+                            // >10 实例时用 retain 模拟删除会误停未枚举到的实例。
+                            checkRc(EasyTierJNI.deleteNetworkInstance(instanceName))
                             result.success(null)
                         }
                         "currentVirtualIp" -> {
