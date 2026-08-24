@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 从 EasyTier 仓库构建 easytier-android-jni 并把产物同步进 app 的 Android 源码树：
-#   - libeasytier_android_jni.so → app/android/app/src/main/jniLibs/arm64-v8a/
+#   - libeasytier_android_jni.so → app/android/app/src/main/jniLibs/<abi>/
 #   - EasyTierJNI.kt → app/android/app/src/main/kotlin/com/easytier/jni/
 #
 # 幂等：cargo 增量构建 + 覆盖拷贝，重复执行结果一致。
@@ -29,13 +29,21 @@ if [ -z "${ANDROID_NDK_HOME:-}" ] && [ -z "${ANDROID_NDK_ROOT:-}" ]; then
     export ANDROID_NDK_HOME="$ndk_dir"
 fi
 
-echo "== 构建 easytier-android-jni (arm64-v8a, release)"
-(cd "$JNI_DIR" && cargo ndk -t arm64-v8a build --release)
+echo "== 构建 easytier-android-jni (arm64-v8a + x86_64, release)"
+# EasyTier 是 Cargo workspace；若不显式指定 -o，cargo-ndk 的链接产物会
+# 落在 workspace target，而这里可能继续复制 JNI crate 下的历史旧文件。
+(cd "$JNI_DIR" && cargo ndk \
+    -t arm64-v8a \
+    -t x86_64 \
+    -o "$JNI_DIR/target/jniLibs" \
+    build --release)
 
-SO_SRC="$JNI_DIR/target/jniLibs/arm64-v8a"
-SO_DST="$APP_ROOT/android/app/src/main/jniLibs/arm64-v8a"
-mkdir -p "$SO_DST"
-cp "$SO_SRC/libeasytier_android_jni.so" "$SO_DST/"
+for abi in arm64-v8a x86_64; do
+    so_src="$JNI_DIR/target/jniLibs/$abi/libeasytier_android_jni.so"
+    so_dst="$APP_ROOT/android/app/src/main/jniLibs/$abi"
+    mkdir -p "$so_dst"
+    cp "$so_src" "$so_dst/"
+done
 
 # EasyTierManager.kt / EasyTierVpnService.t.kt 依赖 VpnService 与 moshi，不拷。
 KT_SRC="$JNI_DIR/kotlin/com/easytier/jni"
@@ -44,4 +52,6 @@ mkdir -p "$KT_DST"
 cp "$KT_SRC/EasyTierJNI.kt" "$KT_DST/"
 
 echo "== 同步完成"
-ls -l "$SO_DST" "$KT_DST"
+ls -l "$APP_ROOT/android/app/src/main/jniLibs/arm64-v8a" \
+    "$APP_ROOT/android/app/src/main/jniLibs/x86_64" \
+    "$KT_DST"
