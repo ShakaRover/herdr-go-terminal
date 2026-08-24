@@ -33,6 +33,8 @@ class FakeEasyTierChannel extends EasyTierChannel {
   /// 每次 currentVirtualIp 弹一个；取空后反复吐最后一个，永不超时。
   final virtualIpResults = <String?>[null, '10.10.64.62'];
   Object? startInstanceError;
+  Completer<void>? addPortForwardGate;
+  Completer<void>? removePortForwardGate;
 
   /// 最近一次 ADD 的 bind 端口（= Ready.localPort）。
   int? lastBindPort;
@@ -71,6 +73,7 @@ class FakeEasyTierChannel extends EasyTierChannel {
       required String dstIp,
       required int dstPort}) async {
     calls.add('addPortForward($instanceName,$bindIp:$bindPort->$dstIp:$dstPort)');
+    await addPortForwardGate?.future;
     lastBindPort = bindPort;
     bindPorts[instanceName] = bindPort;
   }
@@ -83,6 +86,7 @@ class FakeEasyTierChannel extends EasyTierChannel {
       required int dstPort}) async {
     calls.add(
         'removePortForward($instanceName,$bindIp:$bindPort->$dstIp:$dstPort)');
+    await removePortForwardGate?.future;
   }
 }
 
@@ -365,6 +369,73 @@ disable_upnp = true
       expect(channel.calls, isEmpty);
       expect(container.read(easytierRuntimeProvider(profile.id)),
           isA<EasyTierDisconnected>());
+    });
+  });
+
+  group('port-forward lifecycle', () {
+    test('后台只撤销转发，回前台重建 listener，不重启 EasyTier 实例',
+        () async {
+      final channel = FakeEasyTierChannel();
+      final container = makeContainer(channel);
+      await keepAlive(container, profile.id);
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+
+      await notifier.connect(profile);
+      final firstPort =
+          (container.read(easytierRuntimeProvider(profile.id)) as EasyTierReady)
+              .localPort;
+      channel.calls.clear();
+
+      await notifier.suspendPortForward();
+
+      expect(container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierForwardSuspended>());
+      expect(channel.calls, [
+        'removePortForward(${profile.id},127.0.0.1:$firstPort'
+            '->${profile.virtualIp}:${profile.port})',
+      ]);
+
+      channel.calls.clear();
+      await notifier.resumePortForward();
+
+      final resumed = container.read(easytierRuntimeProvider(profile.id));
+      expect(resumed, isA<EasyTierReady>());
+      expect(channel.calls, [
+        startsWith('addPortForward(${profile.id},127.0.0.1:'),
+      ]);
+      expect(channel.calls.single,
+          endsWith('->${profile.virtualIp}:${profile.port})'));
+      expect(channel.calls.where((c) => c.startsWith('startInstance')), isEmpty);
+      expect(channel.calls.where((c) => c.startsWith('stopInstance')), isEmpty);
+    });
+
+    test('快速回前台时，等待后台 REMOVE 完成后才 ADD', () async {
+      final channel = FakeEasyTierChannel();
+      final container = makeContainer(channel);
+      await keepAlive(container, profile.id);
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+      await notifier.connect(profile);
+      channel.calls.clear();
+
+      final removeGate = Completer<void>();
+      channel.removePortForwardGate = removeGate;
+      final suspend = notifier.suspendPortForward();
+      await pumpEventQueue();
+      final resume = notifier.resumePortForward();
+      await pumpEventQueue();
+
+      expect(channel.calls, hasLength(1));
+      expect(channel.calls.single, startsWith('removePortForward'));
+
+      removeGate.complete();
+      await Future.wait([suspend, resume]);
+      expect(channel.calls, hasLength(2));
+      expect(channel.calls[0], startsWith('removePortForward'));
+      expect(channel.calls[1], startsWith('addPortForward'));
+      expect(container.read(easytierRuntimeProvider(profile.id)),
+          isA<EasyTierReady>());
     });
   });
 

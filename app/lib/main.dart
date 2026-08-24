@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'notify/notify_service.dart';
 import 'state/bridges.dart';
+import 'state/easytier_runtime.dart';
 import 'state/settings.dart';
 import 'state/snapshot.dart';
 import 'ui/agent/agent_screen.dart';
@@ -72,8 +75,8 @@ bool hasAnyConnection(WidgetRef ref) =>
     ref.watch(bridgesProvider).isNotEmpty;
 
 /// 任一 enabled bridge 连接存在 → dashboard；空配置 → 设置页。
-/// 同时负责 app 前后台切换时暂停/恢复各 bridge 的 snapshot 轮询（后台停
-/// 轮询 → 前台心跳停写 → 通知抑制按 foregroundFreshWindow 自然解除）。
+/// 同时负责 app 前后台切换时暂停/恢复各 bridge 的 snapshot 轮询；iOS 还
+/// 会撤销/重建回环端口转发，EasyTier 实例本身始终保持运行。
 class RootGate extends ConsumerStatefulWidget {
   const RootGate({super.key, this.launchTarget});
 
@@ -85,6 +88,8 @@ class RootGate extends ConsumerStatefulWidget {
 
 class _RootGateState extends ConsumerState<RootGate> {
   late final AppLifecycleListener _lifecycleListener;
+  bool _foreground = true;
+  int _lifecycleGeneration = 0;
 
   @override
   void initState() {
@@ -105,14 +110,50 @@ class _RootGateState extends ConsumerState<RootGate> {
     super.dispose();
   }
 
-  /// 退后台：标记后台并暂停每条 enabled bridge 的快照轮询；回前台恢复。
+  /// 非 resumed 的多个中间状态只处理一次。iOS 普通 app 挂起时可能回收
+  /// listener 的内核资源却不唤醒 Tokio accept，因此退后台先撤销转发，
+  /// 回前台重建成功后再恢复轮询。这个历史兼容逻辑必须留在宿主 app 层，
+  /// 不要把 iOS 生命周期概念下沉到 EasyTier core。
   void _onLifecycle(AppLifecycleState state) {
     final foreground = state == AppLifecycleState.resumed;
+    if (foreground == _foreground) return;
+    _foreground = foreground;
+    final generation = ++_lifecycleGeneration;
+    unawaited(_applyLifecycle(foreground, generation));
+  }
+
+  Future<void> _applyLifecycle(bool foreground, int generation) async {
     ref.read(appForegroundProvider.notifier).setForeground(foreground);
-    for (final conn in ref.read(bridgesProvider)) {
+    final connections = ref.read(bridgesProvider);
+
+    if (!foreground) {
+      for (final conn in connections) {
+        ref.read(bridgeSnapshotProvider(conn.id).notifier).setPaused(true);
+      }
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await Future.wait([
+          for (final conn in connections)
+            ref
+                .read(easytierRuntimeProvider(conn.id).notifier)
+                .suspendPortForward(),
+        ]);
+      }
+      return;
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await Future.wait([
+        for (final conn in connections)
+          ref
+              .read(easytierRuntimeProvider(conn.id).notifier)
+              .resumePortForward(),
+      ]);
+    }
+    if (!mounted || generation != _lifecycleGeneration) return;
+    for (final conn in connections) {
       ref
           .read(bridgeSnapshotProvider(conn.id).notifier)
-          .setPaused(!foreground);
+          .setPaused(false);
     }
   }
 

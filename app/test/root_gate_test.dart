@@ -14,6 +14,7 @@
 library;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,18 +69,35 @@ Future<void> _pumpFrames(WidgetTester tester,
   }
 }
 
+Future<void> _waitEasyTierReady(
+    WidgetTester tester, ProviderContainer container) async {
+  for (var i = 0; i < 200; i++) {
+    await tester.pump(const Duration(milliseconds: 10));
+    if (container.read(easytierRuntimeProvider('pa')) is EasyTierReady) {
+      return;
+    }
+  }
+  throw StateError('EasyTier runtime 未在测试时限内进入 Ready');
+}
+
 Future<void> _pumpApp(
   WidgetTester tester,
   _FakeBridgeApi api, {
   (String, String)? launchTarget,
+  FakeEasyTierChannel? easyTierChannel,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
+  var nextLoopbackPort = 40000;
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
-        easytierChannelProvider.overrideWithValue(FakeEasyTierChannel()),
+        easytierChannelProvider
+            .overrideWithValue(easyTierChannel ?? FakeEasyTierChannel()),
+        bridgeReachabilityProbeProvider.overrideWithValue((_, _) async => true),
+        loopbackPortPickerProvider
+            .overrideWithValue(() async => nextLoopbackPort++),
         blockedNotifierProvider.overrideWithValue(RecordingBlockedNotifier()),
         apiProvider.overrideWith(
             (ref, bridgeId) => bridgeId == 'pa' ? api : null),
@@ -123,17 +141,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('退后台暂停各 bridge 轮询并标记后台；回前台恢复', (tester) async {
+  testWidgets('iOS 退后台暂停轮询并撤销转发；回前台重建后恢复轮询',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final api = _FakeBridgeApi();
-    await _pumpApp(tester, api);
+    final channel = FakeEasyTierChannel()..virtualIpResults.removeAt(0);
+    await _pumpApp(tester, api, easyTierChannel: channel);
     final container = ProviderScope.containerOf(
         tester.element(find.byType(RootGate)),
         listen: false);
     await container.read(profileStoreProvider).add(profileA);
     await container.read(enabledProfilesProvider.notifier).reload();
-    await _pumpFrames(tester);
+    await _waitEasyTierReady(tester, container);
     expect(find.byType(DashboardScreen), findsOneWidget);
     expect(container.read(appForegroundProvider), isTrue);
+    expect(container.read(easytierRuntimeProvider('pa')),
+        isA<EasyTierReady>());
 
     // 前台轮询持续推进。
     final count1 = api.getSnapshotCount;
@@ -151,6 +175,12 @@ void main() {
       await tester.pump();
     }
     expect(container.read(appForegroundProvider), isFalse);
+    await _pumpFrames(tester, 2);
+    expect(container.read(easytierRuntimeProvider('pa')),
+        isA<EasyTierForwardSuspended>());
+    expect(channel.calls.where((c) => c.startsWith('removePortForward')),
+        hasLength(1));
+    expect(channel.calls.where((c) => c.startsWith('stopInstance')), isEmpty);
     final countAtPause = api.getSnapshotCount;
     await _pumpFrames(tester, 5, const Duration(seconds: 2));
     expect(api.getSnapshotCount, countAtPause, reason: '退后台后轮询应停止');
@@ -165,8 +195,16 @@ void main() {
       await tester.pump();
     }
     expect(container.read(appForegroundProvider), isTrue);
+    await _waitEasyTierReady(tester, container);
     await _pumpFrames(tester, 10, const Duration(seconds: 1));
+    expect(container.read(easytierRuntimeProvider('pa')),
+        isA<EasyTierReady>());
+    expect(channel.calls.where((c) => c.startsWith('addPortForward')),
+        hasLength(2));
+    expect(channel.calls.where((c) => c.startsWith('startInstance')),
+        hasLength(1));
     expect(api.getSnapshotCount, greaterThan(countAtPause),
         reason: '回前台后轮询应恢复');
+    debugDefaultTargetPlatformOverride = null;
   });
 }

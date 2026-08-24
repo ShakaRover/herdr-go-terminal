@@ -167,6 +167,9 @@ BridgeConn _driveAndDerive(Ref ref, RemoteProfile profile) {
     case EasyTierConnecting():
       return BridgeConn(
           id: profile.id, label: profile.label, status: ConnStatus.connecting);
+    case EasyTierForwardSuspended():
+      return BridgeConn(
+          id: profile.id, label: profile.label, status: ConnStatus.connecting);
     case EasyTierReady(:final localPort):
       return BridgeConn(
         id: profile.id,

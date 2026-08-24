@@ -28,6 +28,11 @@ typedef BridgeReachabilityProbe = Future<bool> Function(
 final bridgeReachabilityProbeProvider = Provider<BridgeReachabilityProbe>(
     (_) => _probeBridgeReachability);
 
+typedef LoopbackPortPicker = Future<int> Function();
+
+final loopbackPortPickerProvider =
+    Provider<LoopbackPortPicker>((_) => _pickLoopbackPort);
+
 Future<bool> _probeBridgeReachability(
     int localPort, Duration timeout) async {
   final client = HttpClient()..connectionTimeout = timeout;
@@ -73,6 +78,11 @@ class EasyTierReady extends EasyTierRuntimeState {
   const EasyTierReady(this.localPort);
 
   final int localPort;
+}
+
+/// EasyTier 实例仍在运行，但宿主 app 在后台，回环端口转发已主动移除。
+class EasyTierForwardSuspended extends EasyTierRuntimeState {
+  const EasyTierForwardSuspended();
 }
 
 /// 连接失败（启动报错 / 等虚拟 IP 超时）。
@@ -129,10 +139,18 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   static Duration bridgeProbeTimeout = const Duration(seconds: 1);
 
   int _localPort = 0;
+
   /// 与 [_localPort] 同生命周期：REMOVE patch 按「整条 PortForwardConfig
   /// 相等」匹配，撤销时必须复现 ADD 时的 dst（见 easytier_channel.dart）。
   String _dstIp = '';
   int _dstPort = 0;
+  RemoteProfile? _profile;
+  bool _forwardSuspended = false;
+  bool _instanceHasVirtualIp = false;
+
+  /// ADD/REMOVE 必须串行。前后台快速切换可能让上一次 REMOVE 尚未返回就
+  /// 收到下一次 ADD；按生命周期顺序执行才能保证最终配置与前台状态一致。
+  Future<void> _forwardOperations = Future<void>.value();
 
   /// 代际计数：connect/disconnect 交错时，旧的异步流程在下一个 await 后
   /// 检出自己已过期即退出，避免后到的状态被先到的覆盖。
@@ -149,6 +167,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// stopInstance）——startInstance 成功后的失败若不停实例，同名实例残留
   /// 会让重试被 EasyTier 内核以 "instance name already exists" 拒绝。
   Future<void> connect(RemoteProfile profile) async {
+    _profile = profile;
     final gen = ++_generation;
     state = const EasyTierConnecting();
     final channel = ref.read(easytierChannelProvider);
@@ -161,21 +180,13 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       if (ip == null) {
         throw StateError('等待虚拟 IP 超时（${virtualIpTimeout.inSeconds}s）');
       }
-      // PatchConfig 通路不支持「bind 端口 0 再读回」，先在 Dart 侧占一个
-      // 临时回环端口再交给内核 bind；抢占失败会走下面的 Failed 路径。
-      final port = await _pickLoopbackPort();
-      // ignore: avoid_print
-      print('[easytier] instance $profileId got ip=$ip, '
-          'forwarding 127.0.0.1:$port to ${profile.virtualIp}:${profile.port}');
-      await channel.addPortForward(profileId,
-          bindIp: '127.0.0.1',
-          bindPort: port,
-          dstIp: profile.virtualIp,
-          dstPort: profile.port);
+      _instanceHasVirtualIp = true;
+      final port = await _installForward(channel, profile, gen);
       if (gen != _generation) return;
-      _localPort = port;
-      _dstIp = profile.virtualIp;
-      _dstPort = profile.port;
+      if (port == null) {
+        state = const EasyTierForwardSuspended();
+        return;
+      }
       await _waitBridgeReachable(port, gen);
       if (gen != _generation) return;
       // ignore: avoid_print
@@ -192,6 +203,66 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
         // startInstance 本身失败时实例不存在，按已停处理。
       }
       if (gen != _generation) return;
+      _instanceHasVirtualIp = false;
+      state = EasyTierFailed('$e');
+    }
+  }
+
+  /// iOS 会在普通 app 挂起时回收监听 socket 的内核资源，而且 Tokio 的
+  /// accept future 不一定收到可用于自愈的错误。宿主 app 因此在退后台时
+  /// 主动撤销回环转发，避免保留一个用户态看似存活、实际已不监听的 socket。
+  /// 这里只暂停通用 port-forward，EasyTier 实例和虚拟网连接保持运行；不要
+  /// 把 UIKit/AppLifecycle 等平台概念下沉到 EasyTier core。
+  Future<void> suspendPortForward() async {
+    if (_forwardSuspended) return;
+    _forwardSuspended = true;
+    if (state is EasyTierDisconnected || state is EasyTierFailed) return;
+
+    ++_generation;
+    state = const EasyTierForwardSuspended();
+    final channel = ref.read(easytierChannelProvider);
+    await _removeForward(channel);
+  }
+
+  /// 回到前台后重新创建刚才撤销的回环 listener，并在 bridge API 真正可达
+  /// 后恢复 Ready。平台生命周期只由 HerdrGo 调用本方法，EasyTier core
+  /// 仍只提供平台无关的 ADD/REMOVE port-forward 配置接口。
+  Future<void> resumePortForward() async {
+    if (!_forwardSuspended) return;
+    _forwardSuspended = false;
+    if (state is! EasyTierForwardSuspended) return;
+
+    final profile = _profile;
+    if (profile == null) return;
+    final gen = ++_generation;
+    state = const EasyTierConnecting();
+    final channel = ref.read(easytierChannelProvider);
+    try {
+      if (!_instanceHasVirtualIp) {
+        final ip = await _waitVirtualIp(channel, gen);
+        if (gen != _generation) return;
+        if (ip == null) {
+          throw StateError('等待虚拟 IP 超时（${virtualIpTimeout.inSeconds}s）');
+        }
+        _instanceHasVirtualIp = true;
+      }
+      final port = await _installForward(channel, profile, gen);
+      if (gen != _generation) return;
+      if (port == null) {
+        state = const EasyTierForwardSuspended();
+        return;
+      }
+      await _waitBridgeReachable(port, gen);
+      if (gen != _generation) return;
+      // ignore: avoid_print
+      print('[easytier] instance $profileId forward resumed on :$port');
+      state = EasyTierReady(port);
+    } catch (e) {
+      // ignore: avoid_print
+      print('[easytier] instance $profileId forward resume failed: $e');
+      if (gen != _generation) return;
+      await _removeForward(channel);
+      if (gen != _generation) return;
       state = EasyTierFailed('$e');
     }
   }
@@ -199,6 +270,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// 停本实例的转发与 EasyTier 实例；重复调用幂等（已断开时 no-op）。
   Future<void> disconnect() async {
     _generation++;
+    _forwardSuspended = false;
     if (_localPort == 0 && state is EasyTierDisconnected) return;
     // 先取通道再 await：autoDispose 下 await 之后 provider 可能已销毁。
     final channel = ref.read(easytierChannelProvider);
@@ -208,11 +280,16 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     } catch (_) {
       // 实例可能已被原生侧停掉，按已停处理。
     }
+    _instanceHasVirtualIp = false;
+    _profile = null;
     state = const EasyTierDisconnected();
   }
 
   /// 停本实例的转发（如有）；失败不影响后续流程。
-  Future<void> _removeForward(EasyTierChannel channel) async {
+  Future<void> _removeForward(EasyTierChannel channel) =>
+      _enqueueForwardOperation(() => _removeForwardNow(channel));
+
+  Future<void> _removeForwardNow(EasyTierChannel channel) async {
     if (_localPort > 0) {
       final port = _localPort;
       final dstIp = _dstIp;
@@ -232,12 +309,50 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     }
   }
 
-  /// 占一个临时回环 TCP 端口后立即释放；返回的端口交给 PatchConfig bind。
-  static Future<int> _pickLoopbackPort() async {
-    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    final port = socket.port;
-    await socket.close();
-    return port;
+  /// 为当前代际安装一条新转发；若排队或原生 ADD 期间生命周期又变化，
+  /// 立即撤销刚加的配置，不能把旧代际 listener 泄漏在 EasyTier 中。
+  Future<int?> _installForward(
+      EasyTierChannel channel, RemoteProfile profile, int gen) async {
+    // PatchConfig 通路不支持「bind 端口 0 再读回」，先在 Dart 侧占一个
+    // 临时回环端口再交给内核 bind。
+    final port = await ref.read(loopbackPortPickerProvider)();
+    var installed = false;
+    await _enqueueForwardOperation(() async {
+      if (gen != _generation || _forwardSuspended) return;
+      // ignore: avoid_print
+      print('[easytier] instance $profileId forwarding '
+          '127.0.0.1:$port to ${profile.virtualIp}:${profile.port}');
+      await channel.addPortForward(profileId,
+          bindIp: '127.0.0.1',
+          bindPort: port,
+          dstIp: profile.virtualIp,
+          dstPort: profile.port);
+      if (gen != _generation || _forwardSuspended) {
+        try {
+          await channel.removePortForward(profileId,
+              bindIp: '127.0.0.1',
+              bindPort: port,
+              dstIp: profile.virtualIp,
+              dstPort: profile.port);
+        } catch (_) {
+          // 实例可能同时被停掉，按已撤销处理。
+        }
+        return;
+      }
+      _localPort = port;
+      _dstIp = profile.virtualIp;
+      _dstPort = profile.port;
+      installed = true;
+    });
+    return installed ? port : null;
+  }
+
+  Future<void> _enqueueForwardOperation(
+      Future<void> Function() operation) {
+    final result = _forwardOperations.then((_) => operation());
+    // 单次错误交给调用方处理，但不能毒化队列、阻止后续生命周期操作。
+    _forwardOperations = result.catchError((Object _) {});
+    return result;
   }
 
   /// 每 [pollInterval] 轮询一次本实例的虚拟 IP，总超时 [virtualIpTimeout]；
@@ -263,6 +378,14 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       await Future<void>.delayed(bridgeProbeInterval);
     }
   }
+}
+
+/// 占一个临时回环 TCP 端口后立即释放；返回的端口交给 PatchConfig bind。
+Future<int> _pickLoopbackPort() async {
+  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = socket.port;
+  await socket.close();
+  return port;
 }
 
 final easytierRuntimeProvider = NotifierProvider.family<
