@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the opaque corner color of the generated brand master. -->
+    <color name="launcher_icon_background">#030A22</color>
+</resources>
