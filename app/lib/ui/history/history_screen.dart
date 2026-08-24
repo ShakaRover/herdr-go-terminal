@@ -8,11 +8,12 @@ import '../../state/snapshot.dart';
 
 /// 对话历史页：从 agent 自己的会话日志分页读取（非终端滚屏）。
 class HistoryScreen extends ConsumerStatefulWidget {
-  const HistoryScreen(
-      {super.key,
-      required this.bridgeId,
-      required this.paneId,
-      required this.title});
+  const HistoryScreen({
+    super.key,
+    required this.bridgeId,
+    required this.paneId,
+    required this.title,
+  });
 
   final String bridgeId;
   final String paneId;
@@ -43,36 +44,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     super.dispose();
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-    });
-  }
-
-  void _preserveViewport(double oldPixels, double oldMaxExtent) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      final position = _scrollController.position;
-      final addedExtent = position.maxScrollExtent - oldMaxExtent;
-      final target = (oldPixels + addedExtent)
-          .clamp(0.0, position.maxScrollExtent)
-          .toDouble();
-      _scrollController.jumpTo(target);
-    });
-  }
-
   Future<void> _loadOlder() async {
     if (_loading) return;
     final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null) return;
-    final initialLoad = _entries.isEmpty;
-    final oldPixels = _scrollController.hasClients
-        ? _scrollController.position.pixels
-        : null;
-    final oldMaxExtent = _scrollController.hasClients
-        ? _scrollController.position.maxScrollExtent
-        : null;
     setState(() {
       _loading = true;
       _error = null;
@@ -89,20 +64,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           case HistoryUnavailable(:final reason):
             _unavailableReason = reason;
           case HistoryPage(
-              entries: final entries,
-              hasMore: final hasMore,
-              fileTruncated: final fileTruncated
-            ):
+            entries: final entries,
+            hasMore: final hasMore,
+            fileTruncated: final fileTruncated,
+          ):
             _entries.insertAll(0, entries);
             _hasMore = hasMore;
             _fileTruncated = fileTruncated;
         }
       });
-      if (initialLoad) {
-        _scrollToBottom();
-      } else if (oldPixels != null && oldMaxExtent != null) {
-        _preserveViewport(oldPixels, oldMaxExtent);
-      }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -135,36 +105,50 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     if (_entries.isEmpty && _error != null) {
       return Center(child: Text('加载失败：$_error'));
     }
-    return ListView(
+    return Scrollbar(
       controller: _scrollController,
-      padding: const EdgeInsets.all(12),
-      children: [
-        if (_hasMore)
-          TextButton.icon(
-            onPressed: _loading ? null : _loadOlder,
-            icon: _loading
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.history, size: 18),
-            label: Text(_loading ? '加载中…' : '加载更早'),
-          ),
-        if (_fileTruncated)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text('日志过大，只解析了尾部',
-                style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
-          ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text('加载失败：$_error',
-                style: TextStyle(color: theme.colorScheme.error)),
-          ),
-        for (final e in _entries) _EntryCard(entry: e),
-      ],
+      thumbVisibility: true,
+      interactive: true,
+      child: ListView(
+        controller: _scrollController,
+        reverse: true,
+        padding: const EdgeInsets.all(12),
+        children: [
+          // reverse 列表以 offset 0 锚定底部；数据也反向渲染后，视觉顺序仍是
+          // 旧消息在上、最新消息在下。加载更早时，新 child 只追加到顶部，
+          // Flutter 会自然保持当前消息的位置，不再依赖帧后的 jumpTo。
+          for (final e in _entries.reversed) _EntryCard(entry: e),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '加载失败：$_error',
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ),
+          if (_fileTruncated)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '日志过大，只解析了尾部',
+                style: theme.textTheme.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          if (_hasMore)
+            TextButton.icon(
+              onPressed: _loading ? null : _loadOlder,
+              icon: _loading
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.history, size: 18),
+              label: Text(_loading ? '加载中…' : '加载更早'),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -192,8 +176,10 @@ class _EntryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(label,
-                    style: theme.textTheme.labelMedium?.copyWith(color: color)),
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(color: color),
+                ),
                 const SizedBox(width: 8),
                 if (entry.ts.isNotEmpty)
                   Text(_shortTs(entry.ts), style: theme.textTheme.bodySmall),
@@ -225,50 +211,55 @@ class _PartView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return switch (part) {
-      TextPart(:final text) => SelectableText(text,
-          style: theme.textTheme.bodyMedium?.copyWith(height: 1.4)),
-      ThinkingPart(:final text) => text.isEmpty
-          ? const SizedBox.shrink()
-          : SelectableText(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontStyle: FontStyle.italic,
-                color: theme.colorScheme.outline,
-                height: 1.4,
+      TextPart(:final text) => SelectableText(
+        text,
+        style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+      ),
+      ThinkingPart(:final text) =>
+        text.isEmpty
+            ? const SizedBox.shrink()
+            : SelectableText(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.outline,
+                  height: 1.4,
+                ),
               ),
-            ),
       ToolPart(:final name, :final summary, :final result) => Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(top: 4),
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('🔧 $name · $summary',
-                  style: theme.textTheme.bodySmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
-              if (result != null && result.text.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    result.text,
-                    maxLines: 6,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: result.isError
-                          ? theme.colorScheme.error
-                          : theme.colorScheme.outline,
-                    ),
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '🔧 $name · $summary',
+              style: theme.textTheme.bodySmall,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (result != null && result.text.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  result.text,
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: result.isError
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.outline,
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
+      ),
     };
   }
 }

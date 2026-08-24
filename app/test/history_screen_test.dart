@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,36 +15,48 @@ class _FakeHistoryApi extends BridgeApi {
   int _nextPage = 0;
 
   @override
-  Future<PaneHistory> fetchHistory(String paneId,
-          {int? limit, String? before, String? session}) async =>
-      pages[_nextPage++];
+  Future<PaneHistory> fetchHistory(
+    String paneId, {
+    int? limit,
+    String? before,
+    String? session,
+  }) async => pages[_nextPage++];
+}
+
+class _DelayedHistoryApi extends BridgeApi {
+  _DelayedHistoryApi() : super(baseUrl: 'http://127.0.0.1:1');
+
+  final response = Completer<PaneHistory>();
+
+  @override
+  Future<PaneHistory> fetchHistory(
+    String paneId, {
+    int? limit,
+    String? before,
+    String? session,
+  }) => response.future;
 }
 
 List<TranscriptEntry> _entries(String prefix, int count) => List.generate(
-      count,
-      (i) => TranscriptEntry(
-        uuid: '$prefix-$i',
-        ts: '2026-08-24T12:${i.toString().padLeft(2, '0')}:00Z',
-        role: i.isEven ? TranscriptRole.user : TranscriptRole.assistant,
-        parts: [
-          TextPart(List.filled(3, '$prefix message $i').join('\n')),
-        ],
-      ),
-    );
+  count,
+  (i) => TranscriptEntry(
+    uuid: '$prefix-$i',
+    ts: '2026-08-24T12:${i.toString().padLeft(2, '0')}:00Z',
+    role: i.isEven ? TranscriptRole.user : TranscriptRole.assistant,
+    parts: [TextPart(List.filled(3, '$prefix message $i').join('\n'))],
+  ),
+);
 
 Future<void> _pumpHistory(WidgetTester tester, BridgeApi api) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         apiProvider.overrideWith(
-            (ref, bridgeId) => bridgeId == 'b1' ? api : null),
+          (ref, bridgeId) => bridgeId == 'b1' ? api : null,
+        ),
       ],
       child: const MaterialApp(
-        home: HistoryScreen(
-          bridgeId: 'b1',
-          paneId: 'p1',
-          title: 'agent',
-        ),
+        home: HistoryScreen(bridgeId: 'b1', paneId: 'p1', title: 'agent'),
       ),
     ),
   );
@@ -50,26 +64,47 @@ Future<void> _pumpHistory(WidgetTester tester, BridgeApi api) async {
 }
 
 void main() {
-  testWidgets('历史页首次加载后定位到最新消息', (tester) async {
+  testWidgets('历史页异步加载后锚定最新消息并显示滚动条', (tester) async {
     final entries = _entries('history', 20);
-    final api = _FakeHistoryApi([
+    final api = _DelayedHistoryApi();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          apiProvider.overrideWith(
+            (ref, bridgeId) => bridgeId == 'b1' ? api : null,
+          ),
+        ],
+        child: const MaterialApp(
+          home: HistoryScreen(bridgeId: 'b1', paneId: 'p1', title: 'agent'),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    api.response.complete(
       HistoryPage(
         entries: entries,
         hasMore: false,
         total: entries.length,
         fileTruncated: false,
       ),
-    ]);
-    await _pumpHistory(tester, api);
+    );
+    await tester.pumpAndSettle();
+
+    final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+    expect(scrollbar.thumbVisibility, isTrue);
+    expect(scrollbar.interactive, isTrue);
 
     final listView = tester.widget<ListView>(find.byType(ListView));
-    expect(listView.controller, isNotNull);
+    expect(listView.reverse, isTrue);
+    expect(listView.controller, same(scrollbar.controller));
     final position = listView.controller!.position;
     expect(position.maxScrollExtent, greaterThan(0));
-    expect(position.pixels, moreOrLessEquals(
-      position.maxScrollExtent,
-      epsilon: 0.1,
-    ));
+    expect(position.pixels, moreOrLessEquals(0, epsilon: 0.1));
+    expect(
+      find.textContaining('history message 19').hitTestable(),
+      findsOneWidget,
+    );
   });
 
   testWidgets('加载更早记录后保持原消息的阅读位置', (tester) async {
@@ -93,18 +128,17 @@ void main() {
 
     final listView = tester.widget<ListView>(find.byType(ListView));
     final controller = listView.controller!;
-    controller.jumpTo(0);
+    controller.jumpTo(controller.position.maxScrollExtent);
     await tester.pump();
-    final oldMaxExtent = controller.position.maxScrollExtent;
+    final oldPixels = controller.position.pixels;
 
     await tester.tap(find.text('加载更早'));
     await tester.pumpAndSettle();
 
-    final addedExtent = controller.position.maxScrollExtent - oldMaxExtent;
-    expect(addedExtent, greaterThan(0));
-    expect(controller.position.pixels, moreOrLessEquals(
-      addedExtent,
-      epsilon: 0.1,
-    ));
+    expect(controller.position.maxScrollExtent, greaterThan(oldPixels));
+    expect(
+      controller.position.pixels,
+      moreOrLessEquals(oldPixels, epsilon: 0.1),
+    );
   });
 }
