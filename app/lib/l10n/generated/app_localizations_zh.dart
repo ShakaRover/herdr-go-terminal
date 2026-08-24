@@ -391,4 +391,80 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get blockedNotificationChannelDescription => 'agent 停下来等你回复时提醒你';
+
+  @override
+  String get newAgent => '新建 agent';
+
+  @override
+  String get createAgentTitle => '创建 agent';
+
+  @override
+  String get targetComputer => '电脑';
+
+  @override
+  String get herdrSession => 'Herdr 会话';
+
+  @override
+  String get agentType => 'Agent 类型';
+
+  @override
+  String get agentName => 'Agent 名称';
+
+  @override
+  String get agentNameHint => '小写字母、数字、- 或 _';
+
+  @override
+  String get workspace => '工作区';
+
+  @override
+  String get newWorkspace => '新建工作区';
+
+  @override
+  String get workingDirectory => '工作目录';
+
+  @override
+  String get workingDirectoryHint => '/项目的/绝对路径';
+
+  @override
+  String get recentDirectories => '最近目录';
+
+  @override
+  String get initialTask => '初始任务（可选）';
+
+  @override
+  String get initialTaskHint => '希望 agent 先做什么？';
+
+  @override
+  String get createAgentAction => '创建';
+
+  @override
+  String get creatingAgent => '正在创建 agent…';
+
+  @override
+  String get noWritableComputer => '当前没有可用于创建 agent 的已连接电脑。';
+
+  @override
+  String get noAgentTypes => 'Herdr 没有返回可用的 agent 类型。';
+
+  @override
+  String loadCreateAgentOptionsFailed(String error) {
+    return '无法加载 agent 选项：$error';
+  }
+
+  @override
+  String get invalidAgentName => '请输入 1–32 位：以小写字母开头，只能包含小写字母、数字、- 或 _。';
+
+  @override
+  String get absolutePathRequired => '请输入绝对路径。';
+
+  @override
+  String get agentCreatePartialTitle => '终端已创建，但初始化未完成';
+
+  @override
+  String agentCreatePartialBody(String paneId, String error) {
+    return '已创建 pane $paneId。请先打开检查 agent 的实际状态，再决定是否重试。\n\n$error';
+  }
+
+  @override
+  String get openTerminal => '打开终端';
 }

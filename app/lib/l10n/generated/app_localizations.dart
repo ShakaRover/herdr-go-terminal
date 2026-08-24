@@ -781,6 +781,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Notifies you when an agent stops and waits for your reply'**
   String get blockedNotificationChannelDescription;
+
+  /// No description provided for @newAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'New agent'**
+  String get newAgent;
+
+  /// No description provided for @createAgentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create agent'**
+  String get createAgentTitle;
+
+  /// No description provided for @targetComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer'**
+  String get targetComputer;
+
+  /// No description provided for @herdrSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Herdr session'**
+  String get herdrSession;
+
+  /// No description provided for @agentType.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent type'**
+  String get agentType;
+
+  /// No description provided for @agentName.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent name'**
+  String get agentName;
+
+  /// No description provided for @agentNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Lowercase letters, numbers, - or _'**
+  String get agentNameHint;
+
+  /// No description provided for @workspace.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace'**
+  String get workspace;
+
+  /// No description provided for @newWorkspace.
+  ///
+  /// In en, this message translates to:
+  /// **'New workspace'**
+  String get newWorkspace;
+
+  /// No description provided for @workingDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Working directory'**
+  String get workingDirectory;
+
+  /// No description provided for @workingDirectoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'/absolute/path/to/project'**
+  String get workingDirectoryHint;
+
+  /// No description provided for @recentDirectories.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent directories'**
+  String get recentDirectories;
+
+  /// No description provided for @initialTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial task (optional)'**
+  String get initialTask;
+
+  /// No description provided for @initialTaskHint.
+  ///
+  /// In en, this message translates to:
+  /// **'What should the agent work on?'**
+  String get initialTaskHint;
+
+  /// No description provided for @createAgentAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get createAgentAction;
+
+  /// No description provided for @creatingAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating agent…'**
+  String get creatingAgent;
+
+  /// No description provided for @noWritableComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'No connected computer is available for creating agents.'**
+  String get noWritableComputer;
+
+  /// No description provided for @noAgentTypes.
+  ///
+  /// In en, this message translates to:
+  /// **'Herdr did not report any available agent types.'**
+  String get noAgentTypes;
+
+  /// No description provided for @loadCreateAgentOptionsFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load agent options: {error}'**
+  String loadCreateAgentOptionsFailed(String error);
+
+  /// No description provided for @invalidAgentName.
+  ///
+  /// In en, this message translates to:
+  /// **'Use 1–32 characters: lowercase letters, numbers, - or _; start with a letter.'**
+  String get invalidAgentName;
+
+  /// No description provided for @absolutePathRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an absolute path.'**
+  String get absolutePathRequired;
+
+  /// No description provided for @agentCreatePartialTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The terminal was created, but setup did not finish'**
+  String get agentCreatePartialTitle;
+
+  /// No description provided for @agentCreatePartialBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Pane {paneId} was created. Open it to check the actual agent state before retrying.\n\n{error}'**
+  String agentCreatePartialBody(String paneId, String error);
+
+  /// No description provided for @openTerminal.
+  ///
+  /// In en, this message translates to:
+  /// **'Open terminal'**
+  String get openTerminal;
 }
 
 class _AppLocalizationsDelegate

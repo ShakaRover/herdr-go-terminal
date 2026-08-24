@@ -189,4 +189,74 @@ impl HerdrClient {
         .await?;
         Ok(())
     }
+
+    pub async fn agent_kinds(&self) -> Result<Vec<String>, HerdrError> {
+        let r: AgentManifestStatusResult = self
+            .call("server.agent_manifests", &serde_json::json!({}), DEFAULT_TIMEOUT)
+            .await?;
+        Ok(r.manifests.into_iter().map(|manifest| manifest.agent).collect())
+    }
+
+    pub async fn create_workspace(
+        &self, cwd: &str, label: &str,
+    ) -> Result<CreatedPane, HerdrError> {
+        let r: WorkspaceCreatedResult = self
+            .call(
+                "workspace.create",
+                &serde_json::json!({
+                    "cwd": cwd,
+                    "label": label,
+                    "env": {},
+                    "focus": false,
+                }),
+                DEFAULT_TIMEOUT,
+            )
+            .await?;
+        Ok(CreatedPane {
+            workspace_id: r.workspace.workspace_id,
+            tab_id: r.tab.tab_id,
+            pane_id: r.root_pane.pane_id,
+        })
+    }
+
+    pub async fn create_tab(
+        &self, workspace_id: &str, cwd: &str, label: &str,
+    ) -> Result<CreatedPane, HerdrError> {
+        let r: TabCreatedResult = self
+            .call(
+                "tab.create",
+                &serde_json::json!({
+                    "workspace_id": workspace_id,
+                    "cwd": cwd,
+                    "label": label,
+                    "env": {},
+                    "focus": false,
+                }),
+                DEFAULT_TIMEOUT,
+            )
+            .await?;
+        Ok(CreatedPane {
+            workspace_id: r.tab.workspace_id,
+            tab_id: r.tab.tab_id,
+            pane_id: r.root_pane.pane_id,
+        })
+    }
+
+    pub async fn start_agent(
+        &self, name: &str, kind: &str, pane_id: &str, timeout_ms: u64,
+    ) -> Result<(), HerdrError> {
+        self.call::<serde_json::Value, _>(
+            "agent.start",
+            &serde_json::json!({
+                "name": name,
+                "kind": kind,
+                "pane_id": pane_id,
+                "args": [],
+                "timeout_ms": timeout_ms,
+            }),
+            Duration::from_millis(timeout_ms + 5_000),
+        )
+        .await?;
+        Ok(())
+    }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,6 +14,7 @@ import '../agent/agent_screen.dart';
 import '../settings/settings_screen.dart';
 import '../status_style.dart';
 import 'agent_preview_sheet.dart';
+import 'create_agent_sheet.dart';
 
 /// triage 首页：顶部 tab 栏 = 「全部」（聚合各宿主机）+ 每个 enabled bridge
 /// 一个 tab；分段结构不变（已置顶 / 需要你处理 / 工作中 / 其他）。
@@ -83,11 +86,85 @@ class DashboardScreen extends ConsumerWidget {
                 for (final c in conns) _SingleBridgeTab(conn: c),
               ],
             ),
+            floatingActionButton:
+                conns.any(
+                  (conn) => conn.status == ConnStatus.ready && conn.api != null,
+                )
+                ? FloatingActionButton.extended(
+                    onPressed: () {
+                      final index = tabController.index;
+                      final initialBridgeId = index > 0 && index <= conns.length
+                          ? conns[index - 1].id
+                          : null;
+                      _openCreateAgent(
+                        context,
+                        ref,
+                        initialBridgeId: initialBridgeId,
+                      );
+                    },
+                    icon: const Icon(Icons.add),
+                    label: Text(l10n.newAgent),
+                  )
+                : null,
           );
         },
       ),
     );
   }
+}
+
+Future<void> _openCreateAgent(
+  BuildContext context,
+  WidgetRef ref, {
+  String? initialBridgeId,
+}) async {
+  final outcome = await showCreateAgentSheet(
+    context,
+    initialBridgeId: initialBridgeId,
+  );
+  if (outcome == null || !context.mounted) return;
+
+  ref
+      .read(sessionFilterProvider(outcome.bridgeId).notifier)
+      .select(outcome.session);
+  // 创建成功后立即进详情；快照刷新留在后台，避免额外等待一次网络往返。
+  unawaited(
+    ref.read(bridgeSnapshotProvider(outcome.bridgeId).notifier).refresh(),
+  );
+
+  final result = outcome.result;
+  if (!result.success) {
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.l10n.agentCreatePartialTitle),
+        content: Text(
+          dialogContext.l10n.agentCreatePartialBody(
+            result.paneId,
+            result.error ?? dialogContext.l10n.unknownError,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(dialogContext.l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(dialogContext.l10n.openTerminal),
+          ),
+        ],
+      ),
+    );
+    if (open != true || !context.mounted) return;
+  }
+
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) =>
+          AgentScreen(bridgeId: outcome.bridgeId, paneId: result.paneId),
+    ),
+  );
 }
 
 /// 单 bridge tab 的 label：状态点 + 连接名。

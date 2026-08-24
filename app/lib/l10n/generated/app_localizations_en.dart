@@ -429,4 +429,83 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get blockedNotificationChannelDescription =>
       'Notifies you when an agent stops and waits for your reply';
+
+  @override
+  String get newAgent => 'New agent';
+
+  @override
+  String get createAgentTitle => 'Create agent';
+
+  @override
+  String get targetComputer => 'Computer';
+
+  @override
+  String get herdrSession => 'Herdr session';
+
+  @override
+  String get agentType => 'Agent type';
+
+  @override
+  String get agentName => 'Agent name';
+
+  @override
+  String get agentNameHint => 'Lowercase letters, numbers, - or _';
+
+  @override
+  String get workspace => 'Workspace';
+
+  @override
+  String get newWorkspace => 'New workspace';
+
+  @override
+  String get workingDirectory => 'Working directory';
+
+  @override
+  String get workingDirectoryHint => '/absolute/path/to/project';
+
+  @override
+  String get recentDirectories => 'Recent directories';
+
+  @override
+  String get initialTask => 'Initial task (optional)';
+
+  @override
+  String get initialTaskHint => 'What should the agent work on?';
+
+  @override
+  String get createAgentAction => 'Create';
+
+  @override
+  String get creatingAgent => 'Creating agent…';
+
+  @override
+  String get noWritableComputer =>
+      'No connected computer is available for creating agents.';
+
+  @override
+  String get noAgentTypes => 'Herdr did not report any available agent types.';
+
+  @override
+  String loadCreateAgentOptionsFailed(String error) {
+    return 'Could not load agent options: $error';
+  }
+
+  @override
+  String get invalidAgentName =>
+      'Use 1–32 characters: lowercase letters, numbers, - or _; start with a letter.';
+
+  @override
+  String get absolutePathRequired => 'Enter an absolute path.';
+
+  @override
+  String get agentCreatePartialTitle =>
+      'The terminal was created, but setup did not finish';
+
+  @override
+  String agentCreatePartialBody(String paneId, String error) {
+    return 'Pane $paneId was created. Open it to check the actual agent state before retrying.\n\n$error';
+  }
+
+  @override
+  String get openTerminal => 'Open terminal';
 }

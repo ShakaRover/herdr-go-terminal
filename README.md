@@ -52,6 +52,8 @@ Claude-style approval menu recognized as native buttons — one tap to approve.*
   structural-equality → expectedPrompt-binding chain before any key is sent.
 - **History** — paged full conversation read from the agent's own session log
   (beyond the terminal scrollback).
+- **Agent creation** — start a supported Herdr agent from the phone in an
+  existing or new workspace, with an optional initial task (Herdr 0.8.2+).
 - **Images** — pick from the gallery, upload to the host, and the returned path
   is auto-filled into the reply box.
 - **Notifications** — WorkManager background polling (≥15 min) with local

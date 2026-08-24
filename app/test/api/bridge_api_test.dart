@@ -64,7 +64,8 @@ Future<void> _json(HttpRequest req, int status, Object body) async {
 
 /// 起 harness 并返回 (harness, api)。
 Future<(_Harness, BridgeApi)> _start(
-    Future<void> Function(HttpRequest req) handler) async {
+  Future<void> Function(HttpRequest req) handler,
+) async {
   final h = _Harness(handler);
   final api = await h.start();
   return (h, api);
@@ -72,46 +73,54 @@ Future<(_Harness, BridgeApi)> _start(
 
 void main() {
   test('getConfig 走 /api/v1/config，带 Origin 与 x-requested-with', () async {
-    final (h, api) = await _start((req) => _json(req, 200, {
-          'push': false,
-          'vapidPublicKey': '',
-          'build': 'b1234',
-        }));
+    final (h, api) = await _start(
+      (req) => _json(req, 200, {
+        'push': false,
+        'vapidPublicKey': '',
+        'build': 'b1234',
+      }),
+    );
     addTearDown(h.stop);
     final config = await api.getConfig();
     expect(h.requests.single.method, 'GET');
     expect(h.requests.single.uri.path, '/api/v1/config');
-    expect(h.requests.single.headers.value('origin'),
-        'http://127.0.0.1:${h.server!.port}');
-    expect(h.requests.single.headers.value('x-requested-with'),
-        'XMLHttpRequest');
+    expect(
+      h.requests.single.headers.value('origin'),
+      'http://127.0.0.1:${h.server!.port}',
+    );
+    expect(
+      h.requests.single.headers.value('x-requested-with'),
+      'XMLHttpRequest',
+    );
     expect(config.build, 'b1234');
     expect(config.push, isFalse);
   });
 
   test('getSnapshot 带 session 查询参数并解析 device', () async {
-    final (h, api) = await _start((req) => _json(req, 200, {
-          'bridge': 'connected',
-          'agents': [
-            {
-              'paneId': 'w1:p1',
-              'workspaceId': 'w1',
-              'workspaceLabel': 'ws',
-              'workspaceNumber': 1,
-              'tabId': 'w1:t1',
-              'agent': 'claude',
-              'status': 'blocked',
-              'cwd': '/repo',
-              'focused': false,
-            },
-          ],
-          'shellPanes': [],
-          'workspaces': [],
-          'tabs': [],
-          'sessions': [],
-          'ts': 123,
-          'device': {'enforced': true, 'device': 'd1', 'authorized': false},
-        }));
+    final (h, api) = await _start(
+      (req) => _json(req, 200, {
+        'bridge': 'connected',
+        'agents': [
+          {
+            'paneId': 'w1:p1',
+            'workspaceId': 'w1',
+            'workspaceLabel': 'ws',
+            'workspaceNumber': 1,
+            'tabId': 'w1:t1',
+            'agent': 'claude',
+            'status': 'blocked',
+            'cwd': '/repo',
+            'focused': false,
+          },
+        ],
+        'shellPanes': [],
+        'workspaces': [],
+        'tabs': [],
+        'sessions': [],
+        'ts': 123,
+        'device': {'enforced': true, 'device': 'd1', 'authorized': false},
+      }),
+    );
     addTearDown(h.stop);
     final snap = await api.getSnapshot(session: 's2');
     expect(h.requests.single.uri.path, '/api/v1/snapshot');
@@ -123,17 +132,118 @@ void main() {
     expect(snap.readOnly, isTrue);
   });
 
+  test('getAgentKinds 带 session 并解析动态 agent 列表', () async {
+    final (h, api) = await _start(
+      (req) => _json(req, 200, {
+        'agents': ['claude', 'codex'],
+      }),
+    );
+    addTearDown(h.stop);
+
+    final kinds = await api.getAgentKinds(session: 'work');
+
+    expect(h.requests.single.uri.path, '/api/v1/agents/kinds');
+    expect(h.requests.single.uri.queryParameters['session'], 'work');
+    expect(kinds, ['claude', 'codex']);
+  });
+
+  test('createAgent 发送选择项并解析新 pane', () async {
+    final (h, api) = await _start(
+      (req) => _json(req, 201, {
+        'ok': true,
+        'agentName': 'codex-1',
+        'workspaceId': 'w1',
+        'tabId': 't2',
+        'paneId': 'p3',
+      }),
+    );
+    addTearDown(h.stop);
+
+    final result = await api.createAgent(
+      name: 'codex-1',
+      kind: 'codex',
+      cwd: '/repo',
+      workspaceId: 'w1',
+      initialPrompt: 'fix the test',
+      session: 'work',
+    );
+
+    final req = h.requests.single;
+    expect(req.method, 'POST');
+    expect(req.uri.path, '/api/v1/agents');
+    expect(req.uri.queryParameters['session'], 'work');
+    expect(req.bodyJson, {
+      'name': 'codex-1',
+      'kind': 'codex',
+      'cwd': '/repo',
+      'workspaceId': 'w1',
+      'initialPrompt': 'fix the test',
+    });
+    expect(result.success, isTrue);
+    expect(result.agentName, 'codex-1');
+    expect(result.workspaceId, 'w1');
+    expect(result.tabId, 't2');
+    expect(result.paneId, 'p3');
+  });
+
+  test('createAgent 初始化失败保留已创建 pane 且不抛异常', () async {
+    final (h, api) = await _start(
+      (req) => _json(req, 502, {
+        'error': 'agent startup timed out',
+        'code': 'agent_start_failed',
+        'created': {'workspaceId': 'w1', 'tabId': 't1', 'paneId': 'p1'},
+      }),
+    );
+    addTearDown(h.stop);
+
+    final result = await api.createAgent(
+      name: 'claude-1',
+      kind: 'claude',
+      cwd: '/repo',
+    );
+
+    expect(result.success, isFalse);
+    expect(result.hasCreatedPane, isTrue);
+    expect(result.paneId, 'p1');
+    expect(result.error, 'agent startup timed out');
+  });
+
+  test('createAgent 创建前失败仍抛 ApiException', () async {
+    final (h, api) = await _start(
+      (req) => _json(req, 400, {
+        'error': 'unsupported agent: unknown',
+        'code': 'unsupported_agent_kind',
+      }),
+    );
+    addTearDown(h.stop);
+
+    await expectLater(
+      api.createAgent(name: 'agent-1', kind: 'unknown', cwd: '/repo'),
+      throwsA(
+        isA<ApiException>()
+            .having((error) => error.statusCode, 'statusCode', 400)
+            .having(
+              (error) => error.message,
+              'message',
+              'unsupported agent: unknown',
+            ),
+      ),
+    );
+  });
+
   test('readPane 带 x-bridge-seen，解析 body', () async {
     final (h, api) = await _start((req) async {
       req.response.statusCode = 200;
       req.response.headers.contentType = ContentType.json;
       req.response.headers.set('etag', '"v1"');
-      req.response.write(jsonEncode({
-        'paneId': 'p1',
-        'text': 'hello',
-        'truncated': false,
-        'revision': 7,
-      }));
+      req.response.write(
+        jsonEncode({
+          'paneId': 'p1',
+          'text': 'hello',
+          'truncated': false,
+          'revision': 7,
+        }),
+      );
       await req.response.close();
     });
     addTearDown(h.stop);
@@ -154,12 +264,14 @@ void main() {
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
         req.response.headers.set('etag', '"v1"');
-        req.response.write(jsonEncode({
-          'paneId': 'p1',
-          'text': 'fresh',
-          'truncated': false,
-          'revision': 9,
-        }));
+        req.response.write(
+          jsonEncode({
+            'paneId': 'p1',
+            'text': 'fresh',
+            'truncated': false,
+            'revision': 9,
+          }),
+        );
       } else {
         req.response.statusCode = 304;
         req.response.headers.set('etag', '"v1"');
@@ -178,23 +290,25 @@ void main() {
   });
 
   test('fetchHistory 走 /api/v1/pane/:id/history 并带 seen 头', () async {
-    final (h, api) = await _start((req) => _json(req, 200, {
-          'paneId': 'p1',
-          'available': true,
-          'entries': [
-            {
-              'uuid': 'u1',
-              'ts': '2026-08-13T07:12:34.567Z',
-              'role': 'user',
-              'parts': [
-                {'kind': 'text', 'text': '帮我修个 bug'},
-              ],
-            },
-          ],
-          'hasMore': false,
-          'total': 1,
-          'fileTruncated': false,
-        }));
+    final (h, api) = await _start(
+      (req) => _json(req, 200, {
+        'paneId': 'p1',
+        'available': true,
+        'entries': [
+          {
+            'uuid': 'u1',
+            'ts': '2026-08-13T07:12:34.567Z',
+            'role': 'user',
+            'parts': [
+              {'kind': 'text', 'text': '帮我修个 bug'},
+            ],
+          },
+        ],
+        'hasMore': false,
+        'total': 1,
+        'fileTruncated': false,
+      }),
+    );
     addTearDown(h.stop);
     final page = await api.fetchHistory('p1');
     expect(h.requests.single.uri.path, '/api/v1/pane/p1/history');
@@ -206,11 +320,14 @@ void main() {
   });
 
   test('sendReply 走 /api/v1，body 用 expectedPrompt', () async {
-    final (h, api) =
-        await _start((req) => _json(req, 200, {'ok': true}));
+    final (h, api) = await _start((req) => _json(req, 200, {'ok': true}));
     addTearDown(h.stop);
-    final res = await api.sendReply('p1', 'hi',
-        session: 's1', expectedPrompt: '❯ 1. Yes');
+    final res = await api.sendReply(
+      'p1',
+      'hi',
+      session: 's1',
+      expectedPrompt: '❯ 1. Yes',
+    );
     expect(res.success, isTrue);
     final req = h.requests.single;
     expect(req.method, 'POST');
@@ -224,8 +341,7 @@ void main() {
   });
 
   test('sendKeys 不带 expectedPrompt 时 body 无该键', () async {
-    final (h, api) =
-        await _start((req) => _json(req, 200, {'ok': true}));
+    final (h, api) = await _start((req) => _json(req, 200, {'ok': true}));
     addTearDown(h.stop);
     final res = await api.sendKeys('p1', ['escape', 'up']);
     expect(res.success, isTrue);
@@ -236,10 +352,12 @@ void main() {
   });
 
   test('409 prompt_changed 转为 promptChanged failure', () async {
-    final (h, api) = await _start((req) => _json(req, 409, {
-          'error': 'prompt changed',
-          'code': 'prompt_changed',
-        }));
+    final (h, api) = await _start(
+      (req) => _json(req, 409, {
+        'error': 'prompt changed',
+        'code': 'prompt_changed',
+      }),
+    );
     addTearDown(h.stop);
     final res = await api.sendReply('p1', 'hi', expectedPrompt: '旧屏幕');
     expect(res.success, isFalse);
@@ -249,11 +367,13 @@ void main() {
   });
 
   test('502 text_delivered 转为 textDelivered failure', () async {
-    final (h, api) = await _start((req) => _json(req, 502, {
-          'error': 'herdr error',
-          'code': 'text_delivered',
-          'textDelivered': true,
-        }));
+    final (h, api) = await _start(
+      (req) => _json(req, 502, {
+        'error': 'herdr error',
+        'code': 'text_delivered',
+        'textDelivered': true,
+      }),
+    );
     addTearDown(h.stop);
     final res = await api.sendReply('p1', 'hi');
     expect(res.success, isFalse);
@@ -263,30 +383,35 @@ void main() {
   });
 
   test('其它业务失败抛 ApiException，带状态码与服务端 error', () async {
-    final (h, api) = await _start((req) => _json(req, 400, {
-          'error': 'no keys',
-          'code': 'bad_request',
-        }));
+    final (h, api) = await _start(
+      (req) => _json(req, 400, {'error': 'no keys', 'code': 'bad_request'}),
+    );
     addTearDown(h.stop);
     await expectLater(
       api.sendKeys('p1', []),
-      throwsA(isA<ApiException>()
-          .having((e) => e.statusCode, 'statusCode', 400)
-          .having((e) => e.message, 'message', 'no keys')),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.statusCode, 'statusCode', 400)
+            .having((e) => e.message, 'message', 'no keys'),
+      ),
     );
   });
 
   test('401 映射为 isAuth 的 ApiException', () async {
     final (h, api) = await _start(
-        (req) => _json(req, 401, {'error': 'unauthorized', 'code': 'auth'}));
+      (req) => _json(req, 401, {'error': 'unauthorized', 'code': 'auth'}),
+    );
     addTearDown(h.stop);
-    await expectLater(api.getSnapshot(), throwsA(predicate<ApiException>(
-        (e) => e.isAuth && e.message == 'unauthorized')));
+    await expectLater(
+      api.getSnapshot(),
+      throwsA(
+        predicate<ApiException>((e) => e.isAuth && e.message == 'unauthorized'),
+      ),
+    );
   });
 
   test('closePane/renamePane 走 /api/v1 且 ok 成功', () async {
-    final (h, api) =
-        await _start((req) => _json(req, 200, {'ok': true}));
+    final (h, api) = await _start((req) => _json(req, 200, {'ok': true}));
     addTearDown(h.stop);
     expect((await api.closePane('p1')).success, isTrue);
     expect((await api.renamePane('p1', 'lab')).success, isTrue);
@@ -296,20 +421,25 @@ void main() {
   });
 
   test('rename 400 抛 ApiException 而非 failure', () async {
-    final (h, api) = await _start((req) => _json(
-        req, 400, {'error': 'bad label', 'code': 'bad_request'}));
+    final (h, api) = await _start(
+      (req) => _json(req, 400, {'error': 'bad label', 'code': 'bad_request'}),
+    );
     addTearDown(h.stop);
     await expectLater(
       api.renamePane('p1', 'x'),
-      throwsA(isA<ApiException>()
-          .having((e) => e.statusCode, 'statusCode', 400)
-          .having((e) => e.message, 'message', 'bad label')),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.statusCode, 'statusCode', 400)
+            .having((e) => e.message, 'message', 'bad label'),
+      ),
     );
   });
 
   test('uploadImage 成功返回宿主机路径', () async {
-    final (h, api) = await _start((req) =>
-        _json(req, 200, {'ok': true, 'path': '/var/herdr/uploads/p1/a.png'}));
+    final (h, api) = await _start(
+      (req) =>
+          _json(req, 200, {'ok': true, 'path': '/var/herdr/uploads/p1/a.png'}),
+    );
     addTearDown(h.stop);
     final tmp = _tmpPng();
     final res = await api.uploadImage('p1', tmp.path);
@@ -322,10 +452,12 @@ void main() {
   });
 
   test('uploadImage 413 转 failure 并透传服务端 error', () async {
-    final (h, api) = await _start((req) => _json(req, 413, {
-          'error': 'image too large (max 10 MB)',
-          'code': 'payload_too_large',
-        }));
+    final (h, api) = await _start(
+      (req) => _json(req, 413, {
+        'error': 'image too large (max 10 MB)',
+        'code': 'payload_too_large',
+      }),
+    );
     addTearDown(h.stop);
     final res = await api.uploadImage('p1', _tmpPng().path);
     expect(res.success, isFalse);
@@ -334,17 +466,20 @@ void main() {
 
   test('uploadImage 401 抛 isAuth ApiException', () async {
     final (h, api) = await _start(
-        (req) => _json(req, 401, {'error': 'unauthorized', 'code': 'auth'}));
+      (req) => _json(req, 401, {'error': 'unauthorized', 'code': 'auth'}),
+    );
     addTearDown(h.stop);
-    await expectLater(api.uploadImage('p1', _tmpPng().path),
-        throwsA(predicate<ApiException>((e) => e.isAuth)));
+    await expectLater(
+      api.uploadImage('p1', _tmpPng().path),
+      throwsA(predicate<ApiException>((e) => e.isAuth)),
+    );
   });
 }
 
 File _tmpPng() {
   final f = File(
-      '${Directory.systemTemp.path}/bridge_api_test_${DateTime.now().microsecondsSinceEpoch}.png')
-    ..writeAsBytesSync([1, 2, 3]);
+    '${Directory.systemTemp.path}/bridge_api_test_${DateTime.now().microsecondsSinceEpoch}.png',
+  )..writeAsBytesSync([1, 2, 3]);
   addTearDown(() => f.delete());
   return f;
 }

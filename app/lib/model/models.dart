@@ -34,21 +34,21 @@ List<Map<String, dynamic>> _l(Map<String, dynamic> j, String k) => j[k] is List
 enum AgentStatus { idle, working, blocked, done, unknown }
 
 AgentStatus parseAgentStatus(String raw) => switch (raw) {
-      'idle' => AgentStatus.idle,
-      'working' => AgentStatus.working,
-      'blocked' => AgentStatus.blocked,
-      'done' => AgentStatus.done,
-      _ => AgentStatus.unknown,
-    };
+  'idle' => AgentStatus.idle,
+  'working' => AgentStatus.working,
+  'blocked' => AgentStatus.blocked,
+  'done' => AgentStatus.done,
+  _ => AgentStatus.unknown,
+};
 
 /// triage 排序权重：值越小越靠前（blocked 最紧急）。
 int statusRank(AgentStatus s) => switch (s) {
-      AgentStatus.blocked => 0,
-      AgentStatus.working => 1,
-      AgentStatus.unknown => 2,
-      AgentStatus.idle => 3,
-      AgentStatus.done => 4,
-    };
+  AgentStatus.blocked => 0,
+  AgentStatus.working => 1,
+  AgentStatus.unknown => 2,
+  AgentStatus.idle => 3,
+  AgentStatus.done => 4,
+};
 
 /// 浏览器看到的 pane（collie `PaneWire`）。
 class PaneInfo {
@@ -106,24 +106,24 @@ class PaneInfo {
   bool get isShell => kind == 'shell';
 
   factory PaneInfo.fromJson(Map<String, dynamic> j) => PaneInfo(
-        paneId: _s(j, 'paneId'),
-        workspaceId: _s(j, 'workspaceId'),
-        workspaceLabel: _s(j, 'workspaceLabel'),
-        workspaceNumber: _i(j, 'workspaceNumber'),
-        tabId: _s(j, 'tabId'),
-        agent: _s(j, 'agent', '?'),
-        status: parseAgentStatus(_s(j, 'status')),
-        cwd: _s(j, 'cwd'),
-        focused: _b(j, 'focused'),
-        kind: _s(j, 'kind', 'agent'),
-        paneLabel: _so(j, 'paneLabel'),
-        sessionName: _so(j, 'sessionName'),
-        readableLines: _io(j, 'readableLines'),
-        tabLabel: _so(j, 'tabLabel'),
-        lastActiveAt: _io(j, 'lastActiveAt'),
-        lastSeenAt: _io(j, 'lastSeenAt'),
-        hasSession: _b(j, 'hasSession'),
-      );
+    paneId: _s(j, 'paneId'),
+    workspaceId: _s(j, 'workspaceId'),
+    workspaceLabel: _s(j, 'workspaceLabel'),
+    workspaceNumber: _i(j, 'workspaceNumber'),
+    tabId: _s(j, 'tabId'),
+    agent: _s(j, 'agent', '?'),
+    status: parseAgentStatus(_s(j, 'status')),
+    cwd: _s(j, 'cwd'),
+    focused: _b(j, 'focused'),
+    kind: _s(j, 'kind', 'agent'),
+    paneLabel: _so(j, 'paneLabel'),
+    sessionName: _so(j, 'sessionName'),
+    readableLines: _io(j, 'readableLines'),
+    tabLabel: _so(j, 'tabLabel'),
+    lastActiveAt: _io(j, 'lastActiveAt'),
+    lastSeenAt: _io(j, 'lastSeenAt'),
+    hasSession: _b(j, 'hasSession'),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,14 +150,14 @@ class WorkspaceInfo {
   final int paneCount;
 
   factory WorkspaceInfo.fromJson(Map<String, dynamic> j) => WorkspaceInfo(
-        workspaceId: _s(j, 'workspaceId'),
-        number: _i(j, 'number'),
-        label: _s(j, 'label'),
-        focused: _b(j, 'focused'),
-        activeTabId: _s(j, 'activeTabId'),
-        tabCount: _i(j, 'tabCount'),
-        paneCount: _i(j, 'paneCount'),
-      );
+    workspaceId: _s(j, 'workspaceId'),
+    number: _i(j, 'number'),
+    label: _s(j, 'label'),
+    focused: _b(j, 'focused'),
+    activeTabId: _s(j, 'activeTabId'),
+    tabCount: _i(j, 'tabCount'),
+    paneCount: _i(j, 'paneCount'),
+  );
 }
 
 class TabInfo {
@@ -178,13 +178,13 @@ class TabInfo {
   final int paneCount;
 
   factory TabInfo.fromJson(Map<String, dynamic> j) => TabInfo(
-        tabId: _s(j, 'tabId'),
-        workspaceId: _s(j, 'workspaceId'),
-        number: _i(j, 'number'),
-        label: _s(j, 'label'),
-        focused: _b(j, 'focused'),
-        paneCount: _i(j, 'paneCount'),
-      );
+    tabId: _s(j, 'tabId'),
+    workspaceId: _s(j, 'workspaceId'),
+    number: _i(j, 'number'),
+    label: _s(j, 'label'),
+    focused: _b(j, 'focused'),
+    paneCount: _i(j, 'paneCount'),
+  );
 }
 
 class SessionSummary {
@@ -205,13 +205,13 @@ class SessionSummary {
   final int blocked;
 
   factory SessionSummary.fromJson(Map<String, dynamic> j) => SessionSummary(
-        name: _s(j, 'name'),
-        isPrimary: _b(j, 'isPrimary'),
-        reachable: _b(j, 'reachable'),
-        agents: _i(j, 'agents'),
-        working: _i(j, 'working'),
-        blocked: _i(j, 'blocked'),
-      );
+    name: _s(j, 'name'),
+    isPrimary: _b(j, 'isPrimary'),
+    reachable: _b(j, 'reachable'),
+    agents: _i(j, 'agents'),
+    working: _i(j, 'working'),
+    blocked: _i(j, 'blocked'),
+  );
 }
 
 /// collie device gate 对当前请求者的判定。
@@ -227,10 +227,10 @@ class DeviceAuth {
   final bool authorized;
 
   factory DeviceAuth.fromJson(Map<String, dynamic> j) => DeviceAuth(
-        enforced: _b(j, 'enforced'),
-        device: _so(j, 'device'),
-        authorized: _b(j, 'authorized'),
-      );
+    enforced: _b(j, 'enforced'),
+    device: _so(j, 'device'),
+    authorized: _b(j, 'authorized'),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,20 +258,21 @@ class Snapshot {
   final List<SessionSummary> sessions;
   final int ts;
 
-  bool get readOnly => device != null && device!.enforced && !device!.authorized;
+  bool get readOnly =>
+      device != null && device!.enforced && !device!.authorized;
 
   factory Snapshot.fromJson(Map<String, dynamic> j) => Snapshot(
-        bridgeConnected: _s(j, 'bridge', 'disconnected') == 'connected',
-        device: j['device'] is Map<String, dynamic>
-            ? DeviceAuth.fromJson(j['device'] as Map<String, dynamic>)
-            : null,
-        agents: _l(j, 'agents').map(PaneInfo.fromJson).toList(),
-        shellPanes: _l(j, 'shellPanes').map(PaneInfo.fromJson).toList(),
-        workspaces: _l(j, 'workspaces').map(WorkspaceInfo.fromJson).toList(),
-        tabs: _l(j, 'tabs').map(TabInfo.fromJson).toList(),
-        sessions: _l(j, 'sessions').map(SessionSummary.fromJson).toList(),
-        ts: _i(j, 'ts'),
-      );
+    bridgeConnected: _s(j, 'bridge', 'disconnected') == 'connected',
+    device: j['device'] is Map<String, dynamic>
+        ? DeviceAuth.fromJson(j['device'] as Map<String, dynamic>)
+        : null,
+    agents: _l(j, 'agents').map(PaneInfo.fromJson).toList(),
+    shellPanes: _l(j, 'shellPanes').map(PaneInfo.fromJson).toList(),
+    workspaces: _l(j, 'workspaces').map(WorkspaceInfo.fromJson).toList(),
+    tabs: _l(j, 'tabs').map(TabInfo.fromJson).toList(),
+    sessions: _l(j, 'sessions').map(SessionSummary.fromJson).toList(),
+    ts: _i(j, 'ts'),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -300,19 +301,19 @@ class PaneRead {
   final bool notModified;
 
   PaneRead copyAsNotModified() => PaneRead(
-        paneId: paneId,
-        text: text,
-        truncated: truncated,
-        revision: revision,
-        notModified: true,
-      );
+    paneId: paneId,
+    text: text,
+    truncated: truncated,
+    revision: revision,
+    notModified: true,
+  );
 
   factory PaneRead.fromJson(Map<String, dynamic> j) => PaneRead(
-        paneId: _s(j, 'paneId'),
-        text: _s(j, 'text'),
-        truncated: _b(j, 'truncated'),
-        revision: _i(j, 'revision'),
-      );
+    paneId: _s(j, 'paneId'),
+    text: _s(j, 'text'),
+    truncated: _b(j, 'truncated'),
+    revision: _i(j, 'revision'),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -331,8 +332,60 @@ class BridgeConfig {
   final String? build;
 
   factory BridgeConfig.fromJson(Map<String, dynamic> j) => BridgeConfig(
-        push: _b(j, 'push'),
-        vapidPublicKey: _s(j, 'vapidPublicKey'),
-        build: _so(j, 'build'),
+    push: _b(j, 'push'),
+    vapidPublicKey: _s(j, 'vapidPublicKey'),
+    build: _so(j, 'build'),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Agent creation
+// ---------------------------------------------------------------------------
+
+class CreateAgentResult {
+  const CreateAgentResult({
+    required this.success,
+    required this.agentName,
+    required this.workspaceId,
+    required this.tabId,
+    required this.paneId,
+    this.error,
+    this.textDelivered = false,
+  });
+
+  final bool success;
+  final String agentName;
+  final String workspaceId;
+  final String tabId;
+  final String paneId;
+  final String? error;
+
+  /// 首条任务已经输入，但 Enter 失败；用户应先打开 pane 检查，不能重发。
+  final bool textDelivered;
+
+  bool get hasCreatedPane => paneId.isNotEmpty;
+
+  factory CreateAgentResult.fromJson(Map<String, dynamic> json) =>
+      CreateAgentResult(
+        success: _b(json, 'ok'),
+        agentName: _s(json, 'agentName'),
+        workspaceId: _s(json, 'workspaceId'),
+        tabId: _s(json, 'tabId'),
+        paneId: _s(json, 'paneId'),
       );
+
+  factory CreateAgentResult.partial(Map<String, dynamic> json, String error) {
+    final created = json['created'] is Map<String, dynamic>
+        ? json['created'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return CreateAgentResult(
+      success: false,
+      agentName: '',
+      workspaceId: _s(created, 'workspaceId'),
+      tabId: _s(created, 'tabId'),
+      paneId: _s(created, 'paneId'),
+      error: error,
+      textDelivered: _b(json, 'textDelivered'),
+    );
+  }
 }

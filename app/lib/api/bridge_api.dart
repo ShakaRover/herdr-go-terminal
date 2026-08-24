@@ -101,6 +101,7 @@ class BridgeApi {
 
   static const _getTimeout = Duration(seconds: 5);
   static const _mutationTimeout = Duration(seconds: 20);
+  static const _createAgentTimeout = Duration(seconds: 30);
   static const _uploadTimeout = Duration(seconds: 60);
 
   static String _normalizeBaseUrl(String raw) {
@@ -197,6 +198,26 @@ class BridgeApi {
         options: Options(receiveTimeout: _getTimeout),
       );
       return Snapshot.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
+  Future<List<String>> getAgentKinds({String? session}) async {
+    try {
+      final res = await _dio.get(
+        '/api/v1/agents/kinds',
+        queryParameters: _queryWithSession(session),
+        options: Options(receiveTimeout: _getTimeout),
+      );
+      final data = res.data;
+      if (data is! Map<String, dynamic> || data['agents'] is! List) {
+        throw ApiException(
+          _localizations.invalidJsonResponse,
+          statusCode: res.statusCode,
+        );
+      }
+      return (data['agents'] as List).whereType<String>().toList();
     } on DioException catch (e) {
       throw _wrap(e);
     }
@@ -362,6 +383,62 @@ class BridgeApi {
   }) => _postAction('/api/v1/pane/$paneId/rename', {
     'label': label,
   }, session: session);
+
+  Future<CreateAgentResult> createAgent({
+    required String name,
+    required String kind,
+    required String cwd,
+    String? workspaceId,
+    String? workspaceLabel,
+    String? initialPrompt,
+    String? session,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/api/v1/agents',
+        data: {
+          'name': name,
+          'kind': kind,
+          'cwd': cwd,
+          'workspaceId': ?workspaceId,
+          'workspaceLabel': ?workspaceLabel,
+          'initialPrompt': ?initialPrompt,
+        },
+        queryParameters: _queryWithSession(session),
+        options: Options(receiveTimeout: _createAgentTimeout),
+      );
+      final data = res.data;
+      if (data is! Map<String, dynamic>) {
+        throw ApiException(
+          _localizations.invalidJsonResponse,
+          statusCode: res.statusCode,
+        );
+      }
+      final result = CreateAgentResult.fromJson(data);
+      if (!result.success || !result.hasCreatedPane) {
+        throw ApiException(
+          _localizations.invalidJsonResponse,
+          statusCode: res.statusCode,
+        );
+      }
+      return result;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data is Map<String, dynamic> &&
+          data['created'] is Map<String, dynamic> &&
+          (data['created'] as Map<String, dynamic>)['paneId'] is String &&
+          ((data['created'] as Map<String, dynamic>)['paneId'] as String)
+              .isNotEmpty) {
+        return CreateAgentResult.partial(
+          data,
+          data['error'] is String
+              ? data['error'] as String
+              : _localizations.unknownError,
+        );
+      }
+      throw _wrap(e);
+    }
+  }
 
   /// 上传图片，返回宿主机路径供回复中引用。
   /// 413/415/400（超限/类型/坏请求）转成 failure 供 UI 提示，其余抛异常。

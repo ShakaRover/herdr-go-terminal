@@ -76,6 +76,186 @@ pub async fn get_snapshot(
     Ok(json_response(StatusCode::OK, body))
 }
 
+pub async fn get_agent_kinds(
+    State(state): State<AppState>, headers: HeaderMap, Query(q): Query<SessionQuery>,
+) -> Result<Response, ApiError> {
+    check_access(&state.cfg, &headers, AccessLevel::Read)?;
+    let rt = state.runtime(q.session.as_deref())?;
+    let mut agents = rt.client.agent_kinds().await.map_err(|e| {
+        if e.is_unknown_variant() {
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "herdr_upgrade_required",
+                "creating agents requires Herdr 0.8.2 or newer",
+            )
+        } else {
+            ApiError::herdr(&e)
+        }
+    })?;
+    agents.sort();
+    agents.dedup();
+    Ok(json_response(StatusCode::OK, serde_json::json!({"agents": agents})))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAgentBody {
+    name: Option<String>,
+    kind: Option<String>,
+    cwd: Option<String>,
+    workspace_id: Option<String>,
+    workspace_label: Option<String>,
+    initial_prompt: Option<String>,
+}
+
+const AGENT_START_TIMEOUT_MS: u64 = 20_000;
+
+fn required_text(
+    value: Option<String>, field: &'static str, max_chars: usize,
+) -> Result<String, ApiError> {
+    let value = value.unwrap_or_default().trim().to_string();
+    if value.is_empty() || value.chars().count() > max_chars {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+            format!("bad {field}"),
+        ));
+    }
+    Ok(value)
+}
+
+fn valid_agent_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
+fn created_json(created: &crate::herdr::types::CreatedPane) -> serde_json::Value {
+    serde_json::json!({
+        "workspaceId": created.workspace_id,
+        "tabId": created.tab_id,
+        "paneId": created.pane_id,
+    })
+}
+
+fn created_error(
+    code: &'static str,
+    message: impl Into<String>,
+    created: &crate::herdr::types::CreatedPane,
+) -> ApiError {
+    ApiError::new(StatusCode::BAD_GATEWAY, code, message)
+        .with_extra("created", created_json(created))
+}
+
+pub async fn create_agent(
+    State(state): State<AppState>, headers: HeaderMap, Query(q): Query<SessionQuery>,
+    body: Result<axum::Json<CreateAgentBody>, axum::extract::rejection::JsonRejection>,
+) -> Result<Response, ApiError> {
+    let device = check_access(&state.cfg, &headers, AccessLevel::Write)?;
+    let rt = state.runtime(q.session.as_deref())?;
+    let axum::Json(body) = body.map_err(|_| ApiError::new(
+        StatusCode::BAD_REQUEST, "bad_request", "invalid json body"))?;
+
+    let name = required_text(body.name, "name", 32)?;
+    if !valid_agent_name(&name) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+            "name must match [a-z][a-z0-9_-]{0,31}",
+        ));
+    }
+    let kind = required_text(body.kind, "kind", 64)?;
+    let cwd = required_text(body.cwd, "cwd", 4096)?;
+    if !std::path::Path::new(&cwd).is_absolute() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST, "bad_request", "cwd must be an absolute path"));
+    }
+    let workspace_id = body.workspace_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if workspace_id.as_ref().is_some_and(|value| value.chars().count() > 128) {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "bad_request", "bad workspaceId"));
+    }
+    let workspace_label = body.workspace_label
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| name.clone());
+    if workspace_label.chars().count() > 128 {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "bad_request", "bad workspaceLabel"));
+    }
+    let initial_prompt = body.initial_prompt
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if initial_prompt.as_ref().is_some_and(|value| value.chars().count() > 100_000) {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "bad_request", "initialPrompt too long"));
+    }
+
+    let kinds = rt.client.agent_kinds().await.map_err(|e| {
+        if e.is_unknown_variant() {
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "herdr_upgrade_required",
+                "creating agents requires Herdr 0.8.2 or newer",
+            )
+        } else {
+            ApiError::herdr(&e)
+        }
+    })?;
+    if !kinds.iter().any(|candidate| candidate == &kind) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "unsupported_agent_kind",
+            format!("unsupported agent: {kind}"),
+        ));
+    }
+
+    let created = match workspace_id.as_deref() {
+        Some(workspace_id) => rt.client.create_tab(workspace_id, &cwd, &name).await,
+        None => rt.client.create_workspace(&cwd, &workspace_label).await,
+    }
+    .map_err(|e| ApiError::herdr(&e))?;
+    rt.engine.poke();
+
+    if let Err(e) = rt.client
+        .start_agent(&name, &kind, &created.pane_id, AGENT_START_TIMEOUT_MS)
+        .await
+    {
+        state.audit.log(
+            "create_agent_failed", Some(&created.pane_id), q.session.as_deref(),
+            device.device.as_deref(), &format!("{kind} {name}: {e}"));
+        return Err(created_error("agent_start_failed", e.to_string(), &created));
+    }
+
+    if let Some(prompt) = initial_prompt {
+        if let Err(e) = rt.client.pane_send_text(&created.pane_id, &prompt).await {
+            state.audit.log(
+                "create_agent_failed", Some(&created.pane_id), q.session.as_deref(),
+                device.device.as_deref(), &format!("{kind} {name}: initial prompt: {e}"));
+            return Err(created_error("initial_prompt_failed", e.to_string(), &created));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        if rt.client.pane_send_keys(&created.pane_id, &state.cfg.submit_keys).await.is_err() {
+            state.audit.log(
+                "create_agent_failed", Some(&created.pane_id), q.session.as_deref(),
+                device.device.as_deref(), &format!("{kind} {name}: initial prompt submit failed"));
+            return Err(ApiError::text_delivered().with_extra("created", created_json(&created)));
+        }
+    }
+
+    state.audit.log(
+        "create_agent", Some(&created.pane_id), q.session.as_deref(),
+        device.device.as_deref(), &format!("{kind} {name} cwd={cwd}"));
+    rt.engine.mark_seen(&created.pane_id);
+    rt.engine.poke();
+    Ok(json_response(StatusCode::CREATED, serde_json::json!({
+        "ok": true,
+        "agentName": name,
+        "workspaceId": created.workspace_id,
+        "tabId": created.tab_id,
+        "paneId": created.pane_id,
+    })))
+}
+
 #[derive(Deserialize)]
 pub struct PaneReadQuery {
     session: Option<String>,

@@ -18,6 +18,8 @@ session（缺省为 primary）。写端点（POST）受 device gate 约束（见
 | --- | --- | --- |
 | GET | `/api/v1/config` | bridge 构建信息（`build` 等），无需鉴权 |
 | GET | `/api/v1/snapshot` | dashboard 快照：`bridge` 连接态、`agents`、`shellPanes`、`workspaces`、`tabs`、`sessions`、`ts` |
+| GET | `/api/v1/agents/kinds` | 从 Herdr 动态读取可用 agent 类型（需 Herdr 0.8.2+） |
+| POST | `/api/v1/agents` | 在新建 workspace 或已有 workspace 的新 tab 中启动 agent，可选发送 `initialPrompt` |
 | GET | `/api/v1/pane/{id}` | 读 pane 终端镜像（ANSI 文本），`?lines=`（默认 200，上限 10000）；带 ETag，支持 `If-None-Match` → 304 |
 | GET | `/api/v1/pane/{id}/history` | 从 agent 自己的会话日志分页读历史，`?limit=&before=` 游标分页 |
 | POST | `/api/v1/pane/{id}/reply` | 发送文本，body `{text?, submit?, expectedPrompt?}`；带 `expectedPrompt` 时先做 prompt-binding 校验，不匹配返回 409 `prompt_changed` |
@@ -29,6 +31,9 @@ session（缺省为 primary）。写端点（POST）受 device gate 约束（见
 错误统一为 JSON body：`{"error": <消息>, "code": <机读码>}`；reply 在文本
 已送达但提交键失败时返回 502 且带 `textDelivered: true`。所有写级动作
 追加审计到 `<state_dir>/audit.log`。
+创建 agent 在终端已创建、但 agent 启动或初始任务发送失败时，
+错误体额外返回 `created: {workspaceId, tabId, paneId}`；客户端不自动
+删除这个 pane，避免启动超时后误杀仍在运行的 agent。
 
 ## 构建
 

@@ -46,6 +46,8 @@ EasyTier 虚拟网直连——不用配 TUN、不用 root、不用申请 VPN 权
 - **对话框按钮**：识别 Claude 式单选审批/提问菜单（prompt-select）为原生按钮；
   点击时经「新鲜读取 → 重新识别 → 结构相等 → expectedPrompt 绑定」防护链后才发键。
 - **历史**：从 agent 自己的会话日志分页读完整对话（终端滚屏之外的部分）。
+- **创建 agent**：直接从手机在新建或已有 workspace 中启动 Herdr
+  支持的 agent，并可选填入初始任务（需 Herdr 0.8.2+）。
 - **图片**：相册选图上传到宿主机，返回路径自动填入回复框。
 - **通知**：WorkManager 后台周期轮询（≥15min），新增 blocked 发本地通知，
   点击直达对应 agent；app 前台使用时自动静默。

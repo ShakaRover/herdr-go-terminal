@@ -7,11 +7,18 @@ pub struct ApiError {
     pub code: &'static str,
     pub message: String,
     pub text_delivered: bool,
+    pub extra: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 impl ApiError {
     pub fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
-        ApiError { status, code, message: message.into(), text_delivered: false }
+        ApiError {
+            status,
+            code,
+            message: message.into(),
+            text_delivered: false,
+            extra: None,
+        }
     }
 
     pub fn herdr(err: &crate::herdr::client::HerdrError) -> Self {
@@ -27,7 +34,13 @@ impl ApiError {
             code: "text_delivered",
             message: "typed into the pane but not submitted — check the pane before resending".into(),
             text_delivered: true,
+            extra: None,
         }
+    }
+
+    pub fn with_extra(mut self, key: &str, value: serde_json::Value) -> Self {
+        self.extra.get_or_insert_default().insert(key.to_string(), value);
+        self
     }
 }
 
@@ -43,6 +56,11 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let mut body = serde_json::json!({"error": self.message, "code": self.code});
         if self.text_delivered { body["textDelivered"] = serde_json::json!(true); }
+        if let Some(extra) = self.extra {
+            for (key, value) in extra {
+                body[&key] = value;
+            }
+        }
         let mut res = (self.status, axum::Json(body)).into_response();
         res.headers_mut().extend(security_headers());
         res

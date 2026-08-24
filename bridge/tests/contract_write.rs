@@ -24,6 +24,197 @@ fn post_json(uri: &str, body: &str) -> Request<Body> {
         .body(Body::from(body.to_string())).unwrap()
 }
 
+fn get(uri: &str) -> Request<Body> {
+    Request::builder().method("GET").uri(uri)
+        .header("host", "127.0.0.1:8787")
+        .body(Body::empty()).unwrap()
+}
+
+fn agent_manifests(kinds: &[&str]) -> serde_json::Value {
+    serde_json::json!({
+        "type": "agent_manifest_status",
+        "manifests": kinds.iter().map(|kind| serde_json::json!({"agent": kind})).collect::<Vec<_>>(),
+    })
+}
+
+fn pane(pane_id: &str, workspace_id: &str, tab_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "pane_id": pane_id,
+        "workspace_id": workspace_id,
+        "tab_id": tab_id,
+        "focused": false,
+        "agent_status": "idle",
+        "revision": 1,
+        "cwd": "/repo",
+        "label": null,
+        "agent": null,
+        "agent_session": null,
+        "scroll": null,
+    })
+}
+
+fn tab_created() -> serde_json::Value {
+    serde_json::json!({
+        "type": "tab_created",
+        "tab": {
+            "tab_id": "w1:t2", "workspace_id": "w1", "number": 2,
+            "label": "codex-1", "focused": false,
+        },
+        "root_pane": pane("w1:p2", "w1", "w1:t2"),
+    })
+}
+
+fn workspace_created() -> serde_json::Value {
+    serde_json::json!({
+        "type": "workspace_created",
+        "workspace": {
+            "workspace_id": "w2", "number": 2, "label": "repo", "focused": false,
+        },
+        "tab": {
+            "tab_id": "w2:t1", "workspace_id": "w2", "number": 1,
+            "label": "", "focused": false,
+        },
+        "root_pane": pane("w2:p1", "w2", "w2:t1"),
+    })
+}
+
+fn agent_started() -> serde_json::Value {
+    serde_json::json!({
+        "type": "agent_started",
+        "agent": {"name": "codex-1", "pane_id": "w1:p2"},
+        "argv": ["codex"],
+    })
+}
+
+#[tokio::test]
+async fn agent_kinds_are_sorted_and_deduplicated() {
+    let mut script = serde_json::Map::new();
+    script.insert("server.agent_manifests".into(), agent_manifests(&["codex", "claude", "codex"]));
+    let (mock, app, _sd) = write_app(script).await;
+
+    let res = app.oneshot(get("/api/v1/agents/kinds?session=default")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["agents"], serde_json::json!(["claude", "codex"]));
+    assert_eq!(mock.received("server.agent_manifests").len(), 1);
+}
+
+#[tokio::test]
+async fn create_agent_in_existing_workspace_starts_and_prompts() {
+    let mut script = serde_json::Map::new();
+    script.insert("server.agent_manifests".into(), agent_manifests(&["codex"]));
+    script.insert("tab.create".into(), tab_created());
+    script.insert("agent.start".into(), agent_started());
+    script.insert("pane.send_text".into(), serde_json::json!({"type": "ok"}));
+    script.insert("pane.send_keys".into(), serde_json::json!({"type": "ok"}));
+    let (mock, app, _sd) = write_app(script).await;
+
+    let res = app.oneshot(post_json("/api/v1/agents?session=default", r#"{
+        "name":"codex-1","kind":"codex","cwd":"/repo","workspaceId":"w1",
+        "initialPrompt":"  review this patch  "
+    }"#)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["paneId"], "w1:p2");
+    assert_eq!(json["agentName"], "codex-1");
+
+    let tabs = mock.received("tab.create");
+    assert_eq!(tabs[0]["params"], serde_json::json!({
+        "workspace_id": "w1", "cwd": "/repo", "label": "codex-1",
+        "env": {}, "focus": false,
+    }));
+    let starts = mock.received("agent.start");
+    assert_eq!(starts[0]["params"], serde_json::json!({
+        "name": "codex-1", "kind": "codex", "pane_id": "w1:p2",
+        "args": [], "timeout_ms": 20000,
+    }));
+    assert_eq!(mock.received("pane.send_text")[0]["params"]["text"], "review this patch");
+    assert_eq!(mock.received("pane.send_keys")[0]["params"]["keys"][0], "Enter");
+}
+
+#[tokio::test]
+async fn create_agent_without_workspace_creates_unfocused_workspace() {
+    let mut script = serde_json::Map::new();
+    script.insert("server.agent_manifests".into(), agent_manifests(&["claude"]));
+    script.insert("workspace.create".into(), workspace_created());
+    script.insert("agent.start".into(), agent_started());
+    let (mock, app, _sd) = write_app(script).await;
+
+    let res = app.oneshot(post_json("/api/v1/agents", r#"{
+        "name":"claude-1","kind":"claude","cwd":"/repo","workspaceLabel":"repo"
+    }"#)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    assert_eq!(mock.received("workspace.create")[0]["params"], serde_json::json!({
+        "cwd": "/repo", "label": "repo", "env": {}, "focus": false,
+    }));
+    assert!(mock.received("tab.create").is_empty());
+}
+
+#[tokio::test]
+async fn agent_start_failure_returns_created_pane_without_closing_it() {
+    let mut script = serde_json::Map::new();
+    script.insert("server.agent_manifests".into(), agent_manifests(&["codex"]));
+    script.insert("tab.create".into(), tab_created());
+    script.insert("agent.start".into(), serde_json::json!({
+        "__error__": {"code": "agent_start_timeout", "message": "not ready"}
+    }));
+    let (mock, app, _sd) = write_app(script).await;
+
+    let res = app.oneshot(post_json("/api/v1/agents", r#"{
+        "name":"codex-1","kind":"codex","cwd":"/repo","workspaceId":"w1"
+    }"#)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_GATEWAY);
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["code"], "agent_start_failed");
+    assert_eq!(json["created"]["paneId"], "w1:p2");
+    assert!(mock.received("pane.close").is_empty());
+    assert!(mock.received("tab.close").is_empty());
+}
+
+#[tokio::test]
+async fn initial_prompt_submit_failure_reports_text_and_keeps_pane() {
+    let mut script = serde_json::Map::new();
+    script.insert("server.agent_manifests".into(), agent_manifests(&["codex"]));
+    script.insert("tab.create".into(), tab_created());
+    script.insert("agent.start".into(), agent_started());
+    script.insert("pane.send_text".into(), serde_json::json!({"type": "ok"}));
+    script.insert("pane.send_keys".into(), serde_json::json!({
+        "__error__": {"code": "invalid_key", "message": "submit failed"}
+    }));
+    let (mock, app, _sd) = write_app(script).await;
+
+    let res = app.oneshot(post_json("/api/v1/agents", r#"{
+        "name":"codex-1","kind":"codex","cwd":"/repo","workspaceId":"w1",
+        "initialPrompt":"review this"
+    }"#)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_GATEWAY);
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["code"], "text_delivered");
+    assert_eq!(json["textDelivered"], true);
+    assert_eq!(json["created"]["paneId"], "w1:p2");
+    assert!(mock.received("pane.close").is_empty());
+    assert!(mock.received("tab.close").is_empty());
+}
+
+#[tokio::test]
+async fn create_agent_validates_before_mutating_herdr() {
+    let (mock, app, _sd) = write_app(serde_json::Map::new()).await;
+    let bad_name = app.clone().oneshot(post_json("/api/v1/agents", r#"{
+        "name":"Bad Name","kind":"codex","cwd":"/repo","workspaceId":"w1"
+    }"#)).await.unwrap();
+    assert_eq!(bad_name.status(), StatusCode::BAD_REQUEST);
+    let bad_cwd = app.oneshot(post_json("/api/v1/agents", r#"{
+        "name":"codex-1","kind":"codex","cwd":"relative/path","workspaceId":"w1"
+    }"#)).await.unwrap();
+    assert_eq!(bad_cwd.status(), StatusCode::BAD_REQUEST);
+    assert!(mock.received("server.agent_manifests").is_empty());
+    assert!(mock.received("tab.create").is_empty());
+}
+
 #[tokio::test]
 async fn reply_sends_text_then_enter() {
     let mut script = serde_json::Map::new();

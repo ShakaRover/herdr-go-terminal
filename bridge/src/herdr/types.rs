@@ -114,3 +114,33 @@ pub struct TabListResult { pub tabs: Vec<TabInfo> }
 pub struct PaneListResult { pub panes: Vec<PaneInfo> }
 #[derive(Debug, Deserialize)]
 pub struct PaneReadResponse { pub read: PaneReadResult }
+
+#[derive(Debug, Deserialize)]
+pub struct AgentManifestInfo {
+    pub agent: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AgentManifestStatusResult {
+    pub manifests: Vec<AgentManifestInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WorkspaceCreatedResult {
+    pub workspace: WorkspaceInfo,
+    pub tab: TabInfo,
+    pub root_pane: PaneInfo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TabCreatedResult {
+    pub tab: TabInfo,
+    pub root_pane: PaneInfo,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreatedPane {
+    pub workspace_id: String,
+    pub tab_id: String,
+    pub pane_id: String,
+}
