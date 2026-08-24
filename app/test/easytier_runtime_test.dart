@@ -33,6 +33,7 @@ class FakeEasyTierChannel extends EasyTierChannel {
   /// 每次 currentVirtualIp 弹一个；取空后反复吐最后一个，永不超时。
   final virtualIpResults = <String?>[null, '10.10.64.62'];
   Object? startInstanceError;
+  Completer<void>? startInstanceGate;
   Completer<void>? addPortForwardGate;
   Completer<void>? removePortForwardGate;
   final addPortForwardErrors = <Object>[];
@@ -47,6 +48,7 @@ class FakeEasyTierChannel extends EasyTierChannel {
   Future<void> startInstance(String tomlConfig) async {
     calls.add('startInstance');
     startedConfigs.add(tomlConfig);
+    await startInstanceGate?.future;
     final e = startInstanceError;
     if (e != null) throw e;
   }
@@ -144,6 +146,16 @@ Future<void> keepAlive(ProviderContainer container, String profileId) async {
   final sub = container.listen(easytierRuntimeProvider(profileId), (_, _) {});
   addTearDown(sub.close);
   await pumpEventQueue();
+}
+
+Future<void> waitUntil(bool Function() condition) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TimeoutException('等待测试条件超时');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 void main() {
@@ -463,6 +475,72 @@ disable_upnp = true
           hasLength(1),
           reason: '首次 ADD 可能已生效，重试前应按原配置容错撤销');
       expect(channel.calls.where((c) => c.startsWith('stopInstance')), isEmpty);
+    });
+  });
+
+  group('autoDispose cleanup', () {
+    test('启动中销毁 provider：等待 startInstance 返回后再 stop', () async {
+      final channel = FakeEasyTierChannel();
+      final container = makeContainer(channel);
+      final sub = container.listen(
+          easytierRuntimeProvider(profile.id), (_, _) {});
+      await pumpEventQueue();
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+      final startGate = Completer<void>();
+      channel.startInstanceGate = startGate;
+      final connect = notifier.connect(profile);
+      await pumpEventQueue();
+
+      sub.close();
+      await pumpEventQueue();
+      expect(channel.calls.where((c) => c.startsWith('stopInstance')), isEmpty,
+          reason: 'start 尚未返回时不能先发一个会 no-op 的 stop');
+
+      startGate.complete();
+      await connect;
+      await waitUntil(() => channel.calls
+          .contains('stopInstance(${profile.id})'));
+      expect(channel.calls.first, 'startInstance');
+      expect(channel.calls.last, 'stopInstance(${profile.id})');
+    });
+
+    test('恢复探测中销毁 provider：取消探测、撤销 listener 并 stop', () async {
+      var reachable = true;
+      var probeCount = 0;
+      final channel = FakeEasyTierChannel();
+      final container = ProviderContainer(overrides: [
+        easytierChannelProvider.overrideWithValue(channel),
+        bridgeReachabilityProbeProvider.overrideWithValue((_, _) async {
+          probeCount++;
+          return reachable;
+        }),
+      ]);
+      addTearDown(container.dispose);
+      final sub = container.listen(
+          easytierRuntimeProvider(profile.id), (_, _) {});
+      await pumpEventQueue();
+      final notifier =
+          container.read(easytierRuntimeProvider(profile.id).notifier);
+      await notifier.connect(profile);
+      await notifier.suspendPortForward();
+      reachable = false;
+      final resume = notifier.resumePortForward();
+      await waitUntil(() => probeCount >= 2);
+
+      sub.close();
+      await pumpEventQueue();
+      await resume;
+      await waitUntil(() => channel.calls
+          .contains('stopInstance(${profile.id})'));
+
+      expect(channel.calls.where((c) => c.startsWith('removePortForward')),
+          hasLength(2),
+          reason: '后台撤销一次，dispose 再撤销恢复阶段的新 listener');
+      final countAfterDispose = probeCount;
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(probeCount, countAfterDispose,
+          reason: 'provider 销毁后不能继续可达性探测');
     });
   });
 

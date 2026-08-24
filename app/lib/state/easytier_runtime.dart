@@ -151,13 +151,27 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// ADD/REMOVE 必须串行。前后台快速切换可能让上一次 REMOVE 尚未返回就
   /// 收到下一次 ADD；按生命周期顺序执行才能保证最终配置与前台状态一致。
   Future<void> _forwardOperations = Future<void>.value();
+  final Set<Future<void>> _instanceStarts = {};
+  bool _disposed = false;
 
   /// 代际计数：connect/disconnect 交错时，旧的异步流程在下一个 await 后
   /// 检出自己已过期即退出，避免后到的状态被先到的覆盖。
   int _generation = 0;
 
   @override
-  EasyTierRuntimeState build() => const EasyTierDisconnected();
+  EasyTierRuntimeState build() {
+    final channel = ref.read(easytierChannelProvider);
+    ref.onDispose(() {
+      // autoDispose 是本 runtime 的资源所有权边界：先同步使全部异步流程
+      // 过期，再异步撤销 listener 并停实例。清理只使用预先捕获的 channel，
+      // provider 销毁后不得再读取 ref 或写 state。
+      _disposed = true;
+      ++_generation;
+      _forwardSuspended = true;
+      unawaited(_disposeRuntime(channel));
+    });
+    return const EasyTierDisconnected();
+  }
 
   /// 启动本实例：生成 TOML → startInstance → 轮询 currentVirtualIp
   /// → 选回环端口 → PatchConfig ADD port_forward → 探测 bridge API → Ready。
@@ -167,12 +181,20 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// stopInstance）——startInstance 成功后的失败若不停实例，同名实例残留
   /// 会让重试被 EasyTier 内核以 "instance name already exists" 拒绝。
   Future<void> connect(RemoteProfile profile) async {
+    if (_disposed) return;
     _profile = profile;
     final gen = ++_generation;
     state = const EasyTierConnecting();
     final channel = ref.read(easytierChannelProvider);
     try {
-      await channel.startInstance(buildInstanceToml(profile));
+      final start = channel.startInstance(buildInstanceToml(profile));
+      _instanceStarts.add(start);
+      try {
+        await start;
+      } finally {
+        _instanceStarts.remove(start);
+      }
+      if (gen != _generation) return;
       // 等本实例拿到虚拟 IP（证明 EasyTier 已连上网络），然后向
       // bridge 的虚拟 IP（pairing 里的 virtualIp）打端口转发 patch。
       final ip = await _waitVirtualIp(channel, gen);
@@ -214,6 +236,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// 这里只暂停通用 port-forward，EasyTier 实例和虚拟网连接保持运行；不要
   /// 把 UIKit/AppLifecycle 等平台概念下沉到 EasyTier core。
   Future<void> suspendPortForward() async {
+    if (_disposed) return;
     if (_forwardSuspended) return;
     _forwardSuspended = true;
     if (state is EasyTierDisconnected || state is EasyTierFailed) return;
@@ -228,6 +251,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// 后恢复 Ready。平台生命周期只由 HerdrGo 调用本方法，EasyTier core
   /// 仍只提供平台无关的 ADD/REMOVE port-forward 配置接口。
   Future<void> resumePortForward() async {
+    if (_disposed) return;
     if (!_forwardSuspended) return;
     _forwardSuspended = false;
     if (state is! EasyTierForwardSuspended) return;
@@ -269,6 +293,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
 
   /// 停本实例的转发与 EasyTier 实例；重复调用幂等（已断开时 no-op）。
   Future<void> disconnect() async {
+    if (_disposed) return;
     _generation++;
     _forwardSuspended = false;
     if (_localPort == 0 && state is EasyTierDisconnected) return;
@@ -283,6 +308,26 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     _instanceHasVirtualIp = false;
     _profile = null;
     state = const EasyTierDisconnected();
+  }
+
+  Future<void> _disposeRuntime(EasyTierChannel channel) async {
+    // dispose 可能发生在 startInstance 的 MethodChannel 调用尚未返回时；
+    // 必须等所有已发出的启动结束再 stop，否则 stop 的 no-op 会被迟到的
+    // start 反转，留下无 owner 的 EasyTier 实例。
+    final starts = _instanceStarts.toList();
+    for (final start in starts) {
+      try {
+        await start;
+      } catch (_) {
+        // 启动失败时仍执行下面的幂等清理。
+      }
+    }
+    await _removeForward(channel);
+    try {
+      await channel.stopInstance(profileId);
+    } catch (_) {
+      // 实例可能尚未创建或已被其他路径停掉，按已停处理。
+    }
   }
 
   /// 停本实例的转发（如有）；失败不影响后续流程。
@@ -313,6 +358,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// 立即撤销刚加的配置，不能把旧代际 listener 泄漏在 EasyTier 中。
   Future<int?> _installForward(
       EasyTierChannel channel, RemoteProfile profile, int gen) async {
+    if (_disposed || gen != _generation || _forwardSuspended) return null;
     // PatchConfig 通路不支持「bind 端口 0 再读回」，先在 Dart 侧占一个
     // 临时回环端口再交给内核 bind。
     final port = await ref.read(loopbackPortPickerProvider)();
@@ -367,6 +413,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   Future<int?> _waitForwardInstalled(
       EasyTierChannel channel, RemoteProfile profile, int gen) async {
     for (;;) {
+      if (_disposed || gen != _generation || _forwardSuspended) return null;
       try {
         final port = await _installForward(channel, profile, gen);
         if (port != null) return port;
@@ -392,6 +439,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   Future<String?> _waitVirtualIp(EasyTierChannel channel, int gen) async {
     final deadline = DateTime.now().add(virtualIpTimeout);
     for (;;) {
+      if (_disposed || gen != _generation) return null;
       final raw = await channel.currentVirtualIpRaw(profileId);
       // ignore: avoid_print
       print('[easytier] _waitVirtualIp $profileId raw=$raw');
@@ -405,6 +453,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   Future<void> _waitBridgeReachable(int localPort, int gen) async {
     final probe = ref.read(bridgeReachabilityProbeProvider);
     for (;;) {
+      if (_disposed || gen != _generation) return;
       if (await probe(localPort, bridgeProbeTimeout)) return;
       if (gen != _generation) return;
       await Future<void>.delayed(bridgeProbeInterval);

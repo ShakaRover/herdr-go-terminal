@@ -158,10 +158,12 @@ class _RootGateState extends ConsumerState<RootGate> {
   }
 
   Future<void> _resumeBridge(String bridgeId, int generation) async {
+    if (!ref.read(enabledProfilesProvider).any((p) => p.id == bridgeId)) return;
     await ref
         .read(easytierRuntimeProvider(bridgeId).notifier)
         .resumePortForward();
     if (!mounted || generation != _lifecycleGeneration) return;
+    if (!ref.read(enabledProfilesProvider).any((p) => p.id == bridgeId)) return;
     if (ref.read(easytierRuntimeProvider(bridgeId)) is! EasyTierReady) return;
     ref.read(bridgeSnapshotProvider(bridgeId).notifier).setPaused(false);
   }
