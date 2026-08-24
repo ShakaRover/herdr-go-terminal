@@ -7,6 +7,7 @@ library;
 
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../model/models.dart';
@@ -53,6 +54,8 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
   final String bridgeId;
   Timer? _timer;
   Timer? _retryTimer;
+  CancelToken? _cancelToken;
+  int _refreshGeneration = 0;
   bool _inFlight = false;
   bool _paused = false;
 
@@ -61,12 +64,17 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
     final api = ref.watch(apiProvider(bridgeId));
     // session 切换也触发重建（重新拉对应会话的数据）。
     ref.watch(sessionFilterProvider(bridgeId));
+    _timer?.cancel();
+    _timer = null;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _cancelRefresh();
     ref.onDispose(() {
       _timer?.cancel();
       _retryTimer?.cancel();
+      _cancelRefresh();
     });
-    if (api == null) return const SnapshotState();
-    _timer?.cancel();
+    if (api == null || _paused) return const SnapshotState();
     _timer = Timer.periodic(pollInterval, (_) => refresh());
     // build 期间不允许写 state，推迟到微任务。
     Future.microtask(refresh);
@@ -80,8 +88,10 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
       _timer = null;
       _retryTimer?.cancel();
       _retryTimer = null;
-    } else if (_timer == null) {
+      _cancelRefresh();
+    } else {
       _paused = false;
+      if (_timer != null) return;
       _timer = Timer.periodic(pollInterval, (_) => refresh());
       Future.microtask(refresh);
     }
@@ -89,26 +99,40 @@ class SnapshotNotifier extends Notifier<SnapshotState> {
 
   Future<void> refresh() async {
     final api = ref.read(apiProvider(bridgeId));
-    if (api == null || _inFlight) return;
+    if (api == null || _inFlight || _paused) return;
+    final generation = _refreshGeneration;
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
     _inFlight = true;
     try {
       final snap = await api.getSnapshot(
-          session: ref.read(sessionFilterProvider(bridgeId)));
+          session: ref.read(sessionFilterProvider(bridgeId)),
+          cancelToken: cancelToken);
       // await 后 provider 可能已随 bridgesProvider 重建被销毁。
-      if (!ref.mounted) return;
+      if (!ref.mounted || generation != _refreshGeneration) return;
       _retryTimer?.cancel();
       _retryTimer = null;
       state = SnapshotState(data: snap, lastOk: DateTime.now());
     } catch (e) {
-      if (!ref.mounted) return;
+      if (!ref.mounted || generation != _refreshGeneration) return;
       state = SnapshotState(data: state.data, error: e, lastOk: state.lastOk);
       if (!_paused) {
         _retryTimer?.cancel();
         _retryTimer = Timer(retryInterval, refresh);
       }
     } finally {
-      _inFlight = false;
+      if (generation == _refreshGeneration) {
+        if (identical(_cancelToken, cancelToken)) _cancelToken = null;
+        _inFlight = false;
+      }
     }
+  }
+
+  void _cancelRefresh() {
+    _refreshGeneration++;
+    _cancelToken?.cancel();
+    _cancelToken = null;
+    _inFlight = false;
   }
 }
 

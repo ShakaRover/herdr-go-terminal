@@ -13,6 +13,7 @@
 ///   之后制造，否则旧实现在测试里根本重建不出来。
 library;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,7 +39,8 @@ class _FakeBridgeApi extends BridgeApi {
   int getSnapshotCount = 0;
 
   @override
-  Future<Snapshot> getSnapshot({String? session}) async {
+  Future<Snapshot> getSnapshot(
+      {String? session, CancelToken? cancelToken}) async {
     getSnapshotCount++;
     return Snapshot(
       bridgeConnected: true,

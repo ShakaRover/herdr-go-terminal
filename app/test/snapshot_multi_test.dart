@@ -8,6 +8,7 @@ library;
 
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herdrgo/api/bridge_api.dart';
@@ -31,7 +32,8 @@ class FakeBridgeApi extends BridgeApi {
   int getSnapshotCount = 0;
 
   @override
-  Future<Snapshot> getSnapshot({String? session}) async {
+  Future<Snapshot> getSnapshot(
+      {String? session, CancelToken? cancelToken}) async {
     getSnapshotCount++;
     seenSessions.add(session);
     return Snapshot(
@@ -160,6 +162,61 @@ void main() {
 
     expect(flaky.getSnapshotCount, 2);
   });
+
+  test('暂停取消未完成的请求，恢复后立即重新拉取且忽略旧响应', () async {
+    SnapshotNotifier.pollInterval = const Duration(hours: 1);
+    addTearDown(() {
+      SnapshotNotifier.pollInterval = const Duration(seconds: 3);
+    });
+    final api = _SuspendingBridgeApi();
+    final container = await buildContainer(api, FakeBridgeApi('b2'));
+
+    final recovered = waitSnapshot(container, 'b1');
+    await pumpEventQueue();
+    expect(api.getSnapshotCount, 1);
+
+    final notifier = container.read(bridgeSnapshotProvider('b1').notifier);
+    notifier.setPaused(true);
+    expect(api.firstCancelToken, isNotNull);
+    expect(api.firstCancelToken!.isCancelled, isTrue);
+
+    notifier.setPaused(false);
+    final state = await recovered;
+    expect(api.getSnapshotCount, 2);
+    expect(state.data!.agents.single.agent, 'recovered');
+
+    api.completeFirstRequest();
+    await pumpEventQueue();
+    expect(container
+        .read(bridgeSnapshotProvider('b1'))
+        .data!
+        .agents
+        .single
+        .agent, 'recovered');
+  });
+
+  test('暂停期间 session 依赖重建不会偷偷恢复轮询', () async {
+    SnapshotNotifier.pollInterval = const Duration(milliseconds: 20);
+    addTearDown(() {
+      SnapshotNotifier.pollInterval = const Duration(seconds: 3);
+    });
+    final api = FakeBridgeApi('b1');
+    final container = await buildContainer(api, FakeBridgeApi('b2'));
+
+    await waitSnapshot(container, 'b1');
+    final notifier = container.read(bridgeSnapshotProvider('b1').notifier);
+    notifier.setPaused(true);
+    final countAtPause = api.getSnapshotCount;
+
+    container.read(sessionFilterProvider('b1').notifier).select('ops');
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(api.getSnapshotCount, countAtPause);
+
+    final resumed = waitSnapshot(container, 'b1');
+    notifier.setPaused(false);
+    await resumed;
+    expect(api.getSnapshotCount, greaterThan(countAtPause));
+  });
 }
 
 class _FlakyBridgeApi extends FakeBridgeApi {
@@ -168,13 +225,57 @@ class _FlakyBridgeApi extends FakeBridgeApi {
   bool _failed = false;
 
   @override
-  Future<Snapshot> getSnapshot({String? session}) {
+  Future<Snapshot> getSnapshot(
+      {String? session, CancelToken? cancelToken}) {
     if (!_failed) {
       _failed = true;
       getSnapshotCount++;
       seenSessions.add(session);
       return Future.error(const ApiException('暂时不可达'));
     }
-    return super.getSnapshot(session: session);
+    return super.getSnapshot(session: session, cancelToken: cancelToken);
   }
+}
+
+class _SuspendingBridgeApi extends FakeBridgeApi {
+  _SuspendingBridgeApi() : super('unused');
+
+  final _firstRequest = Completer<Snapshot>();
+  CancelToken? firstCancelToken;
+
+  @override
+  Future<Snapshot> getSnapshot(
+      {String? session, CancelToken? cancelToken}) {
+    getSnapshotCount++;
+    seenSessions.add(session);
+    if (getSnapshotCount == 1) {
+      firstCancelToken = cancelToken;
+      return _firstRequest.future;
+    }
+    return Future.value(_snapshot('recovered', 2));
+  }
+
+  void completeFirstRequest() => _firstRequest.complete(_snapshot('stale', 1));
+
+  Snapshot _snapshot(String agent, int ts) => Snapshot(
+        bridgeConnected: true,
+        agents: [
+          PaneInfo(
+            paneId: 'w0',
+            workspaceId: 'w0',
+            workspaceLabel: 'ws0',
+            workspaceNumber: 0,
+            tabId: 'w0:t0',
+            agent: agent,
+            status: AgentStatus.working,
+            cwd: '/repo',
+            focused: false,
+          ),
+        ],
+        shellPanes: const [],
+        workspaces: const [],
+        tabs: const [],
+        sessions: const [],
+        ts: ts,
+      );
 }

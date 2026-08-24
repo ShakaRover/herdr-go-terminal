@@ -151,10 +151,11 @@ class BridgeApi {
     }
   }
 
-  Future<Snapshot> getSnapshot({String? session}) async {
+  Future<Snapshot> getSnapshot({String? session, CancelToken? cancelToken}) async {
     try {
       final res = await _dio.get('/api/v1/snapshot',
           queryParameters: _queryWithSession(session),
+          cancelToken: cancelToken,
           options: Options(receiveTimeout: _getTimeout));
       return Snapshot.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
