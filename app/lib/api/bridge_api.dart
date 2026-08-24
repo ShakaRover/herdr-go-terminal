@@ -12,6 +12,8 @@
 /// - 超时：GET 10s，修改类 20s，上传 60s。
 library;
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../model/history.dart';
@@ -104,6 +106,7 @@ class BridgeApi {
   }
 
   ApiException _wrap(DioException e) {
+    _logTransportFailure(e);
     final status = e.response?.statusCode;
     final data = e.response?.data;
     String? serverMsg;
@@ -116,6 +119,24 @@ class BridgeApi {
       serverMsg ?? _transportReason(e),
       statusCode: status,
     );
+  }
+
+  static void _logTransportFailure(DioException e) {
+    if (e.response != null) return;
+    final Object? inner = e.error;
+    final detail = switch (inner) {
+      SocketException() =>
+        'SocketException(message=${inner.message}, '
+            'address=${inner.address?.address}, port=${inner.port}, '
+            'osError=${inner.osError?.message}, '
+            'errno=${inner.osError?.errorCode})',
+      OSError() =>
+        'OSError(message=${inner.message}, errno=${inner.errorCode})',
+      _ => '${inner ?? e.message}',
+    };
+    stderr.writeln('[bridge-api] transport failure '
+        'method=${e.requestOptions.method} uri=${e.requestOptions.uri} '
+        'type=${e.type.name} error=$detail');
   }
 
   /// 无响应 body 的传输层错误映射为简短原因，避免把 dio 冗长的英文

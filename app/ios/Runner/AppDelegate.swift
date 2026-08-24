@@ -20,6 +20,11 @@ import UIKit
 /// 背后调 easytier-ios 的 C ABI（见 easytier-ios.h）。
 final class EasyTierChannel {
   static func register(with messenger: FlutterBinaryMessenger) {
+    let loggingRc = easytier_ios_enable_diagnostic_logging()
+    if loggingRc != 0 {
+      let message = takeOwnedString(easytier_ios_last_error()) ?? "unknown error"
+      NSLog("[easytier-ios] diagnostic logging unavailable: %@", message)
+    }
     let channel = FlutterMethodChannel(name: "dev.herdr/easytier", binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
       do {
