@@ -46,7 +46,8 @@ Future<void> initNotifications({
   );
   await _plugin
       .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+        AndroidFlutterLocalNotificationsPlugin
+      >()
       ?.requestNotificationsPermission();
 }
 
@@ -65,16 +66,23 @@ Future<(String, String)?> consumeLaunchTarget() async {
 /// 发一条 blocked 通知。title 加 `[宿主机 label]` 前缀；通知 id 按
 /// bridgeId:paneId 稳定去重（同一 pane 重复通知覆盖而非堆叠）。
 Future<void> showBlockedNotification(
-    String bridgeId, String paneId, String label, String title, String body) {
+  String bridgeId,
+  String paneId,
+  String label,
+  String title,
+  String body,
+  String channelName,
+  String channelDescription,
+) {
   return _plugin.show(
     id: '$bridgeId:$paneId'.hashCode & 0x7fffffff,
     title: '[$label] $title',
     body: body,
-    notificationDetails: const NotificationDetails(
+    notificationDetails: NotificationDetails(
       android: AndroidNotificationDetails(
         _channelId,
-        'agent 待处理',
-        channelDescription: 'agent 停下来等你回复时提醒你',
+        channelName,
+        channelDescription: channelDescription,
         importance: Importance.high,
         priority: Priority.high,
       ),

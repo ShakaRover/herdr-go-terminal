@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/remote_profile.dart';
@@ -16,17 +17,54 @@ final sharedPrefsProvider = Provider<SharedPreferences>(
   (_) => throw UnimplementedError('sharedPrefsProvider 未 override'),
 );
 
+const appLocalePreferenceKey = 'app_locale_v1';
+
+enum AppLocalePreference {
+  system,
+  simplifiedChinese,
+  english;
+
+  Locale? get locale => switch (this) {
+    AppLocalePreference.system => null,
+    AppLocalePreference.simplifiedChinese => const Locale('zh'),
+    AppLocalePreference.english => const Locale('en'),
+  };
+}
+
+class AppLocaleNotifier extends Notifier<AppLocalePreference> {
+  @override
+  AppLocalePreference build() {
+    final stored = ref
+        .watch(sharedPrefsProvider)
+        .getString(appLocalePreferenceKey);
+    return AppLocalePreference.values
+            .where((value) => value.name == stored)
+            .firstOrNull ??
+        AppLocalePreference.system;
+  }
+
+  Future<void> select(AppLocalePreference preference) async {
+    state = preference;
+    await ref
+        .read(sharedPrefsProvider)
+        .setString(appLocalePreferenceKey, preference.name);
+  }
+}
+
+final appLocaleProvider =
+    NotifierProvider<AppLocaleNotifier, AppLocalePreference>(
+      AppLocaleNotifier.new,
+    );
+
 /// profile 列表的本地持久化仓库。
-final profileStoreProvider = Provider<ProfileStore>(
-  (ref) {
-    final prefs = ref.watch(sharedPrefsProvider);
-    // 删直连：旧键（v1 单条直连配置、v2 直连配置列表）不再有地方放，
-    // 检测到即删，数据丢弃。
-    prefs.remove('bridge_settings_v1');
-    prefs.remove('bridge_settings_v2');
-    return ProfileStore(prefs);
-  },
-);
+final profileStoreProvider = Provider<ProfileStore>((ref) {
+  final prefs = ref.watch(sharedPrefsProvider);
+  // 删直连：旧键（v1 单条直连配置、v2 直连配置列表）不再有地方放，
+  // 检测到即删，数据丢弃。
+  prefs.remove('bridge_settings_v1');
+  prefs.remove('bridge_settings_v2');
+  return ProfileStore(prefs);
+});
 
 /// 全部 enabled profile 的常驻列表（bridgesProvider 的数据源）。
 ///
@@ -55,4 +93,5 @@ class EnabledProfilesNotifier extends Notifier<List<RemoteProfile>> {
 
 final enabledProfilesProvider =
     NotifierProvider<EnabledProfilesNotifier, List<RemoteProfile>>(
-        EnabledProfilesNotifier.new);
+      EnabledProfilesNotifier.new,
+    );

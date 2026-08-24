@@ -7,6 +7,7 @@ import '../../api/bridge_api.dart';
 import '../../blocks/prompt_action.dart';
 import '../../blocks/prompt_model.dart';
 import '../../blocks/prompt_select.dart';
+import '../../l10n/l10n.dart';
 import '../../state/bridges.dart';
 import '../../state/pane_read.dart';
 import '../../state/snapshot.dart';
@@ -78,6 +79,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   }
 
   Future<void> _sendReply() async {
+    final l10n = context.l10n;
     // 发送前 trim（对齐 collie composer）：尾随换行会变成额外的 Enter 打进 PTY。
     final text = _replyController.text.trim();
     if (text.isEmpty || _sending) return;
@@ -90,17 +92,16 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       final go = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('屏幕上有待处理的对话框'),
-          content: const Text('直接发送的回车可能选中对话框高亮的选项。'
-              '如果是想回答它的自由文本项，可以继续。'),
+          title: Text(ctx.l10n.pendingDialogTitle),
+          content: Text(ctx.l10n.pendingDialogBody),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('取消'),
+              child: Text(ctx.l10n.commonCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('仍发送'),
+              child: Text(ctx.l10n.sendAnyway),
             ),
           ],
         ),
@@ -109,41 +110,52 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
     setState(() => _sending = true);
     try {
-      final res = await api.sendReply(widget.paneId, text,
-          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      final res = await api.sendReply(
+        widget.paneId,
+        text,
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+      );
       if (!mounted) return;
       if (res.success) {
         _replyController.clear();
-        _toast('已发送');
+        _toast(l10n.sent);
       } else if (res.promptChanged) {
-        _toast('界面已变化，请查看最新输出后重试');
+        _toast(l10n.screenChangedRetry);
       } else if (res.textDelivered) {
-        _toast('文本已输入但回车未生效——请勿直接重发，先查看输出');
+        _toast(l10n.textDeliveredWarning);
       } else {
-        _toast('发送失败：${res.error}');
+        _toast(l10n.sendFailed(res.error ?? l10n.unknownError));
       }
       await _refreshAll();
     } on ApiException catch (e) {
-      _toast('发送失败：$e');
+      _toast(l10n.sendFailed('$e'));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
   Future<void> _sendKeys(List<String> keys) async {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _sending) return;
     setState(() => _sending = true);
     try {
-      final res = await api.sendKeys(widget.paneId, keys,
-          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      final res = await api.sendKeys(
+        widget.paneId,
+        keys,
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+      );
       if (!mounted) return;
       if (!res.success) {
-        _toast(res.promptChanged ? '界面已变化，请重试' : '按键失败：${res.error}');
+        _toast(
+          res.promptChanged
+              ? l10n.screenChangedShort
+              : l10n.keyFailed(res.error ?? l10n.unknownError),
+        );
       }
       await _refreshAll();
     } on ApiException catch (e) {
-      _toast('按键失败：$e');
+      _toast(l10n.keyFailed('$e'));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -153,6 +165,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   /// prompt-select 路径）：新鲜读取 → 重新派生模型 → 结构相等校验 →
   /// 带 expectedPrompt 发键。这里只把结果映射成 toast 并触发刷新。
   Future<void> _tapPromptOption(PromptModel tapped, PromptOption opt) async {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _sending) return;
     final session = ref.read(sessionFilterProvider(widget.bridgeId));
@@ -168,11 +181,11 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       if (!mounted) return;
       switch (result.outcome) {
         case PromptTapOutcome.sent:
-          _toast('已发送');
+          _toast(l10n.sent);
         case PromptTapOutcome.changed:
-          _toast('界面已变化，请查看最新输出后重试');
+          _toast(l10n.screenChangedRetry);
         case PromptTapOutcome.failed:
-          _toast('发送失败：${result.error}');
+          _toast(l10n.sendFailed(result.error ?? l10n.unknownError));
       }
       // failed（含 readPane 抛 ApiException）不刷新，与现状一致。
       if (result.outcome != PromptTapOutcome.failed) {
@@ -185,35 +198,42 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   Future<void> _refreshAll() async {
     await ref
-        .read(paneReadProvider((bridgeId: widget.bridgeId, paneId: widget.paneId))
-            .notifier)
+        .read(
+          paneReadProvider((bridgeId: widget.bridgeId, paneId: widget.paneId))
+              .notifier,
+        )
         .refresh();
     await ref.read(bridgeSnapshotProvider(widget.bridgeId).notifier).refresh();
   }
 
   /// 相册选图 → 上传到宿主机 → 返回的路径插进回复框（agent 按路径读图）。
   Future<void> _pickAndUpload() async {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _sending) return;
-    final picked = await ImagePicker()
-        .pickImage(source: ImageSource.gallery, maxWidth: 2048);
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 2048,
+    );
     if (picked == null || !mounted) return;
     setState(() => _sending = true);
     try {
-      final res = await api.uploadImage(widget.paneId, picked.path,
-          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      final res = await api.uploadImage(
+        widget.paneId,
+        picked.path,
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+      );
       if (!mounted) return;
       if (res.success && res.path != null) {
         final current = _replyController.text;
         final path = res.path!;
-        _replyController.text =
-            current.isEmpty ? path : '$current $path';
-        _toast('图片已上传，路径已填入回复框');
+        _replyController.text = current.isEmpty ? path : '$current $path';
+        _toast(l10n.imageUploaded);
       } else {
-        _toast('上传失败：${res.error}');
+        _toast(l10n.uploadFailed(res.error ?? l10n.unknownError));
       }
     } on ApiException catch (e) {
-      _toast('上传失败：$e');
+      _toast(l10n.uploadFailed('$e'));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -221,12 +241,14 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+    );
   }
 
   /// 重命名 agent：调 herdr pane.rename，AppBar 标题随下一次快照轮询刷新。
   Future<void> _rename() async {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     final pane = ref
         .read(bridgeSnapshotProvider(widget.bridgeId))
@@ -239,15 +261,20 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     if (label == null || !mounted) return;
     setState(() => _sending = true);
     try {
-      final res = await api.renamePane(widget.paneId, label,
-          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      final res = await api.renamePane(
+        widget.paneId,
+        label,
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+      );
       if (!mounted) return;
-      _toast(res.success
-          ? (label.isEmpty ? '已清除别名' : '已重命名')
-          : (res.error ?? '重命名失败'));
+      _toast(
+        res.success
+            ? (label.isEmpty ? l10n.aliasCleared : l10n.renamed)
+            : (res.error ?? l10n.renameFailedShort),
+      );
       if (res.success) await _refreshAll();
     } on ApiException catch (e) {
-      _toast('重命名失败：$e');
+      _toast(l10n.renameFailed('$e'));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -255,6 +282,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final paneKey = (bridgeId: widget.bridgeId, paneId: widget.paneId);
     final readState = ref.watch(paneReadProvider(paneKey));
     final snapshotState = ref.watch(bridgeSnapshotProvider(widget.bridgeId));
@@ -272,8 +300,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final text = readState.data?.text ?? '';
     final lines = splitLines(parseAnsi(text));
     // 尾部对话框识别：命中则菜单区域换成原生按钮（问题与前言保持原文）。
-    final promptRegion =
-        text.isEmpty ? null : detectPromptSelectRegion(lines);
+    final promptRegion = text.isEmpty ? null : detectPromptSelectRegion(lines);
     _lastPromptRegion = promptRegion;
     final mirrorLines = promptRegion != null
         ? trimTrailingBlank(lines.sublist(0, promptRegion.startLine))
@@ -285,8 +312,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(pane?.displayName ?? widget.paneId,
-                style: const TextStyle(fontSize: 16)),
+            Text(
+              pane?.displayName ?? widget.paneId,
+              style: const TextStyle(fontSize: 16),
+            ),
             if (pane != null)
               Text(
                 '${pane.workspaceLabel} · ${pane.agent}',
@@ -299,28 +328,29 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Chip(
-                label: Text(statusLabel(pane.status)),
+                label: Text(statusLabel(l10n, pane.status)),
                 visualDensity: VisualDensity.compact,
                 side: BorderSide.none,
                 backgroundColor: statusColor(
-                        Theme.of(context).colorScheme, pane.status)
-                    .withValues(alpha: 0.15),
+                  Theme.of(context).colorScheme,
+                  pane.status,
+                ).withValues(alpha: 0.15),
               ),
             ),
           IconButton(
-            tooltip: '刷新',
+            tooltip: l10n.refreshTooltip,
             icon: const Icon(Icons.refresh),
             onPressed: _refreshAll,
           ),
           if (pane != null && !readOnly)
             IconButton(
-              tooltip: '重命名',
+              tooltip: l10n.renameTooltip,
               icon: const Icon(Icons.edit_outlined),
               onPressed: _sending ? null : _rename,
             ),
           if (pane?.hasSession == true)
             IconButton(
-              tooltip: '历史',
+              tooltip: l10n.historyTooltip,
               icon: const Icon(Icons.history),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
@@ -341,16 +371,20 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               width: double.infinity,
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text('当前设备未授权写操作（只读模式）',
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                l10n.readOnlyMode,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           if (readState.error != null)
             Container(
               width: double.infinity,
               color: Theme.of(context).colorScheme.errorContainer,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text('输出刷新失败，显示的是旧数据（${readState.error}）',
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                l10n.outputRefreshFailed('${readState.error}'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           Expanded(
             child: text.isEmpty && readState.error == null
@@ -360,8 +394,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       children: [
                         const CircularProgressIndicator(),
                         const SizedBox(height: 16),
-                        Text('正在读取输出…',
-                            style: Theme.of(context).textTheme.bodyMedium),
+                        Text(
+                          l10n.readingOutput,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                       ],
                     ),
                   )
@@ -382,10 +418,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               enabled: !_sending,
               onTap: (opt) => _tapPromptOption(promptRegion.model, opt),
             ),
-          if (!readOnly) ...[
-            const Divider(height: 1),
-            _buildComposer(context),
-          ],
+          if (!readOnly) ...[const Divider(height: 1), _buildComposer(context)],
         ],
       ),
     );
@@ -422,7 +455,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 IconButton(
-                  tooltip: '发图片',
+                  tooltip: context.l10n.sendImageTooltip,
                   icon: const Icon(Icons.image_outlined),
                   onPressed: _sending ? null : _pickAndUpload,
                 ),
@@ -432,8 +465,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     minLines: 1,
                     maxLines: 4,
                     textInputAction: TextInputAction.newline,
-                    decoration: const InputDecoration(
-                      hintText: '回复 agent…',
+                    decoration: InputDecoration(
+                      hintText: context.l10n.replyHint,
                       isDense: true,
                       border: OutlineInputBorder(),
                     ),
@@ -492,8 +525,10 @@ class _PromptCard extends StatelessWidget {
                   onPressed: enabled ? () => onTap(opt) : null,
                   style: FilledButton.styleFrom(
                     alignment: Alignment.centerLeft,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

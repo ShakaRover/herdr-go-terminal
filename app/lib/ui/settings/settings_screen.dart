@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
 import '../../model/remote_profile.dart';
 import '../../state/settings.dart';
 import 'scan_pairing_screen.dart';
@@ -36,6 +37,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _scanAndAdd() async {
+    final l10n = context.l10n;
     final profile = await Navigator.of(context).push<RemoteProfile>(
       MaterialPageRoute(builder: (_) => const ScanPairingScreen()),
     );
@@ -47,7 +49,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _reloadProfiles();
     if (!mounted) return;
     setState(() {
-      _message = '已添加：${profile.label}';
+      _message = l10n.profileAdded(profile.label);
       _messageIsError = false;
     });
   }
@@ -64,22 +66,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final label = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('设备别名'),
+        title: Text(ctx.l10n.deviceAlias),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 32,
-          decoration: const InputDecoration(hintText: '展示名'),
+          decoration: InputDecoration(hintText: ctx.l10n.displayNameHint),
           onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
+            child: Text(ctx.l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: const Text('确定'),
+            child: Text(ctx.l10n.commonConfirm),
           ),
         ],
       ),
@@ -94,16 +96,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除配置'),
-        content: Text('删除「${profile.label}」（${profile.virtualIp}）？'),
+        title: Text(ctx.l10n.deleteConfigTitle),
+        content: Text(
+          ctx.l10n.deleteConfigBody(profile.label, profile.virtualIp),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(ctx.l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除'),
+            child: Text(ctx.l10n.commonDelete),
           ),
         ],
       ),
@@ -117,61 +121,98 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
+    final localePreference = ref.watch(appLocaleProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('连接设置')),
+      appBar: AppBar(title: Text(l10n.connectionSettings)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.language),
+            trailing: DropdownButton<AppLocalePreference>(
+              value: localePreference,
+              onChanged: (value) {
+                if (value != null) {
+                  ref.read(appLocaleProvider.notifier).select(value);
+                }
+              },
+              items: [
+                DropdownMenuItem(
+                  value: AppLocalePreference.system,
+                  child: Text(l10n.systemLanguage),
+                ),
+                DropdownMenuItem(
+                  value: AppLocalePreference.simplifiedChinese,
+                  child: Text(l10n.simplifiedChinese),
+                ),
+                DropdownMenuItem(
+                  value: AppLocalePreference.english,
+                  child: Text(l10n.english),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('远端 bridge（扫码配对）', style: theme.textTheme.titleSmall),
+              Expanded(
+                child: Text(
+                  l10n.remoteBridge,
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _scanAndAdd,
                 icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('扫码添加'),
+                label: Text(l10n.scanToAdd),
               ),
             ],
           ),
           const SizedBox(height: 8),
           if (_profiles.isEmpty)
-            Text(
-              '尚未配对。bridge 启动时会打印配对二维码（herdrgo-bridge 日志里找），扫码后即可通过 EasyTier 虚拟网连接。',
-              style: theme.textTheme.bodySmall,
-            )
+            Text(l10n.notPaired, style: theme.textTheme.bodySmall)
           else
-            ..._profiles.map((p) => Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: ListTile(
-                    title: Text(p.label),
-                    subtitle: Text('${p.virtualIp}:${p.port} · ${p.server.join(', ')}'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: '编辑别名',
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () => _editLabel(p),
-                        ),
-                        Switch(
-                          value: p.enabled,
-                          onChanged: (v) => _setEnabled(p, v),
-                        ),
-                        IconButton(
-                          tooltip: '删除',
-                          icon: Icon(Icons.delete_outline,
-                              color: theme.colorScheme.error),
-                          onPressed: () => _confirmDelete(p),
-                        ),
-                      ],
-                    ),
+            ..._profiles.map(
+              (p) => Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  title: Text(p.label),
+                  subtitle: Text(
+                    '${p.virtualIp}:${p.port} · ${p.server.join(', ')}',
                   ),
-                )),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: l10n.editAliasTooltip,
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: () => _editLabel(p),
+                      ),
+                      Switch(
+                        value: p.enabled,
+                        onChanged: (v) => _setEnabled(p, v),
+                      ),
+                      IconButton(
+                        tooltip: l10n.deleteTooltip,
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: theme.colorScheme.error,
+                        ),
+                        onPressed: () => _confirmDelete(p),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (_profiles.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                '开关控制是否连接该 bridge；多条同时开启即为多宿主机模式。',
+                l10n.bridgeEnableHelp,
                 style: theme.textTheme.bodySmall,
               ),
             ),

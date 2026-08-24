@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/bridge_api.dart';
+import '../l10n/l10n.dart';
 import '../model/models.dart';
 import '../model/remote_profile.dart';
 import '../notify/blocked_watch.dart';
@@ -24,18 +25,40 @@ import 'snapshot.dart';
 /// 测试 override 成 no-op，避免触碰 method channel。
 abstract class BlockedNotifier {
   Future<void> show(
-      String bridgeId, String paneId, String label, String title, String body);
+    String bridgeId,
+    String paneId,
+    String label,
+    String title,
+    String body,
+    String channelName,
+    String channelDescription,
+  );
 }
 
 class _PluginBlockedNotifier implements BlockedNotifier {
   @override
-  Future<void> show(String bridgeId, String paneId, String label,
-          String title, String body) =>
-      showBlockedNotification(bridgeId, paneId, label, title, body);
+  Future<void> show(
+    String bridgeId,
+    String paneId,
+    String label,
+    String title,
+    String body,
+    String channelName,
+    String channelDescription,
+  ) => showBlockedNotification(
+    bridgeId,
+    paneId,
+    label,
+    title,
+    body,
+    channelName,
+    channelDescription,
+  );
 }
 
-final blockedNotifierProvider =
-    Provider<BlockedNotifier>((_) => _PluginBlockedNotifier());
+final blockedNotifierProvider = Provider<BlockedNotifier>(
+  (_) => _PluginBlockedNotifier(),
+);
 
 /// 连接状态。
 enum ConnStatus { connecting, ready, failed }
@@ -67,8 +90,10 @@ final apiProvider = Provider.family<BridgeApi?, String>((ref, bridgeId) {
   if (!profiles.any((p) => p.id == bridgeId)) return null;
   final runtime = ref.watch(easytierRuntimeProvider(bridgeId));
   return switch (runtime) {
-    EasyTierReady(:final localPort) =>
-      BridgeApi(baseUrl: 'http://127.0.0.1:$localPort'),
+    EasyTierReady(:final localPort) => BridgeApi(
+      baseUrl: 'http://127.0.0.1:$localPort',
+      localizations: appLocalizationsFor(ref.watch(appLocaleProvider)),
+    ),
     _ => null,
   };
 });
@@ -81,8 +106,9 @@ class FocusedBridgeNotifier extends Notifier<String> {
   void select(String bridgeId) => state = bridgeId;
 }
 
-final focusedBridgeProvider =
-    NotifierProvider<FocusedBridgeNotifier, String>(FocusedBridgeNotifier.new);
+final focusedBridgeProvider = NotifierProvider<FocusedBridgeNotifier, String>(
+  FocusedBridgeNotifier.new,
+);
 
 /// app 是否在前台（RootGate 的 AppLifecycleListener 驱动，默认前台）。
 ///
@@ -96,8 +122,9 @@ class AppForegroundNotifier extends Notifier<bool> {
   void setForeground(bool foreground) => state = foreground;
 }
 
-final appForegroundProvider =
-    NotifierProvider<AppForegroundNotifier, bool>(AppForegroundNotifier.new);
+final appForegroundProvider = NotifierProvider<AppForegroundNotifier, bool>(
+  AppForegroundNotifier.new,
+);
 
 /// 全部 enabled 连接的运行态列表（顺序 = profile 列表序）。
 ///
@@ -118,6 +145,7 @@ final bridgesProvider = Provider<List<BridgeConn>>((ref) {
   final profiles = ref.watch(enabledProfilesProvider);
   if (defaultTargetPlatform == TargetPlatform.android) {
     final prefs = ref.watch(sharedPrefsProvider);
+    final l10n = appLocalizationsFor(ref.watch(appLocaleProvider));
     final notifier = ref.watch(blockedNotifierProvider);
     final heartbeat = ForegroundHeartbeat();
     for (final p in profiles) {
@@ -131,25 +159,28 @@ final bridgesProvider = Provider<List<BridgeConn>>((ref) {
           final seen = readSeen(prefs);
           final fresh = newlyBlocked(p.id, snap, seen);
           for (final pane in fresh) {
-            unawaited(notifier.show(
-              p.id,
-              pane.paneId,
-              p.label,
-              '${pane.displayName} 需要你处理',
-              '${pane.workspaceLabel} · ${pane.agent}',
-            ));
+            unawaited(
+              notifier.show(
+                p.id,
+                pane.paneId,
+                p.label,
+                l10n.blockedNotificationTitle(pane.displayName),
+                '${pane.workspaceLabel} · ${pane.agent}',
+                l10n.blockedNotificationChannel,
+                l10n.blockedNotificationChannelDescription,
+              ),
+            );
           }
           unawaited(
-              writeSeen(prefs, updateSeen(p.id, seen, snap, nowMs: nowMs)));
+            writeSeen(prefs, updateSeen(p.id, seen, snap, nowMs: nowMs)),
+          );
         }
         // 心跳只在「app 在前台且轮询成功」时写；退后台停写才会过期。
         if (ref.read(appForegroundProvider)) heartbeat.stamp(prefs);
       });
     }
   }
-  return [
-    for (final p in profiles) _driveAndDerive(ref, p),
-  ];
+  return [for (final p in profiles) _driveAndDerive(ref, p)];
 });
 
 /// watch 本 profile 的 runtime、驱动 connect/disconnect，并把 runtime
@@ -163,13 +194,22 @@ BridgeConn _driveAndDerive(Ref ref, RemoteProfile profile) {
       // provider 重建。
       Future.microtask(() => notifier.connect(profile));
       return BridgeConn(
-          id: profile.id, label: profile.label, status: ConnStatus.connecting);
+        id: profile.id,
+        label: profile.label,
+        status: ConnStatus.connecting,
+      );
     case EasyTierConnecting():
       return BridgeConn(
-          id: profile.id, label: profile.label, status: ConnStatus.connecting);
+        id: profile.id,
+        label: profile.label,
+        status: ConnStatus.connecting,
+      );
     case EasyTierForwardSuspended():
       return BridgeConn(
-          id: profile.id, label: profile.label, status: ConnStatus.connecting);
+        id: profile.id,
+        label: profile.label,
+        status: ConnStatus.connecting,
+      );
     case EasyTierReady(:final localPort):
       return BridgeConn(
         id: profile.id,
@@ -179,10 +219,11 @@ BridgeConn _driveAndDerive(Ref ref, RemoteProfile profile) {
       );
     case EasyTierFailed(:final message):
       return BridgeConn(
-          id: profile.id,
-          label: profile.label,
-          status: ConnStatus.failed,
-          error: message);
+        id: profile.id,
+        label: profile.label,
+        status: ConnStatus.failed,
+        error: message,
+      );
   }
 }
 
@@ -202,15 +243,18 @@ class BridgePane {
 /// 聚合排序：statusRank 升序 → 宿主机 label 字典序 → lastActiveAt 新的在前。
 /// 仅取 status == ready 的 bridge 的快照数据。
 List<BridgePane> aggregateBridgePanes(
-    List<BridgeConn> conns, Map<String, SnapshotState> snapshots) {
+  List<BridgeConn> conns,
+  Map<String, SnapshotState> snapshots,
+) {
   final out = <BridgePane>[];
   for (final conn in conns) {
     if (conn.status != ConnStatus.ready) continue;
     final snap = snapshots[conn.id]?.data;
     if (snap == null) continue;
     for (final pane in snap.agents) {
-      out.add(BridgePane(
-          bridgeId: conn.id, bridgeLabel: conn.label, pane: pane));
+      out.add(
+        BridgePane(bridgeId: conn.id, bridgeLabel: conn.label, pane: pane),
+      );
     }
   }
   out.sort((a, b) {

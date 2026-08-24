@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herdrgo/api/bridge_api.dart';
+import 'package:herdrgo/l10n/generated/app_localizations.dart';
 import 'package:herdrgo/model/history.dart';
 import 'package:herdrgo/state/bridges.dart';
 import 'package:herdrgo/ui/history/history_screen.dart';
@@ -56,6 +57,9 @@ Future<void> _pumpHistory(WidgetTester tester, BridgeApi api) async {
         ),
       ],
       child: const MaterialApp(
+        locale: Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: HistoryScreen(bridgeId: 'b1', paneId: 'p1', title: 'agent'),
       ),
     ),
@@ -75,6 +79,9 @@ void main() {
           ),
         ],
         child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: HistoryScreen(bridgeId: 'b1', paneId: 'p1', title: 'agent'),
         ),
       ),

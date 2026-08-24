@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herdrgo/api/bridge_api.dart';
 import 'package:herdrgo/blocks/prompt_select.dart';
+import 'package:herdrgo/l10n/generated/app_localizations.dart';
 import 'package:herdrgo/model/models.dart';
 import 'package:herdrgo/ansi/ansi.dart';
 import 'package:herdrgo/state/bridges.dart';
@@ -47,16 +48,27 @@ class _FakeBridgeApi extends BridgeApi {
   String? capturedSession;
 
   @override
-  Future<PaneRead> readPane(String paneId,
-      {int? lines, String? session}) async {
+  Future<PaneRead> readPane(
+    String paneId, {
+    int? lines,
+    String? session,
+  }) async {
     readPaneCount++;
     return PaneRead(
-        paneId: paneId, text: readPaneText, truncated: false, revision: 1);
+      paneId: paneId,
+      text: readPaneText,
+      truncated: false,
+      revision: 1,
+    );
   }
 
   @override
-  Future<ActionResult> sendKeys(String paneId, List<String> keys,
-      {String? session, String? expectedPrompt}) async {
+  Future<ActionResult> sendKeys(
+    String paneId,
+    List<String> keys, {
+    String? session,
+    String? expectedPrompt,
+  }) async {
     capturedKeys = keys;
     capturedSession = session;
     capturedExpectedPrompt = expectedPrompt;
@@ -93,15 +105,23 @@ Future<void> _pumpSheet(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
         apiProvider.overrideWith(
-            (ref, bridgeId) => bridgeId == 'b1' ? api : null),
+          (ref, bridgeId) => bridgeId == 'b1' ? api : null,
+        ),
       ],
       child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
               child: const Text('open'),
-              onPressed: () => AgentPreviewSheet.show(context,
-                  bridgeId: 'b1', pane: _pane, pinned: pinned),
+              onPressed: () => AgentPreviewSheet.show(
+                context,
+                bridgeId: 'b1',
+                pane: _pane,
+                pinned: pinned,
+              ),
             ),
           ),
         ),
@@ -144,10 +164,10 @@ void main() {
     expect(scrollView.controller, isNotNull);
     final position = scrollView.controller!.position;
     expect(position.maxScrollExtent, greaterThan(0));
-    expect(position.pixels, moreOrLessEquals(
-      position.maxScrollExtent,
-      epsilon: 0.1,
-    ));
+    expect(
+      position.pixels,
+      moreOrLessEquals(position.maxScrollExtent, epsilon: 0.1),
+    );
   });
 
   testWidgets('点选项 → 防护链发键 → 关卡 + 「已发送」', (tester) async {
@@ -171,8 +191,9 @@ void main() {
     expect(find.text('已发送'), findsOneWidget);
   });
 
-  testWidgets('通用动作「继续 (Enter)」→ 盲发 Enter（不带 expectedPrompt）→ 关卡',
-      (tester) async {
+  testWidgets('通用动作「继续 (Enter)」→ 盲发 Enter（不带 expectedPrompt）→ 关卡', (
+    tester,
+  ) async {
     final api = _FakeBridgeApi()..readPaneText = _plainText;
     await _pumpSheet(tester, api);
 

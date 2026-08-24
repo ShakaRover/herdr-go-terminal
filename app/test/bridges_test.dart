@@ -61,34 +61,52 @@ Future<ProviderContainer> buildContainer(
 }) async {
   SharedPreferences.setMockInitialValues(initialValues);
   final prefs = await SharedPreferences.getInstance();
-  final container = ProviderContainer(overrides: [
-    sharedPrefsProvider.overrideWithValue(prefs),
-    easytierChannelProvider.overrideWithValue(channel),
-    bridgeReachabilityProbeProvider.overrideWithValue((_, _) async => true),
-    // bridgesProvider 的 Android 通知副作用会 listen bridgeSnapshotProvider；
-    // 本文件不测通知，发信口 override 成 no-op 避免触碰 method channel。
-    blockedNotifierProvider.overrideWithValue(_NoopBlockedNotifier()),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+      easytierChannelProvider.overrideWithValue(channel),
+      bridgeReachabilityProbeProvider.overrideWithValue((_, _) async => true),
+      // bridgesProvider 的 Android 通知副作用会 listen bridgeSnapshotProvider；
+      // 本文件不测通知，发信口 override 成 no-op 避免触碰 method channel。
+      blockedNotifierProvider.overrideWithValue(_NoopBlockedNotifier()),
+    ],
+  );
   addTearDown(container.dispose);
   return container;
 }
 
 class _NoopBlockedNotifier implements BlockedNotifier {
   @override
-  Future<void> show(String bridgeId, String paneId, String label, String title,
-          String body) async {}
+  Future<void> show(
+    String bridgeId,
+    String paneId,
+    String label,
+    String title,
+    String body,
+    String channelName,
+    String channelDescription,
+  ) async {}
 }
 
 /// 一次 blocked 通知调用的记录。
 class NotifyCall {
-  const NotifyCall(this.bridgeId, this.paneId, this.label, this.title,
-      this.body);
+  const NotifyCall(
+    this.bridgeId,
+    this.paneId,
+    this.label,
+    this.title,
+    this.body,
+    this.channelName,
+    this.channelDescription,
+  );
 
   final String bridgeId;
   final String paneId;
   final String label;
   final String title;
   final String body;
+  final String channelName;
+  final String channelDescription;
 }
 
 /// 记录调用的 BlockedNotifier（通知路径测试用）。
@@ -96,9 +114,26 @@ class RecordingBlockedNotifier implements BlockedNotifier {
   final calls = <NotifyCall>[];
 
   @override
-  Future<void> show(String bridgeId, String paneId, String label,
-      String title, String body) async {
-    calls.add(NotifyCall(bridgeId, paneId, label, title, body));
+  Future<void> show(
+    String bridgeId,
+    String paneId,
+    String label,
+    String title,
+    String body,
+    String channelName,
+    String channelDescription,
+  ) async {
+    calls.add(
+      NotifyCall(
+        bridgeId,
+        paneId,
+        label,
+        title,
+        body,
+        channelName,
+        channelDescription,
+      ),
+    );
   }
 }
 
@@ -152,7 +187,11 @@ void main() {
       await container.read(profileStoreProvider).add(profileA);
       await container.read(enabledProfilesProvider.notifier).reload();
 
-      final ready = waitConn(container, 'pa', (c) => c.status == ConnStatus.ready);
+      final ready = waitConn(
+        container,
+        'pa',
+        (c) => c.status == ConnStatus.ready,
+      );
       await keepAliveBridges(container);
 
       // 初态 connecting（api 为 null）。
@@ -169,8 +208,10 @@ void main() {
       expect(conn.api, isNotNull);
       // localPort 是 runtime 真实抢占的回环端口，与 fake 记录的 bind 一致。
       expect(conn.api!.baseUrl, 'http://127.0.0.1:${channel.lastBindPort}');
-      expect(container.read(apiProvider('pa'))!.baseUrl,
-          'http://127.0.0.1:${channel.lastBindPort}');
+      expect(
+        container.read(apiProvider('pa'))!.baseUrl,
+        'http://127.0.0.1:${channel.lastBindPort}',
+      );
       // 生命周期由 bridgesProvider 驱动：channel 确实 startInstance。
       expect(channel.calls, contains('startInstance'));
       expect(channel.startedConfigs, hasLength(1));
@@ -190,7 +231,11 @@ void main() {
       expect(channel.calls, isEmpty);
 
       // 重新 enable → connect 被驱动。
-      final ready = waitConn(container, 'pa', (c) => c.status == ConnStatus.ready);
+      final ready = waitConn(
+        container,
+        'pa',
+        (c) => c.status == ConnStatus.ready,
+      );
       await store.setEnabled('pa', true);
       await container.read(enabledProfilesProvider.notifier).reload();
       await ready;
@@ -210,21 +255,29 @@ void main() {
       await Future.wait([ra, rb]);
 
       final conns = container.read(bridgesProvider);
-      expect(conns.map((c) => (c.id, c.label)),
-          [('pa', 'alpha'), ('pb', 'beta')]);
+      expect(conns.map((c) => (c.id, c.label)), [
+        ('pa', 'alpha'),
+        ('pb', 'beta'),
+      ]);
       expect(conns.every((c) => c.status == ConnStatus.ready), isTrue);
       expect(channel.startedConfigs, hasLength(2));
     });
 
     test('EasyTier Failed → conn failed 带 message，api 为 null', () async {
       final channel = FakeEasyTierChannel()
-        ..startInstanceError =
-            PlatformException(code: 'easytier', message: 'boom');
+        ..startInstanceError = PlatformException(
+          code: 'easytier',
+          message: 'boom',
+        );
       final container = await buildContainer(channel);
       await container.read(profileStoreProvider).add(profileA);
       await container.read(enabledProfilesProvider.notifier).reload();
 
-      final failed = waitConn(container, 'pa', (c) => c.status == ConnStatus.failed);
+      final failed = waitConn(
+        container,
+        'pa',
+        (c) => c.status == ConnStatus.failed,
+      );
       await keepAliveBridges(container);
       final conn = await failed;
 
@@ -261,21 +314,22 @@ void main() {
           lastActiveAt: lastActiveAt,
         );
 
-    BridgeConn conn(String id, String label, ConnStatus status) => BridgeConn(
-        id: id, label: label, status: status, api: null);
+    BridgeConn conn(String id, String label, ConnStatus status) =>
+        BridgeConn(id: id, label: label, status: status, api: null);
 
     SnapshotState snap(List<PaneInfo> agents) => SnapshotState(
-        data: Snapshot(
-            bridgeConnected: true,
-            agents: agents,
-            shellPanes: const [],
-            workspaces: const [],
-            tabs: const [],
-            sessions: const [],
-            ts: 1));
+      data: Snapshot(
+        bridgeConnected: true,
+        agents: agents,
+        shellPanes: const [],
+        workspaces: const [],
+        tabs: const [],
+        sessions: const [],
+        ts: 1,
+      ),
+    );
 
-    test('blocked 在前；同状态按宿主机 label 字典序、再按 lastActiveAt 新的在前',
-        () {
+    test('blocked 在前；同状态按宿主机 label 字典序、再按 lastActiveAt 新的在前', () {
       final conns = [
         conn('b1', 'zeta', ConnStatus.ready),
         conn('b2', 'alpha', ConnStatus.ready),
@@ -297,8 +351,7 @@ void main() {
       expect(got.first.bridgeLabel, 'zeta');
     });
 
-    test('failed/connecting 的 bridge 不参与聚合；无快照的 ready bridge 跳过',
-        () {
+    test('failed/connecting 的 bridge 不参与聚合；无快照的 ready bridge 跳过', () {
       final conns = [
         conn('ok', 'ok', ConnStatus.ready),
         conn('fail', 'fail', ConnStatus.failed),
@@ -361,13 +414,16 @@ void main() {
     }) async {
       SharedPreferences.setMockInitialValues(initialValues);
       final prefs = await SharedPreferences.getInstance();
-      final container = ProviderContainer(overrides: [
-        sharedPrefsProvider.overrideWithValue(prefs),
-        easytierChannelProvider.overrideWithValue(FakeEasyTierChannel()),
-        blockedNotifierProvider.overrideWithValue(notifier),
-        apiProvider.overrideWith(
-            (ref, bridgeId) => bridgeId == 'pa' ? api : null),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          easytierChannelProvider.overrideWithValue(FakeEasyTierChannel()),
+          blockedNotifierProvider.overrideWithValue(notifier),
+          apiProvider.overrideWith(
+            (ref, bridgeId) => bridgeId == 'pa' ? api : null,
+          ),
+        ],
+      );
       addTearDown(container.dispose);
       await container.read(profileStoreProvider).add(profileA);
       await container.read(enabledProfilesProvider.notifier).reload();
@@ -397,15 +453,17 @@ void main() {
     }
 
     int heartbeatMs(ProviderContainer container) =>
-        container.read(sharedPrefsProvider).getInt(foregroundHeartbeatKey) ??
-        0;
+        container.read(sharedPrefsProvider).getInt(foregroundHeartbeatKey) ?? 0;
 
     test('前台心跳新鲜：新 blocked 被抑制，心跳被续写', () async {
       final now = DateTime.now().millisecondsSinceEpoch;
       final api = FakeBridgeApi('claude')..scriptedAgents = [paneWorking];
       final notifier = RecordingBlockedNotifier();
-      final container = await buildNotifyContainer(api, notifier,
-          initialValues: {foregroundHeartbeatKey: now});
+      final container = await buildNotifyContainer(
+        api,
+        notifier,
+        initialValues: {foregroundHeartbeatKey: now},
+      );
       final first = waitSnapshotWhere(container, 'pa', (s) => s.data != null);
       await keepAliveBridges(container);
       await first;
@@ -417,29 +475,35 @@ void main() {
       // 新快照出现 blocked pane：心跳新鲜 → 抑制（不发通知、不写 seen）。
       api.scriptedAgents = [paneBlocked];
       await waitSnapshotWhere(
-          container,
-          'pa',
-          (s) =>
-              s.data?.agents.any((p) => p.status == AgentStatus.blocked) ??
-              false);
+        container,
+        'pa',
+        (s) =>
+            s.data?.agents.any((p) => p.status == AgentStatus.blocked) ?? false,
+      );
       await pumpEventQueue();
       expect(notifier.calls, isEmpty);
       expect(readSeen(container.read(sharedPrefsProvider)), isEmpty);
       // 心跳仍新鲜（被续写）。
-      final age = DateTime.now().millisecondsSinceEpoch -
-          heartbeatMs(container);
+      final age =
+          DateTime.now().millisecondsSinceEpoch - heartbeatMs(container);
       expect(age, lessThan(foregroundFreshWindow.inMilliseconds));
     });
 
-    test('心跳过期 + 新快照 → 发通知并写 seen；同数据后续快照不重复',
-        () async {
-      final stale = DateTime.now().millisecondsSinceEpoch -
+    test('心跳过期 + 新快照 → 发通知并写 seen；同数据后续快照不重复', () async {
+      final stale =
+          DateTime.now().millisecondsSinceEpoch -
           foregroundFreshWindow.inMilliseconds -
           10000;
       final api = FakeBridgeApi('claude')..scriptedAgents = [paneBlocked];
       final notifier = RecordingBlockedNotifier();
-      final container = await buildNotifyContainer(api, notifier,
-          initialValues: {foregroundHeartbeatKey: stale});
+      final container = await buildNotifyContainer(
+        api,
+        notifier,
+        initialValues: {
+          foregroundHeartbeatKey: stale,
+          appLocalePreferenceKey: AppLocalePreference.english.name,
+        },
+      );
       final first = waitSnapshotWhere(container, 'pa', (s) => s.data != null);
       await keepAliveBridges(container);
       await first;
@@ -448,20 +512,26 @@ void main() {
       expect(notifier.calls.single.bridgeId, 'pa');
       expect(notifier.calls.single.paneId, 'w1');
       expect(notifier.calls.single.label, 'alpha');
-      await until(() =>
-          readSeen(container.read(sharedPrefsProvider))
-              .containsKey('pa:w1'));
+      expect(notifier.calls.single.title, 'claude needs your attention');
+      expect(notifier.calls.single.channelName, 'Agent attention');
+      expect(
+        notifier.calls.single.channelDescription,
+        'Notifies you when an agent stops and waits for your reply',
+      );
+      await until(
+        () =>
+            readSeen(container.read(sharedPrefsProvider)).containsKey('pa:w1'),
+      );
 
       // 同数据继续轮询：seen 已记 + 前台心跳已续写，不重复通知。
       await until(() => api.getSnapshotCount >= 4);
       expect(notifier.calls, hasLength(1));
-      final age = DateTime.now().millisecondsSinceEpoch -
-          heartbeatMs(container);
+      final age =
+          DateTime.now().millisecondsSinceEpoch - heartbeatMs(container);
       expect(age, lessThan(foregroundFreshWindow.inMilliseconds));
     });
 
-    test('退后台：轮询暂停、心跳停写；心跳过期后回前台 → 新 blocked 补发通知',
-        () async {
+    test('退后台：轮询暂停、心跳停写；心跳过期后回前台 → 新 blocked 补发通知', () async {
       final api = FakeBridgeApi('claude')..scriptedAgents = [paneWorking];
       final notifier = RecordingBlockedNotifier();
       final container = await buildNotifyContainer(api, notifier);
@@ -486,7 +556,8 @@ void main() {
       expect(heartbeatMs(container), hb1, reason: '退后台后心跳停写');
 
       // 60s+ 过去（心跳过期），期间出现 blocked。
-      final stale = DateTime.now().millisecondsSinceEpoch -
+      final stale =
+          DateTime.now().millisecondsSinceEpoch -
           foregroundFreshWindow.inMilliseconds -
           10000;
       await container
@@ -499,9 +570,10 @@ void main() {
       container.read(bridgeSnapshotProvider('pa').notifier).setPaused(false);
       await until(() => notifier.calls.isNotEmpty);
       expect(notifier.calls.single.paneId, 'w1');
-      await until(() =>
-          readSeen(container.read(sharedPrefsProvider))
-              .containsKey('pa:w1'));
+      await until(
+        () =>
+            readSeen(container.read(sharedPrefsProvider)).containsKey('pa:w1'),
+      );
       // 前台续写心跳已被「心跳过期 + 新快照」用例覆盖；这里节流器 _last 仍是
       // 测试开头的时间（<15s），stamp 会被节流逝过，不断言心跳值。
     });

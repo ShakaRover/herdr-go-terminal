@@ -13,9 +13,11 @@
 library;
 
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:dio/dio.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../model/history.dart';
 import '../model/models.dart';
 
@@ -35,22 +37,24 @@ class ApiException implements Exception {
 /// POST reply/keys/upload 的结果。对齐 bridge 的 JSON 错误信封。
 class ActionResult {
   const ActionResult.ok()
-      : success = true,
-        error = null,
-        textDelivered = false,
-        promptChanged = false,
-        path = null;
+    : success = true,
+      error = null,
+      textDelivered = false,
+      promptChanged = false,
+      path = null;
 
-  const ActionResult.failure(this.error,
-      {this.textDelivered = false, this.promptChanged = false})
-      : success = false,
-        path = null;
+  const ActionResult.failure(
+    this.error, {
+    this.textDelivered = false,
+    this.promptChanged = false,
+  }) : success = false,
+       path = null;
 
   const ActionResult.uploaded(this.path)
-      : success = true,
-        error = null,
-        textDelivered = false,
-        promptChanged = false;
+    : success = true,
+      error = null,
+      textDelivered = false,
+      promptChanged = false;
 
   final bool success;
   final String? error;
@@ -66,19 +70,27 @@ class ActionResult {
 }
 
 class BridgeApi {
-  BridgeApi({required String baseUrl, Map<String, String> headers = const {}})
-      : _dio = Dio(BaseOptions(
-          baseUrl: _normalizeBaseUrl(baseUrl),
-          headers: {
-            'x-requested-with': 'XMLHttpRequest',
-            'Origin': _originOf(baseUrl),
-            ...headers,
-          },
-          connectTimeout: const Duration(seconds: 2),
-          receiveTimeout: const Duration(seconds: 20),
-        ));
+  BridgeApi({
+    required String baseUrl,
+    Map<String, String> headers = const {},
+    AppLocalizations? localizations,
+  }) : _localizations =
+           localizations ?? lookupAppLocalizations(const Locale('en')),
+       _dio = Dio(
+         BaseOptions(
+           baseUrl: _normalizeBaseUrl(baseUrl),
+           headers: {
+             'x-requested-with': 'XMLHttpRequest',
+             'Origin': _originOf(baseUrl),
+             ...headers,
+           },
+           connectTimeout: const Duration(seconds: 2),
+           receiveTimeout: const Duration(seconds: 20),
+         ),
+       );
 
   final Dio _dio;
+  final AppLocalizations _localizations;
 
   /// 归一化后的 baseUrl（诊断与测试用）。
   String get baseUrl => _dio.options.baseUrl;
@@ -115,10 +127,7 @@ class BridgeApi {
     } else if (data is String && data.isNotEmpty) {
       serverMsg = data;
     }
-    return ApiException(
-      serverMsg ?? _transportReason(e),
-      statusCode: status,
-    );
+    return ApiException(serverMsg ?? _transportReason(e), statusCode: status);
   }
 
   static void _logTransportFailure(DioException e) {
@@ -134,29 +143,31 @@ class BridgeApi {
         'OSError(message=${inner.message}, errno=${inner.errorCode})',
       _ => '${inner ?? e.message}',
     };
-    stderr.writeln('[bridge-api] transport failure '
-        'method=${e.requestOptions.method} uri=${e.requestOptions.uri} '
-        'type=${e.type.name} error=$detail');
+    stderr.writeln(
+      '[bridge-api] transport failure '
+      'method=${e.requestOptions.method} uri=${e.requestOptions.uri} '
+      'type=${e.type.name} error=$detail',
+    );
   }
 
   /// 无响应 body 的传输层错误映射为简短原因，避免把 dio 冗长的英文
   /// 库文案（"The connection errored: ..."）直接露在横幅/toast 里。
-  static String _transportReason(DioException e) => switch (e.type) {
-        DioExceptionType.connectionError => '网络不可达',
-        DioExceptionType.connectionTimeout => '连接超时',
-        DioExceptionType.sendTimeout => '发送超时',
-        DioExceptionType.receiveTimeout => '响应超时',
-        DioExceptionType.transformTimeout => '传输超时',
-        DioExceptionType.badCertificate => 'TLS 证书校验失败',
-        DioExceptionType.badResponse => '服务器错误',
-        DioExceptionType.cancel => '请求已取消',
-        DioExceptionType.unknown => e.message ?? '网络错误',
-      };
+  String _transportReason(DioException e) => switch (e.type) {
+    DioExceptionType.connectionError => _localizations.networkUnreachable,
+    DioExceptionType.connectionTimeout => _localizations.connectionTimeout,
+    DioExceptionType.sendTimeout => _localizations.sendTimeout,
+    DioExceptionType.receiveTimeout => _localizations.responseTimeout,
+    DioExceptionType.transformTimeout => _localizations.transferTimeout,
+    DioExceptionType.badCertificate => _localizations.badCertificate,
+    DioExceptionType.badResponse => _localizations.serverError,
+    DioExceptionType.cancel => _localizations.requestCancelled,
+    DioExceptionType.unknown => e.message ?? _localizations.networkError,
+  };
 
   Map<String, dynamic> _queryWithSession(String? session) =>
       session == null || session.trim().isEmpty
-          ? const {}
-          : {'session': session.trim()};
+      ? const {}
+      : {'session': session.trim()};
 
   // -------------------------------------------------------------------------
   // 只读端点
@@ -164,20 +175,27 @@ class BridgeApi {
 
   Future<BridgeConfig> getConfig() async {
     try {
-      final res = await _dio.get('/api/v1/config',
-          options: Options(receiveTimeout: _getTimeout));
+      final res = await _dio.get(
+        '/api/v1/config',
+        options: Options(receiveTimeout: _getTimeout),
+      );
       return BridgeConfig.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _wrap(e);
     }
   }
 
-  Future<Snapshot> getSnapshot({String? session, CancelToken? cancelToken}) async {
+  Future<Snapshot> getSnapshot({
+    String? session,
+    CancelToken? cancelToken,
+  }) async {
     try {
-      final res = await _dio.get('/api/v1/snapshot',
-          queryParameters: _queryWithSession(session),
-          cancelToken: cancelToken,
-          options: Options(receiveTimeout: _getTimeout));
+      final res = await _dio.get(
+        '/api/v1/snapshot',
+        queryParameters: _queryWithSession(session),
+        cancelToken: cancelToken,
+        options: Options(receiveTimeout: _getTimeout),
+      );
       return Snapshot.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _wrap(e);
@@ -185,17 +203,17 @@ class BridgeApi {
   }
 
   /// 读取 pane 近期输出。命中 304 时返回缓存 body（[PaneRead.notModified] = true）。
-  Future<PaneRead> readPane(String paneId,
-      {int? lines, String? session}) async {
+  Future<PaneRead> readPane(
+    String paneId, {
+    int? lines,
+    String? session,
+  }) async {
     final cacheKey = '${session ?? ''} $paneId';
     final cached = _paneCache[cacheKey];
     try {
       final res = await _dio.get(
         '/api/v1/pane/$paneId',
-        queryParameters: {
-          ..._queryWithSession(session),
-          'lines': ?lines,
-        },
+        queryParameters: {..._queryWithSession(session), 'lines': ?lines},
         options: Options(
           receiveTimeout: _getTimeout,
           headers: {
@@ -224,8 +242,12 @@ class BridgeApi {
   }
 
   /// 翻页读取对话历史：不给 before = 最新一页；before = 某条的 uuid 继续向更早翻。
-  Future<PaneHistory> fetchHistory(String paneId,
-      {int? limit, String? before, String? session}) async {
+  Future<PaneHistory> fetchHistory(
+    String paneId, {
+    int? limit,
+    String? before,
+    String? session,
+  }) async {
     try {
       final res = await _dio.get(
         '/api/v1/pane/$paneId/history',
@@ -253,11 +275,16 @@ class BridgeApi {
   ActionResult _actionFrom(Response<dynamic> res) {
     final data = res.data;
     if (data is! Map<String, dynamic>) {
-      throw ApiException('响应不是 JSON 对象', statusCode: res.statusCode);
+      throw ApiException(
+        _localizations.invalidJsonResponse,
+        statusCode: res.statusCode,
+      );
     }
     if (data['ok'] == true) return const ActionResult.ok();
     return ActionResult.failure(
-      data['error'] is String ? data['error'] as String : '未知错误',
+      data['error'] is String
+          ? data['error'] as String
+          : _localizations.unknownError,
     );
   }
 
@@ -265,12 +292,18 @@ class BridgeApi {
   /// DioException 中恢复——409/prompt_changed 是正常拒绝（屏幕已变），
   /// text_delivered 表示文本已写入终端（不可重发），两者转成 ActionResult
   /// 返回而不抛异常，其余（含 502/404 的其它 code）照常抛出。
-  Future<ActionResult> _postAction(String path, Object? body,
-      {String? session}) async {
+  Future<ActionResult> _postAction(
+    String path,
+    Object? body, {
+    String? session,
+  }) async {
     try {
-      final res = await _dio.post(path,
-          data: body, queryParameters: _queryWithSession(session),
-          options: Options(receiveTimeout: _mutationTimeout));
+      final res = await _dio.post(
+        path,
+        data: body,
+        queryParameters: _queryWithSession(session),
+        options: Options(receiveTimeout: _mutationTimeout),
+      );
       return _actionFrom(res);
     } on DioException catch (e) {
       final status = e.response?.statusCode;
@@ -278,11 +311,15 @@ class BridgeApi {
       if (data is Map<String, dynamic>) {
         if (status == 409 || data['code'] == 'prompt_changed') {
           return ActionResult.failure(
-              data['error'] as String? ?? 'prompt changed', promptChanged: true);
+            data['error'] as String? ?? 'prompt changed',
+            promptChanged: true,
+          );
         }
         if (data['code'] == 'text_delivered') {
           return ActionResult.failure(
-              data['error'] as String? ?? '发送失败', textDelivered: true);
+            data['error'] as String? ?? _localizations.sendFailedShort,
+            textDelivered: true,
+          );
         }
       }
       throw _wrap(e);
@@ -297,12 +334,11 @@ class BridgeApi {
     bool submit = true,
     String? session,
     String? expectedPrompt,
-  }) =>
-      _postAction('/api/v1/pane/$paneId/reply', {
-        'text': text,
-        'submit': submit,
-        'expectedPrompt': ?expectedPrompt,
-      }, session: session);
+  }) => _postAction('/api/v1/pane/$paneId/reply', {
+    'text': text,
+    'submit': submit,
+    'expectedPrompt': ?expectedPrompt,
+  }, session: session);
 
   /// 发送特殊按键（esc / ctrl+c / up / down / tab / shift+tab ...）。
   Future<ActionResult> sendKeys(
@@ -310,29 +346,36 @@ class BridgeApi {
     List<String> keys, {
     String? session,
     String? expectedPrompt,
-  }) =>
-      _postAction('/api/v1/pane/$paneId/keys', {
-        'keys': keys,
-        'expectedPrompt': ?expectedPrompt,
-      }, session: session);
+  }) => _postAction('/api/v1/pane/$paneId/keys', {
+    'keys': keys,
+    'expectedPrompt': ?expectedPrompt,
+  }, session: session);
 
   Future<ActionResult> closePane(String paneId, {String? session}) =>
       _postAction('/api/v1/pane/$paneId/close', null, session: session);
 
   /// 设置 pane 标签；空白标签 = 清除。
-  Future<ActionResult> renamePane(String paneId, String label,
-          {String? session}) =>
-      _postAction('/api/v1/pane/$paneId/rename', {'label': label},
-          session: session);
+  Future<ActionResult> renamePane(
+    String paneId,
+    String label, {
+    String? session,
+  }) => _postAction('/api/v1/pane/$paneId/rename', {
+    'label': label,
+  }, session: session);
 
   /// 上传图片，返回宿主机路径供回复中引用。
   /// 413/415/400（超限/类型/坏请求）转成 failure 供 UI 提示，其余抛异常。
-  Future<ActionResult> uploadImage(String paneId, String filePath,
-      {String? session}) async {
+  Future<ActionResult> uploadImage(
+    String paneId,
+    String filePath, {
+    String? session,
+  }) async {
     try {
       final res = await _dio.post(
         '/api/v1/pane/$paneId/upload',
-        data: FormData.fromMap({'file': await MultipartFile.fromFile(filePath)}),
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(filePath),
+        }),
         queryParameters: _queryWithSession(session),
         options: Options(
           receiveTimeout: _uploadTimeout,
@@ -341,13 +384,19 @@ class BridgeApi {
       );
       final data = res.data;
       if (data is! Map<String, dynamic>) {
-        throw ApiException('响应不是 JSON 对象', statusCode: res.statusCode);
+        throw ApiException(
+          _localizations.invalidJsonResponse,
+          statusCode: res.statusCode,
+        );
       }
       if (data['ok'] == true && data['path'] is String) {
         return ActionResult.uploaded(data['path'] as String);
       }
       return ActionResult.failure(
-          data['error'] is String ? data['error'] as String : '上传失败');
+        data['error'] is String
+            ? data['error'] as String
+            : _localizations.uploadFailedShort,
+      );
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (status == 400 || status == 413 || status == 415) {
@@ -355,7 +404,7 @@ class BridgeApi {
         return ActionResult.failure(
           data is Map<String, dynamic> && data['error'] is String
               ? data['error'] as String
-              : '上传失败',
+              : _localizations.uploadFailedShort,
         );
       }
       throw _wrap(e);

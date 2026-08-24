@@ -1,0 +1,432 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class AppLocalizationsEn extends AppLocalizations {
+  AppLocalizationsEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get appName => 'HerdrGo';
+
+  @override
+  String get allBridges => 'All';
+
+  @override
+  String get settingsTooltip => 'Settings';
+
+  @override
+  String get switchSessionTooltip => 'Switch session';
+
+  @override
+  String get defaultSession => 'Default';
+
+  @override
+  String sessionSummary(String name, int blocked, int working) {
+    return '$name ($blocked waiting / $working working)';
+  }
+
+  @override
+  String connectionsInterrupted(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count connections interrupted',
+      one: '1 connection interrupted',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get easyTierConnecting => 'Connecting to the EasyTier network…';
+
+  @override
+  String easyTierFailed(String error) {
+    return 'EasyTier connection failed ($error)';
+  }
+
+  @override
+  String virtualIpTimeout(int seconds) {
+    return 'Timed out waiting for a virtual IP (${seconds}s)';
+  }
+
+  @override
+  String get networkUnreachable => 'Network unreachable';
+
+  @override
+  String get connectionTimeout => 'Connection timed out';
+
+  @override
+  String get sendTimeout => 'Send timed out';
+
+  @override
+  String get responseTimeout => 'Response timed out';
+
+  @override
+  String get transferTimeout => 'Transfer timed out';
+
+  @override
+  String get badCertificate => 'TLS certificate validation failed';
+
+  @override
+  String get serverError => 'Server error';
+
+  @override
+  String get requestCancelled => 'Request cancelled';
+
+  @override
+  String get networkError => 'Network error';
+
+  @override
+  String get invalidJsonResponse => 'Response is not a JSON object';
+
+  @override
+  String connectionInterrupted(String error) {
+    return 'Connection interrupted. Showing the last data ($error)';
+  }
+
+  @override
+  String get herdrOffline =>
+      'Herdr is offline (the bridge cannot reach the Herdr server)';
+
+  @override
+  String get readOnlyMode =>
+      'This device is not authorized to write (read-only mode)';
+
+  @override
+  String get bridgeConnecting => 'Connecting to the bridge…';
+
+  @override
+  String get noAgents =>
+      'No agents detected\nStart one in Herdr on your computer and it will appear here.';
+
+  @override
+  String get sectionPinned => 'Pinned';
+
+  @override
+  String get sectionNeedsAttention => 'Needs your attention';
+
+  @override
+  String get sectionWorking => 'Working';
+
+  @override
+  String get sectionOther => 'Other';
+
+  @override
+  String get statusBlocked => 'Waiting';
+
+  @override
+  String get statusWorking => 'Working';
+
+  @override
+  String get statusDone => 'Done';
+
+  @override
+  String get statusIdle => 'Idle';
+
+  @override
+  String get statusUnknown => 'Unknown';
+
+  @override
+  String get relativeJustNow => 'Just now';
+
+  @override
+  String relativeMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count minutes ago',
+      one: '1 minute ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relativeHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hours ago',
+      one: '1 hour ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String relativeDaysAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count days ago',
+      one: '1 day ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pendingDialogTitle => 'A dialog is waiting on screen';
+
+  @override
+  String get pendingDialogBody =>
+      'Sending Enter directly may select the highlighted option. You can continue if you intend to answer its free-text option.';
+
+  @override
+  String get commonCancel => 'Cancel';
+
+  @override
+  String get sendAnyway => 'Send anyway';
+
+  @override
+  String get unknownError => 'Unknown error';
+
+  @override
+  String get sent => 'Sent';
+
+  @override
+  String get screenChangedRetry =>
+      'The screen changed. Check the latest output and try again.';
+
+  @override
+  String get screenChangedShort => 'The screen changed. Try again.';
+
+  @override
+  String get screenChangedOpenDetails =>
+      'The screen changed. Open details to confirm.';
+
+  @override
+  String get textDeliveredWarning =>
+      'Text was entered, but Enter did not take effect. Do not resend it before checking the output.';
+
+  @override
+  String sendFailed(String error) {
+    return 'Send failed: $error';
+  }
+
+  @override
+  String keyFailed(String error) {
+    return 'Key failed: $error';
+  }
+
+  @override
+  String get imageUploaded =>
+      'Image uploaded and its path was added to the reply.';
+
+  @override
+  String uploadFailed(String error) {
+    return 'Upload failed: $error';
+  }
+
+  @override
+  String get uploadFailedShort => 'Upload failed';
+
+  @override
+  String get sendFailedShort => 'Send failed';
+
+  @override
+  String get aliasCleared => 'Alias cleared';
+
+  @override
+  String get renamed => 'Renamed';
+
+  @override
+  String renameFailed(String error) {
+    return 'Rename failed: $error';
+  }
+
+  @override
+  String get renameFailedShort => 'Rename failed';
+
+  @override
+  String get refreshTooltip => 'Refresh';
+
+  @override
+  String get renameTooltip => 'Rename';
+
+  @override
+  String get historyTooltip => 'History';
+
+  @override
+  String outputRefreshFailed(String error) {
+    return 'Output refresh failed. Showing old data ($error)';
+  }
+
+  @override
+  String get readingOutput => 'Reading output…';
+
+  @override
+  String get sendImageTooltip => 'Send image';
+
+  @override
+  String get replyHint => 'Reply to agent…';
+
+  @override
+  String get renameAgentTitle => 'Rename agent';
+
+  @override
+  String get renameAgentHelper =>
+      'Leave empty to clear the alias and restore the default name';
+
+  @override
+  String get commonConfirm => 'Confirm';
+
+  @override
+  String get continueEnter => 'Continue (Enter)';
+
+  @override
+  String get bridgeNotConfigured => 'Bridge connection is not configured';
+
+  @override
+  String get unpinned => 'Unpinned';
+
+  @override
+  String get pinned => 'Pinned';
+
+  @override
+  String get unpinTooltip => 'Unpin';
+
+  @override
+  String get pinTooltip => 'Pin';
+
+  @override
+  String get readOnlyCannotRename => 'Cannot rename in read-only mode';
+
+  @override
+  String get openDetails => 'Open details';
+
+  @override
+  String readFailed(String error) {
+    return 'Read failed: $error';
+  }
+
+  @override
+  String historyTitle(String title) {
+    return 'History · $title';
+  }
+
+  @override
+  String get historyDisabled =>
+      'History is disabled on the bridge (COLLIE_TRANSCRIPT)';
+
+  @override
+  String get historyNoSession => 'This agent has no session log';
+
+  @override
+  String get historyNoLog => 'The log file for this session was not found';
+
+  @override
+  String historyUnavailable(String reason) {
+    return 'History unavailable: $reason';
+  }
+
+  @override
+  String loadFailed(String error) {
+    return 'Load failed: $error';
+  }
+
+  @override
+  String get historyTruncated =>
+      'The log is too large; only the tail was parsed';
+
+  @override
+  String get loading => 'Loading…';
+
+  @override
+  String get loadOlder => 'Load earlier';
+
+  @override
+  String get roleYou => 'You';
+
+  @override
+  String get roleAgent => 'Agent';
+
+  @override
+  String get roleSummary => 'Summary';
+
+  @override
+  String get roleSystem => 'System';
+
+  @override
+  String get connectionSettings => 'Connection settings';
+
+  @override
+  String get remoteBridge => 'Remote bridges (scan to pair)';
+
+  @override
+  String get scanToAdd => 'Scan to add';
+
+  @override
+  String get notPaired =>
+      'No bridge is paired yet. Scan the pairing QR code printed when herdrgo-bridge starts to connect through the EasyTier virtual network.';
+
+  @override
+  String get deviceAlias => 'Device alias';
+
+  @override
+  String get displayNameHint => 'Display name';
+
+  @override
+  String get commonDelete => 'Delete';
+
+  @override
+  String get deleteConfigTitle => 'Delete configuration';
+
+  @override
+  String deleteConfigBody(String label, String ip) {
+    return 'Delete “$label” ($ip)?';
+  }
+
+  @override
+  String profileAdded(String label) {
+    return 'Added: $label';
+  }
+
+  @override
+  String get editAliasTooltip => 'Edit alias';
+
+  @override
+  String get deleteTooltip => 'Delete';
+
+  @override
+  String get bridgeEnableHelp =>
+      'Use each switch to control whether that bridge connects. Enable multiple bridges for multi-host mode.';
+
+  @override
+  String get language => 'Language';
+
+  @override
+  String get systemLanguage => 'System default';
+
+  @override
+  String get simplifiedChinese => '简体中文';
+
+  @override
+  String get english => 'English';
+
+  @override
+  String get scanPairingTitle => 'Scan pairing QR code';
+
+  @override
+  String get scanPairingHelp =>
+      'Point the camera at the pairing QR code printed when the bridge starts.';
+
+  @override
+  String get toggleFlashTooltip => 'Toggle flashlight';
+
+  @override
+  String get switchCameraTooltip => 'Switch camera';
+
+  @override
+  String blockedNotificationTitle(String name) {
+    return '$name needs your attention';
+  }
+
+  @override
+  String get blockedNotificationChannel => 'Agent attention';
+
+  @override
+  String get blockedNotificationChannelDescription =>
+      'Notifies you when an agent stops and waits for your reply';
+}

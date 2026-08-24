@@ -11,6 +11,7 @@ import '../../api/bridge_api.dart';
 import '../../blocks/prompt_action.dart';
 import '../../blocks/prompt_model.dart';
 import '../../blocks/prompt_select.dart';
+import '../../l10n/l10n.dart';
 import '../../model/models.dart';
 import '../../state/bridges.dart';
 import '../../state/pinned.dart';
@@ -23,11 +24,12 @@ import '../status_style.dart';
 /// 长按弹出的预览卡：最近一屏 ANSI + 状态 + 上下文按钮/通用动作 + pin +
 /// 打开详情。
 class AgentPreviewSheet extends ConsumerStatefulWidget {
-  const AgentPreviewSheet(
-      {super.key,
-      required this.bridgeId,
-      required this.pane,
-      required this.pinned});
+  const AgentPreviewSheet({
+    super.key,
+    required this.bridgeId,
+    required this.pane,
+    required this.pinned,
+  });
 
   final String bridgeId;
   final PaneInfo pane;
@@ -41,14 +43,13 @@ class AgentPreviewSheet extends ConsumerStatefulWidget {
     required String bridgeId,
     required PaneInfo pane,
     required bool pinned,
-  }) =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) =>
-            AgentPreviewSheet(bridgeId: bridgeId, pane: pane, pinned: pinned),
-      );
+  }) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) =>
+        AgentPreviewSheet(bridgeId: bridgeId, pane: pane, pinned: pinned),
+  );
 
   @override
   ConsumerState<AgentPreviewSheet> createState() => _AgentPreviewSheetState();
@@ -59,22 +60,18 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
   Future<List<StyledLine>>? _future;
   final _scrollController = ScrollController();
   bool _scrollPending = false;
+  bool _initialized = false;
 
   /// 识别出的对话框（null = 未识别 → 通用动作行）。
   PromptModel? _model;
 
   bool _busy = false;
 
-  static const _genericActions = [
-    (label: '继续 (Enter)', keys: ['Enter']),
-    (label: 'Ctrl+C', keys: ['ctrl+c']),
-    (label: '↑', keys: ['Up']),
-    (label: '↓', keys: ['Down']),
-  ];
-
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _reload();
   }
 
@@ -94,15 +91,16 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
   }
 
   void _reload() {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     final session = ref.read(sessionFilterProvider(widget.bridgeId));
     setState(() {
       _scrollPending = true;
       _future = api == null
-          ? Future.error(const ApiException('未配置 bridge 连接'))
-          : api
-              .readPane(widget.pane.paneId, lines: 30, session: session)
-              .then((read) {
+          ? Future.error(ApiException(l10n.bridgeNotConfigured))
+          : api.readPane(widget.pane.paneId, lines: 30, session: session).then((
+              read,
+            ) {
               final lines = splitLines(parseAnsi(read.text));
               _model = detectPromptSelect(lines);
               return lines;
@@ -112,14 +110,14 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
   }
 
   /// 上下文按钮：点选项走防护链（新鲜读取 → 结构相等 → 带 expectedPrompt 发键）。
   Future<void> _tapOption(PromptOption opt) async {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     final model = _model;
     if (api == null || model == null || _busy) return;
@@ -136,12 +134,12 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
       switch (res.outcome) {
         case PromptTapOutcome.sent:
           Navigator.of(context).pop();
-          _toast('已发送');
+          _toast(l10n.sent);
         case PromptTapOutcome.changed:
-          _toast('界面已变化，请打开详情确认');
+          _toast(l10n.screenChangedOpenDetails);
           _reload();
         case PromptTapOutcome.failed:
-          _toast(res.error ?? '发送失败');
+          _toast(res.error ?? l10n.sendFailed(l10n.unknownError));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -150,17 +148,21 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
 
   /// 通用动作：盲发按键（不带 expectedPrompt），成功关卡。
   Future<void> _tapGeneric(List<String> keys) async {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _busy) return;
     setState(() => _busy = true);
     try {
-      final res = await api.sendKeys(widget.pane.paneId, keys,
-          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      final res = await api.sendKeys(
+        widget.pane.paneId,
+        keys,
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+      );
       if (!mounted) return;
       if (res.success) {
         Navigator.of(context).pop();
       } else {
-        _toast(res.error ?? '发送失败');
+        _toast(res.error ?? l10n.sendFailed(l10n.unknownError));
       }
     } on ApiException catch (e) {
       if (mounted) _toast(e.toString());
@@ -173,35 +175,41 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
     Navigator.of(context).pop();
     Navigator.of(context).push(
       MaterialPageRoute(
-          builder: (_) => AgentScreen(
-              bridgeId: widget.bridgeId, paneId: widget.pane.paneId)),
+        builder: (_) =>
+            AgentScreen(bridgeId: widget.bridgeId, paneId: widget.pane.paneId),
+      ),
     );
   }
 
   /// 对齐 dashboard 的 _togglePinned：toggle + SnackBar。
   Future<void> _togglePinned() async {
+    final l10n = context.l10n;
     final session = ref.read(sessionFilterProvider(widget.bridgeId));
     await ref
         .read(pinnedPanesProvider.notifier)
         .toggle(widget.bridgeId, session, widget.pane.paneId);
-    if (mounted) _toast(widget.pinned ? '已取消置顶' : '已置顶');
+    if (mounted) _toast(widget.pinned ? l10n.unpinned : l10n.pinned);
   }
 
   /// 重命名 agent：调 herdr pane.rename，显示名随下一次快照轮询刷新。
   Future<void> _rename() async {
+    final l10n = context.l10n;
     final api = ref.read(apiProvider(widget.bridgeId));
     if (api == null || _busy) return;
     final label = await showRenamePaneDialog(context, widget.pane);
     if (label == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final res = await api.renamePane(widget.pane.paneId, label,
-          session: ref.read(sessionFilterProvider(widget.bridgeId)));
+      final res = await api.renamePane(
+        widget.pane.paneId,
+        label,
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+      );
       if (!mounted) return;
       if (res.success) {
-        _toast(label.isEmpty ? '已清除别名' : '已重命名');
+        _toast(label.isEmpty ? l10n.aliasCleared : l10n.renamed);
       } else {
-        _toast(res.error ?? '重命名失败');
+        _toast(res.error ?? l10n.renameFailedShort);
       }
     } on ApiException catch (e) {
       if (mounted) _toast(e.toString());
@@ -212,10 +220,14 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final scheme = Theme.of(context).colorScheme;
     final pane = widget.pane;
-    final readOnly = ref.watch(bridgeSnapshotProvider(widget.bridgeId)
-            .select((s) => s.data?.readOnly)) ??
+    final readOnly =
+        ref.watch(
+          bridgeSnapshotProvider(widget.bridgeId)
+              .select((s) => s.data?.readOnly),
+        ) ??
         false;
 
     return SafeArea(
@@ -227,8 +239,11 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
           children: [
             Row(
               children: [
-                Icon(Icons.circle,
-                    size: 12, color: statusColor(scheme, pane.status)),
+                Icon(
+                  Icons.circle,
+                  size: 12,
+                  color: statusColor(scheme, pane.status),
+                ),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
@@ -240,27 +255,31 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
                 ),
                 const SizedBox(width: 8),
                 Chip(
-                  label: Text(statusLabel(pane.status)),
+                  label: Text(statusLabel(l10n, pane.status)),
                   visualDensity: VisualDensity.compact,
                   side: BorderSide.none,
-                  backgroundColor:
-                      statusColor(scheme, pane.status).withValues(alpha: 0.15),
+                  backgroundColor: statusColor(
+                    scheme,
+                    pane.status,
+                  ).withValues(alpha: 0.15),
                 ),
                 IconButton(
-                  tooltip: widget.pinned ? '取消置顶' : '置顶',
-                  icon: Icon(widget.pinned
-                      ? Icons.push_pin
-                      : Icons.push_pin_outlined),
+                  tooltip: widget.pinned ? l10n.unpinTooltip : l10n.pinTooltip,
+                  icon: Icon(
+                    widget.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  ),
                   onPressed: _togglePinned,
                 ),
                 IconButton(
-                  tooltip: readOnly ? '只读模式，无法重命名' : '重命名',
+                  tooltip: readOnly
+                      ? l10n.readOnlyCannotRename
+                      : l10n.renameTooltip,
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: readOnly || _busy ? null : _rename,
                 ),
                 TextButton(
                   onPressed: _openDetail,
-                  child: const Text('打开详情'),
+                  child: Text(l10n.openDetails),
                 ),
               ],
             ),
@@ -274,14 +293,17 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
                   future: _future,
                   builder: (context, snap) {
                     if (snap.hasError) {
-                      return Center(child: Text('读取失败：${snap.error}'));
+                      return Center(
+                        child: Text(l10n.readFailed('${snap.error}')),
+                      );
                     }
                     if (!snap.hasData) {
                       return const Center(
-                          child: Padding(
-                        padding: EdgeInsets.all(32),
-                        child: CircularProgressIndicator(),
-                      ));
+                        child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
                     }
                     _scrollToBottomAfterBuild();
                     return Container(
@@ -307,10 +329,16 @@ class _AgentPreviewSheetState extends ConsumerState<AgentPreviewSheet> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final a in _genericActions)
+                        for (final a in [
+                          (label: l10n.continueEnter, keys: ['Enter']),
+                          (label: 'Ctrl+C', keys: ['ctrl+c']),
+                          (label: '↑', keys: ['Up']),
+                          (label: '↓', keys: ['Down']),
+                        ])
                           OutlinedButton(
-                            onPressed:
-                                snap.hasData && !_busy ? () => _tapGeneric(a.keys) : null,
+                            onPressed: snap.hasData && !_busy
+                                ? () => _tapGeneric(a.keys)
+                                : null,
                             child: Text(a.label),
                           ),
                       ],

@@ -19,23 +19,27 @@ import '../api/easytier_channel.dart';
 import '../model/remote_profile.dart';
 
 /// 生产/测试可替换的 EasyTier 通道（测试 override 成 fake）。
-final easytierChannelProvider =
-    Provider<EasyTierChannel>((_) => const EasyTierChannel());
+final easytierChannelProvider = Provider<EasyTierChannel>(
+  (_) => const EasyTierChannel(),
+);
 
 /// 端口转发建立后，从本地回环端口探测 bridge API 是否已端到端可达。
 typedef BridgeReachabilityProbe = Future<bool> Function(
-    int localPort, Duration timeout);
+  int localPort,
+  Duration timeout,
+);
 
 final bridgeReachabilityProbeProvider = Provider<BridgeReachabilityProbe>(
-    (_) => _probeBridgeReachability);
+  (_) => _probeBridgeReachability,
+);
 
 typedef LoopbackPortPicker = Future<int> Function();
 
-final loopbackPortPickerProvider =
-    Provider<LoopbackPortPicker>((_) => _pickLoopbackPort);
+final loopbackPortPickerProvider = Provider<LoopbackPortPicker>(
+  (_) => _pickLoopbackPort,
+);
 
-Future<bool> _probeBridgeReachability(
-    int localPort, Duration timeout) async {
+Future<bool> _probeBridgeReachability(int localPort, Duration timeout) async {
   final client = HttpClient()..connectionTimeout = timeout;
   try {
     return await (() async {
@@ -46,8 +50,7 @@ Future<bool> _probeBridgeReachability(
       final response = await request.close();
       await response.drain<void>();
       return response.statusCode == HttpStatus.ok;
-    })()
-        .timeout(timeout);
+    })().timeout(timeout);
   } on SocketException {
     return false;
   } on HttpException {
@@ -88,9 +91,19 @@ class EasyTierForwardSuspended extends EasyTierRuntimeState {
 
 /// 连接失败（启动报错 / 等虚拟 IP 超时）。
 class EasyTierFailed extends EasyTierRuntimeState {
-  const EasyTierFailed(this.message);
+  const EasyTierFailed(this.message, {this.virtualIpTimeoutSeconds});
 
   final String message;
+  final int? virtualIpTimeoutSeconds;
+}
+
+class _VirtualIpTimeout implements Exception {
+  const _VirtualIpTimeout(this.seconds);
+
+  final int seconds;
+
+  @override
+  String toString() => '等待虚拟 IP 超时（${seconds}s）';
 }
 
 /// RemoteProfile → EasyTier 实例 TOML 配置（无 TUN 转发模式，纯函数便于测试）。
@@ -128,7 +141,7 @@ String _esc(String s) => s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// family 参数：逻辑 profileId；原生实例另用每代唯一的 [_instanceName]。
   EasyTierRuntimeNotifier(this.profileId)
-      : _instanceName = '$profileId-${const Uuid().v4()}';
+    : _instanceName = '$profileId-${const Uuid().v4()}';
 
   final String profileId;
 
@@ -200,7 +213,8 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     final channel = ref.read(easytierChannelProvider);
     try {
       final start = channel.startInstance(
-          buildInstanceToml(profile, instanceName: _instanceName));
+        buildInstanceToml(profile, instanceName: _instanceName),
+      );
       _instanceStarts.add(start);
       try {
         await start;
@@ -213,7 +227,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       final ip = await _waitVirtualIp(channel, gen);
       if (gen != _generation) return;
       if (ip == null) {
-        throw StateError('等待虚拟 IP 超时（${virtualIpTimeout.inSeconds}s）');
+        throw _VirtualIpTimeout(virtualIpTimeout.inSeconds);
       }
       _instanceHasVirtualIp = true;
       final port = await _installForward(channel, profile, gen);
@@ -239,7 +253,10 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       }
       if (gen != _generation) return;
       _instanceHasVirtualIp = false;
-      state = EasyTierFailed('$e');
+      state = EasyTierFailed(
+        '$e',
+        virtualIpTimeoutSeconds: e is _VirtualIpTimeout ? e.seconds : null,
+      );
     }
   }
 
@@ -279,7 +296,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
         final ip = await _waitVirtualIp(channel, gen);
         if (gen != _generation) return;
         if (ip == null) {
-          throw StateError('等待虚拟 IP 超时（${virtualIpTimeout.inSeconds}s）');
+          throw _VirtualIpTimeout(virtualIpTimeout.inSeconds);
         }
         _instanceHasVirtualIp = true;
       }
@@ -300,7 +317,10 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       if (gen != _generation) return;
       await _removeForward(channel);
       if (gen != _generation) return;
-      state = EasyTierFailed('$e');
+      state = EasyTierFailed(
+        '$e',
+        virtualIpTimeoutSeconds: e is _VirtualIpTimeout ? e.seconds : null,
+      );
     }
   }
 
@@ -356,11 +376,13 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       _dstIp = '';
       _dstPort = 0;
       try {
-        await channel.removePortForward(_instanceName,
-            bindIp: '127.0.0.1',
-            bindPort: port,
-            dstIp: dstIp,
-            dstPort: dstPort);
+        await channel.removePortForward(
+          _instanceName,
+          bindIp: '127.0.0.1',
+          bindPort: port,
+          dstIp: dstIp,
+          dstPort: dstPort,
+        );
       } catch (_) {
         // 转发可能已随实例消失，按已停处理。
       }
@@ -370,7 +392,10 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// 为当前代际安装一条新转发；若排队或原生 ADD 期间生命周期又变化，
   /// 立即撤销刚加的配置，不能把旧代际 listener 泄漏在 EasyTier 中。
   Future<int?> _installForward(
-      EasyTierChannel channel, RemoteProfile profile, int gen) async {
+    EasyTierChannel channel,
+    RemoteProfile profile,
+    int gen,
+  ) async {
     if (_disposed || gen != _generation || _forwardSuspended) return null;
     // PatchConfig 通路不支持「bind 端口 0 再读回」，先在 Dart 侧占一个
     // 临时回环端口再交给内核 bind。
@@ -379,23 +404,29 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     await _enqueueForwardOperation(() async {
       if (gen != _generation || _forwardSuspended) return;
       // ignore: avoid_print
-      print('[easytier] instance $profileId forwarding '
-          '127.0.0.1:$port to ${profile.virtualIp}:${profile.port}');
+      print(
+        '[easytier] instance $profileId forwarding '
+        '127.0.0.1:$port to ${profile.virtualIp}:${profile.port}',
+      );
       try {
-        await channel.addPortForward(_instanceName,
-            bindIp: '127.0.0.1',
-            bindPort: port,
-            dstIp: profile.virtualIp,
-            dstPort: profile.port);
+        await channel.addPortForward(
+          _instanceName,
+          bindIp: '127.0.0.1',
+          bindPort: port,
+          dstIp: profile.virtualIp,
+          dstPort: profile.port,
+        );
       } catch (e) {
         // RPC 可能在配置已生效、响应却丢失后报错；先按完整配置撤销，避免
         // 下一次短周期重试留下重复 listener。
         try {
-          await channel.removePortForward(_instanceName,
-              bindIp: '127.0.0.1',
-              bindPort: port,
-              dstIp: profile.virtualIp,
-              dstPort: profile.port);
+          await channel.removePortForward(
+            _instanceName,
+            bindIp: '127.0.0.1',
+            bindPort: port,
+            dstIp: profile.virtualIp,
+            dstPort: profile.port,
+          );
         } catch (_) {
           // ADD 未生效或实例同时消失时 REMOVE 失败，保留原始 ADD 错误。
         }
@@ -403,11 +434,13 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       }
       if (gen != _generation || _forwardSuspended) {
         try {
-          await channel.removePortForward(_instanceName,
-              bindIp: '127.0.0.1',
-              bindPort: port,
-              dstIp: profile.virtualIp,
-              dstPort: profile.port);
+          await channel.removePortForward(
+            _instanceName,
+            bindIp: '127.0.0.1',
+            bindPort: port,
+            dstIp: profile.virtualIp,
+            dstPort: profile.port,
+          );
         } catch (_) {
           // 实例可能同时被停掉，按已撤销处理。
         }
@@ -424,7 +457,10 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
   /// 前台恢复不能因一次瞬时 bind/RPC 错误永久进入 Failed；按现有 bridge
   /// 探测的短周期继续安装，新的后台事件会通过 generation 立即终止等待。
   Future<int?> _waitForwardInstalled(
-      EasyTierChannel channel, RemoteProfile profile, int gen) async {
+    EasyTierChannel channel,
+    RemoteProfile profile,
+    int gen,
+  ) async {
     for (;;) {
       if (_disposed || gen != _generation || _forwardSuspended) return null;
       try {
@@ -439,8 +475,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     }
   }
 
-  Future<void> _enqueueForwardOperation(
-      Future<void> Function() operation) {
+  Future<void> _enqueueForwardOperation(Future<void> Function() operation) {
     final result = _forwardOperations.then((_) => operation());
     // 单次错误交给调用方处理，但不能毒化队列、阻止后续生命周期操作。
     _forwardOperations = result.catchError((Object _) {});
@@ -482,7 +517,9 @@ Future<int> _pickLoopbackPort() async {
   return port;
 }
 
-final easytierRuntimeProvider = NotifierProvider.family<
-    EasyTierRuntimeNotifier,
-    EasyTierRuntimeState,
-    String>(EasyTierRuntimeNotifier.new, isAutoDispose: true);
+final easytierRuntimeProvider =
+    NotifierProvider.family<
+      EasyTierRuntimeNotifier,
+      EasyTierRuntimeState,
+      String
+    >(EasyTierRuntimeNotifier.new, isAutoDispose: true);

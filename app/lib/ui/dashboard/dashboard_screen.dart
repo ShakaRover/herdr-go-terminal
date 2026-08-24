@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
 import '../../model/models.dart';
 import '../../state/bridges.dart';
 import '../../state/easytier_runtime.dart';
@@ -19,66 +20,72 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final conns = ref.watch(bridgesProvider);
     final focused = ref.watch(focusedBridgeProvider);
     // focused 指向的 bridge 已不在列表（被删除/停用）时回落到「全部」。
-    final focusedIndex =
-        focused.isEmpty ? 0 : conns.indexWhere((c) => c.id == focused) + 1;
+    final focusedIndex = focused.isEmpty
+        ? 0
+        : conns.indexWhere((c) => c.id == focused) + 1;
     final safeIndex = focusedIndex < 0 ? 0 : focusedIndex;
 
     return DefaultTabController(
       length: 1 + conns.length,
       initialIndex: safeIndex,
-      child: Builder(builder: (context) {
-        final tabController = DefaultTabController.of(context);
-        // tab 切换 → focusedBridgeProvider（post-frame 回写，避免 build
-        // 期间改 provider）。
-        if (!tabController.indexIsChanging &&
-            tabController.index < 1 + conns.length) {
-          final selected =
-              tabController.index == 0 ? '' : conns[tabController.index - 1].id;
-          if (selected != focused) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              ref.read(focusedBridgeProvider.notifier).select(selected);
-            });
+      child: Builder(
+        builder: (context) {
+          final tabController = DefaultTabController.of(context);
+          // tab 切换 → focusedBridgeProvider（post-frame 回写，避免 build
+          // 期间改 provider）。
+          if (!tabController.indexIsChanging &&
+              tabController.index < 1 + conns.length) {
+            final selected = tabController.index == 0
+                ? ''
+                : conns[tabController.index - 1].id;
+            if (selected != focused) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(focusedBridgeProvider.notifier).select(selected);
+              });
+            }
           }
-        }
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('HerdrGo'),
-            bottom: TabBar(
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              tabs: [
-                const Tab(text: '全部'),
-                for (final c in conns) _ConnTab(conn: c),
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('HerdrGo'),
+              bottom: TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: [
+                  Tab(text: l10n.allBridges),
+                  for (final c in conns) _ConnTab(conn: c),
+                ],
+              ),
+              actions: [
+                // session 切换仅作用于单 bridge tab（全部 tab 直接用各
+                // bridge 当前选择，不提供切换入口）。
+                if (safeIndex > 0)
+                  _SessionMenu(
+                    conn: conns[safeIndex - 1],
+                    state: ref.watch(bridgeSnapshotProvider(focused)),
+                  ),
+                IconButton(
+                  tooltip: l10n.settingsTooltip,
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                ),
               ],
             ),
-            actions: [
-              // session 切换仅作用于单 bridge tab（全部 tab 直接用各
-              // bridge 当前选择，不提供切换入口）。
-              if (safeIndex > 0)
-                _SessionMenu(
-                    conn: conns[safeIndex - 1],
-                    state: ref.watch(bridgeSnapshotProvider(focused))),
-              IconButton(
-                tooltip: '设置',
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                ),
-              ),
-            ],
-          ),
-          body: TabBarView(
-            children: [
-              _AllBridgeTab(conns: conns),
-              for (final c in conns) _SingleBridgeTab(conn: c),
-            ],
-          ),
-        );
-      }),
+            body: TabBarView(
+              children: [
+                _AllBridgeTab(conns: conns),
+                for (final c in conns) _SingleBridgeTab(conn: c),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -120,13 +127,14 @@ class _SessionMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final snap = state.data;
     if (snap == null || snap.sessions.length <= 1) {
       return const SizedBox.shrink();
     }
     final session = ref.watch(sessionFilterProvider(conn.id));
     return PopupMenuButton<String?>(
-      tooltip: '切换 session',
+      tooltip: l10n.switchSessionTooltip,
       icon: const Icon(Icons.layers_outlined),
       initialValue: session,
       onSelected: (v) =>
@@ -136,8 +144,11 @@ class _SessionMenu extends ConsumerWidget {
           PopupMenuItem(
             value: s.isPrimary ? null : s.name,
             child: Text(
-              '${s.isPrimary ? '默认' : s.name}'
-              '（${s.blocked} 待处理 / ${s.working} 工作中）',
+              l10n.sessionSummary(
+                s.isPrimary ? l10n.defaultSession : s.name,
+                s.blocked,
+                s.working,
+              ),
             ),
           ),
       ],
@@ -157,15 +168,14 @@ class _AllBridgeTab extends ConsumerWidget {
       for (final c in conns) c.id: ref.watch(bridgeSnapshotProvider(c.id)),
     };
     final bps = aggregateBridgePanes(conns, snapshots);
-    final failed =
-        conns.where((c) => c.status == ConnStatus.failed).toList();
+    final failed = conns.where((c) => c.status == ConnStatus.failed).toList();
 
     return Column(
       children: [
         if (failed.isNotEmpty)
           _Banner(
             color: Theme.of(context).colorScheme.errorContainer,
-            text: '${failed.length} 台连接中断',
+            text: context.l10n.connectionsInterrupted(failed.length),
             onTap: () {
               // 跳到首个 failed 的 tab（tab 索引 = conn 索引 + 1）。
               final i = conns.indexOf(failed.first) + 1;
@@ -185,7 +195,8 @@ class _AllBridgeTab extends ConsumerWidget {
             },
             // 连接尚未 ready（无 conn / 全部 connecting/failed）时聚合必
             // 为空，展示连接中占位，而不是「没有 agent」空态。
-            child: conns.isEmpty || conns.any((c) => c.status == ConnStatus.ready)
+            child:
+                conns.isEmpty || conns.any((c) => c.status == ConnStatus.ready)
                 ? _BridgePaneList(
                     panes: bps,
                     pinned: ref.watch(pinnedPanesProvider),
@@ -207,6 +218,7 @@ class _SingleBridgeTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final state = ref.watch(bridgeSnapshotProvider(conn.id));
     final session = ref.watch(sessionFilterProvider(conn.id));
     final runtime = ref.watch(easytierRuntimeProvider(conn.id));
@@ -224,27 +236,31 @@ class _SingleBridgeTab extends ConsumerWidget {
         if (runtime is EasyTierConnecting)
           _Banner(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            text: '正在连接 EasyTier 网络…',
+            text: l10n.easyTierConnecting,
           )
         else if (runtime is EasyTierFailed)
           _Banner(
             color: Theme.of(context).colorScheme.errorContainer,
-            text: 'EasyTier 连接失败（${runtime.message}）',
+            text: l10n.easyTierFailed(
+              runtime.virtualIpTimeoutSeconds == null
+                  ? runtime.message
+                  : l10n.virtualIpTimeout(runtime.virtualIpTimeoutSeconds!),
+            ),
           )
         else if (state.error != null)
           _Banner(
             color: Theme.of(context).colorScheme.errorContainer,
-            text: '连接中断，展示的是上次数据（${state.error}）',
+            text: l10n.connectionInterrupted('${state.error}'),
           )
         else if (snap != null && !snap.bridgeConnected)
           _Banner(
             color: Theme.of(context).colorScheme.errorContainer,
-            text: 'herdr 离线（bridge 连不上 herdr server）',
+            text: l10n.herdrOffline,
           )
         else if (snap != null && snap.readOnly)
           _Banner(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            text: '当前设备未授权写操作（只读模式）',
+            text: l10n.readOnlyMode,
           ),
         Expanded(
           child: RefreshIndicator(
@@ -280,9 +296,7 @@ class _Banner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Text(text, style: Theme.of(context).textTheme.bodySmall),
     );
-    return onTap == null
-        ? body
-        : InkWell(onTap: onTap, child: body);
+    return onTap == null ? body : InkWell(onTap: onTap, child: body);
   }
 }
 
@@ -298,8 +312,10 @@ class _LoadingOrEmpty extends StatelessWidget {
         const Center(child: CircularProgressIndicator()),
         const SizedBox(height: 16),
         Center(
-          child: Text('正在连接 bridge…',
-              style: Theme.of(context).textTheme.bodyMedium),
+          child: Text(
+            context.l10n.bridgeConnecting,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
         ),
       ],
     );
@@ -335,11 +351,14 @@ class _BridgePaneList extends StatelessWidget {
         padding: const EdgeInsets.all(32),
         children: [
           const SizedBox(height: 80),
-          Icon(Icons.pest_control_rodent_outlined,
-              size: 48, color: Theme.of(context).colorScheme.outline),
+          Icon(
+            Icons.pest_control_rodent_outlined,
+            size: 48,
+            color: Theme.of(context).colorScheme.outline,
+          ),
           const SizedBox(height: 16),
           Text(
-            '没有检测到 agent\n在电脑上的 herdr 里启动一个，这里就会出现',
+            context.l10n.noAgents,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -353,7 +372,12 @@ class _BridgePaneList extends StatelessWidget {
     final List<BridgePane> unpinned;
     if (session != null) {
       (pinnedPanes, unpinned) = splitPinned(
-          panes, pinned, panes.first.bridgeId, session, (bp) => bp.pane.paneId);
+        panes,
+        pinned,
+        panes.first.bridgeId,
+        session,
+        (bp) => bp.pane.paneId,
+      );
     } else {
       pinnedPanes = [];
       unpinned = [];
@@ -362,38 +386,42 @@ class _BridgePaneList extends StatelessWidget {
       }
     }
 
-    final needsYou =
-        unpinned.where((p) => p.pane.status == AgentStatus.blocked).toList();
-    final working =
-        unpinned.where((p) => p.pane.status == AgentStatus.working).toList();
+    final needsYou = unpinned
+        .where((p) => p.pane.status == AgentStatus.blocked)
+        .toList();
+    final working = unpinned
+        .where((p) => p.pane.status == AgentStatus.working)
+        .toList();
     final rest = unpinned
-        .where((p) =>
-            p.pane.status != AgentStatus.blocked &&
-            p.pane.status != AgentStatus.working)
+        .where(
+          (p) =>
+              p.pane.status != AgentStatus.blocked &&
+              p.pane.status != AgentStatus.working,
+        )
         .toList();
 
     Widget card(BridgePane bp) => _AgentCard(
-          pane: bp.pane,
-          pinned: isPanePinned(context, bp),
-          bridgeId: bp.bridgeId,
-          bridgeLabel: showBridgeLabel ? bp.bridgeLabel : null,
-        );
+      pane: bp.pane,
+      pinned: isPanePinned(context, bp),
+      bridgeId: bp.bridgeId,
+      bridgeLabel: showBridgeLabel ? bp.bridgeLabel : null,
+    );
 
     final children = <Widget>[
       if (pinnedPanes.isNotEmpty) ...[
-        const _SectionHeader('已置顶'),
+        _SectionHeader(context.l10n.sectionPinned),
         for (final p in pinnedPanes) card(p),
       ],
       if (needsYou.isNotEmpty) ...[
-        const _SectionHeader('需要你处理'),
+        _SectionHeader(context.l10n.sectionNeedsAttention),
         for (final p in needsYou) card(p),
       ],
       if (working.isNotEmpty) ...[
-        const _SectionHeader('工作中'),
+        _SectionHeader(context.l10n.sectionWorking),
         for (final p in working) card(p),
       ],
       if (rest.isNotEmpty) ...[
-        const _SectionHeader('其他'),
+        _SectionHeader(context.l10n.sectionOther),
         for (final p in rest) card(p),
       ],
       const SizedBox(height: 24),
@@ -414,8 +442,10 @@ class _BridgePaneList extends StatelessWidget {
   }
 
   static String? _readBridgeSession(BuildContext context, String bridgeId) =>
-      ProviderScope.containerOf(context, listen: false)
-          .read(sessionFilterProvider(bridgeId));
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(sessionFilterProvider(bridgeId));
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -429,9 +459,7 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
       child: Text(
         text,
-        style: Theme.of(context)
-            .textTheme
-            .labelLarge
+        style: Theme.of(context).textTheme.labelLarge
             ?.copyWith(color: Theme.of(context).colorScheme.outline),
       ),
     );
@@ -457,7 +485,7 @@ class _AgentCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final now = DateTime.now();
-    final time = relativeTime(pane.lastActiveAt, now);
+    final time = relativeTime(pane.lastActiveAt, now, context.l10n);
     final location = [
       ?bridgeLabel,
       pane.workspaceLabel,
@@ -467,13 +495,19 @@ class _AgentCard extends ConsumerWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: ListTile(
-        leading: Icon(Icons.circle,
-            size: 12, color: statusColor(scheme, pane.status)),
+        leading: Icon(
+          Icons.circle,
+          size: 12,
+          color: statusColor(scheme, pane.status),
+        ),
         title: Row(
           children: [
             Flexible(
-              child: Text(pane.displayName,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              child: Text(
+                pane.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             if (pinned) ...[
               const SizedBox(width: 4),
@@ -482,29 +516,38 @@ class _AgentCard extends ConsumerWidget {
           ],
         ),
         subtitle: Text(
-          [location, pane.cwd, if (time.isNotEmpty) time]
-              .where((s) => s.isNotEmpty)
-              .join('\n'),
+          [
+            location,
+            pane.cwd,
+            if (time.isNotEmpty) time,
+          ].where((s) => s.isNotEmpty).join('\n'),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
         isThreeLine: true,
         trailing: Chip(
-          label: Text(statusLabel(pane.status)),
+          label: Text(statusLabel(context.l10n, pane.status)),
           visualDensity: VisualDensity.compact,
           side: BorderSide.none,
-          backgroundColor:
-              statusColor(scheme, pane.status).withValues(alpha: 0.15),
+          backgroundColor: statusColor(
+            scheme,
+            pane.status,
+          ).withValues(alpha: 0.15),
         ),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-                builder: (_) =>
-                    AgentScreen(bridgeId: bridgeId, paneId: pane.paneId)),
+              builder: (_) =>
+                  AgentScreen(bridgeId: bridgeId, paneId: pane.paneId),
+            ),
           );
         },
-        onLongPress: () => AgentPreviewSheet.show(context,
-            bridgeId: bridgeId, pane: pane, pinned: pinned),
+        onLongPress: () => AgentPreviewSheet.show(
+          context,
+          bridgeId: bridgeId,
+          pane: pane,
+          pinned: pinned,
+        ),
       ),
     );
   }

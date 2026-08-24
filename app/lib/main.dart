@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'notify/notify_service.dart';
+import 'l10n/generated/app_localizations.dart';
 import 'state/bridges.dart';
 import 'state/easytier_runtime.dart';
 import 'state/settings.dart';
@@ -45,18 +47,27 @@ Future<void> main() async {
   );
 }
 
-class HerdrApp extends StatelessWidget {
+class HerdrApp extends ConsumerWidget {
   const HerdrApp({super.key, this.launchTarget});
 
   /// 冷启动由通知拉起时的目标（bridgeId, paneId）。
   final (String, String)? launchTarget;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(appLocaleProvider).locale;
     return MaterialApp(
-      title: 'HerdrGo',
+      onGenerateTitle: (context) => AppLocalizations.of(context)!.appName,
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
+      locale: locale,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -71,8 +82,7 @@ class HerdrApp extends StatelessWidget {
 
 /// 任一 enabled bridge 连接存在即视为已配置（RootGate 据此进 dashboard）。
 /// bridgesProvider 只含 enabled 项。
-bool hasAnyConnection(WidgetRef ref) =>
-    ref.watch(bridgesProvider).isNotEmpty;
+bool hasAnyConnection(WidgetRef ref) => ref.watch(bridgesProvider).isNotEmpty;
 
 /// 任一 enabled bridge 连接存在 → dashboard；空配置 → 设置页。
 /// 同时负责 app 前后台切换时暂停/恢复各 bridge 的 snapshot 轮询；iOS 还
@@ -100,7 +110,8 @@ class _RootGateState extends ConsumerState<RootGate> {
     final target = widget.launchTarget;
     if (target != null) {
       WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _openPane(target.$1, target.$2));
+        (_) => _openPane(target.$1, target.$2),
+      );
     }
   }
 
@@ -151,9 +162,7 @@ class _RootGateState extends ConsumerState<RootGate> {
     }
     if (!mounted || generation != _lifecycleGeneration) return;
     for (final conn in connections) {
-      ref
-          .read(bridgeSnapshotProvider(conn.id).notifier)
-          .setPaused(false);
+      ref.read(bridgeSnapshotProvider(conn.id).notifier).setPaused(false);
     }
   }
 

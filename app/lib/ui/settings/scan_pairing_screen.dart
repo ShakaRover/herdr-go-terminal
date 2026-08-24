@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../l10n/l10n.dart';
 import '../../model/remote_profile.dart';
 
 /// 全屏扫码页：识别 bridge 打印的 EasyTier 配对二维码。
@@ -54,13 +55,15 @@ class _ScanPairingScreenState extends State<ScanPairingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('扫描配对二维码'),
+        title: Text(context.l10n.scanPairingTitle),
         actions: [
           IconButton(
+            tooltip: context.l10n.toggleFlashTooltip,
             icon: const Icon(Icons.flash_on),
             onPressed: () => _controller.toggleTorch(),
           ),
           IconButton(
+            tooltip: context.l10n.switchCameraTooltip,
             icon: const Icon(Icons.cameraswitch),
             onPressed: () => _controller.switchCamera(),
           ),
@@ -68,13 +71,12 @@ class _ScanPairingScreenState extends State<ScanPairingScreen> {
       ),
       body: Column(
         children: [
-          Expanded(child: MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          )),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('对准 bridge 启动时打印的配对二维码。'),
+          Expanded(
+            child: MobileScanner(controller: _controller, onDetect: _onDetect),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(context.l10n.scanPairingHelp),
           ),
         ],
       ),

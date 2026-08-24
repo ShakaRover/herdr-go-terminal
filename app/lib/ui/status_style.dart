@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../model/models.dart';
 
 Color statusColor(ColorScheme scheme, AgentStatus status) => switch (status) {
@@ -16,10 +17,11 @@ Color statusColor(ColorScheme scheme, AgentStatus status) => switch (status) {
   AgentStatus.unknown => scheme.outline,
 };
 
-String statusLabel(AgentStatus status) => switch (status) {
-  AgentStatus.blocked => '待处理',
-  AgentStatus.working => '工作中',
-  AgentStatus.done => '已完成',
-  AgentStatus.idle => '空闲',
-  AgentStatus.unknown => '未知',
-};
+String statusLabel(AppLocalizations l10n, AgentStatus status) =>
+    switch (status) {
+      AgentStatus.blocked => l10n.statusBlocked,
+      AgentStatus.working => l10n.statusWorking,
+      AgentStatus.done => l10n.statusDone,
+      AgentStatus.idle => l10n.statusIdle,
+      AgentStatus.unknown => l10n.statusUnknown,
+    };

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/bridge_api.dart';
+import '../../l10n/l10n.dart';
 import '../../model/history.dart';
 import '../../state/bridges.dart';
 import '../../state/snapshot.dart';
@@ -84,18 +85,19 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text('历史 · ${widget.title}')),
+      appBar: AppBar(title: Text(context.l10n.historyTitle(widget.title))),
       body: _buildBody(theme),
     );
   }
 
   Widget _buildBody(ThemeData theme) {
+    final l10n = context.l10n;
     if (_unavailableReason != null) {
       final text = switch (_unavailableReason!) {
-        'disabled' => 'bridge 关闭了历史功能（COLLIE_TRANSCRIPT）',
-        'no-session' => '这个 agent 没有会话日志',
-        'no-log' => '找不到该会话的日志文件',
-        final r => '历史不可用：$r',
+        'disabled' => l10n.historyDisabled,
+        'no-session' => l10n.historyNoSession,
+        'no-log' => l10n.historyNoLog,
+        final r => l10n.historyUnavailable(r),
       };
       return Center(child: Text(text, style: theme.textTheme.bodyMedium));
     }
@@ -103,7 +105,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_entries.isEmpty && _error != null) {
-      return Center(child: Text('加载失败：$_error'));
+      return Center(child: Text(l10n.loadFailed('$_error')));
     }
     return Scrollbar(
       controller: _scrollController,
@@ -122,7 +124,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                '加载失败：$_error',
+                l10n.loadFailed('$_error'),
                 style: TextStyle(color: theme.colorScheme.error),
               ),
             ),
@@ -130,7 +132,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                '日志过大，只解析了尾部',
+                l10n.historyTruncated,
                 style: theme.textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),
@@ -145,7 +147,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.history, size: 18),
-              label: Text(_loading ? '加载中…' : '加载更早'),
+              label: Text(_loading ? l10n.loading : l10n.loadOlder),
             ),
         ],
       ),
@@ -161,11 +163,12 @@ class _EntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final (label, color) = switch (entry.role) {
-      TranscriptRole.user => ('你', Colors.tealAccent),
-      TranscriptRole.assistant => ('agent', Colors.lightBlueAccent),
-      TranscriptRole.summary => ('摘要', Colors.amberAccent),
-      TranscriptRole.note => ('系统', theme.colorScheme.outline),
+      TranscriptRole.user => (l10n.roleYou, Colors.tealAccent),
+      TranscriptRole.assistant => (l10n.roleAgent, Colors.lightBlueAccent),
+      TranscriptRole.summary => (l10n.roleSummary, Colors.amberAccent),
+      TranscriptRole.note => (l10n.roleSystem, theme.colorScheme.outline),
     };
     return Card(
       margin: const EdgeInsets.only(bottom: 10),

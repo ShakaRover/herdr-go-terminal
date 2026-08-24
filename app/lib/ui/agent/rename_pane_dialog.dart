@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
 import '../../model/models.dart';
 
 /// agent 重命名对话框：预填当前 paneLabel，留空 = 清除别名恢复默认名。
@@ -12,25 +13,25 @@ Future<String?> showRenamePaneDialog(BuildContext context, PaneInfo pane) {
   return showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('重命名 agent'),
+      title: Text(ctx.l10n.renameAgentTitle),
       content: TextField(
         controller: controller,
         autofocus: true,
         maxLength: 32,
         decoration: InputDecoration(
           hintText: fallback,
-          helperText: '留空则清除别名，恢复默认名',
+          helperText: ctx.l10n.renameAgentHelper,
         ),
         onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('取消'),
+          child: Text(ctx.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-          child: const Text('确定'),
+          child: Text(ctx.l10n.commonConfirm),
         ),
       ],
     ),
