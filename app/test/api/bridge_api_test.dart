@@ -72,6 +72,13 @@ Future<(_Harness, BridgeApi)> _start(
 }
 
 void main() {
+  test('createAgent 客户端超时覆盖 bridge 的合法最坏执行时间', () {
+    expect(
+      BridgeApi.createAgentTimeout,
+      greaterThan(const Duration(seconds: 50)),
+    );
+  });
+
   test('getConfig 走 /api/v1/config，带 Origin 与 x-requested-with', () async {
     final (h, api) = await _start(
       (req) => _json(req, 200, {

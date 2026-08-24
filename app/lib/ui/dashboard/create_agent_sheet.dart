@@ -107,6 +107,8 @@ class _CreateAgentSheetState extends ConsumerState<CreateAgentSheet> {
   Future<void> _selectSession(String? session) async {
     setState(() {
       _session = session;
+      // TODO: 保留上次成功的 session 列表；当前若新 session 加载失败，
+      // 下拉框会随 snapshot 清空，只能重开表单切回。
       _snapshot = null;
       _workspaceId = _newWorkspace;
       _cwdEdited = false;

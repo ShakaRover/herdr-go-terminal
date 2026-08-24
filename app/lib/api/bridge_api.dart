@@ -101,7 +101,10 @@ class BridgeApi {
 
   static const _getTimeout = Duration(seconds: 5);
   static const _mutationTimeout = Duration(seconds: 20);
-  static const _createAgentTimeout = Duration(seconds: 30);
+  // Bridge 最坏链路：manifest 5s + create 5s + start 25s（Herdr 20s
+  // + bridge 余量）+ prompt text/key 各 5s。客户端必须晚于 bridge 收口，
+  // 否则 pane 已创建时只能得到无响应体超时，无法返回 created IDs。
+  static const createAgentTimeout = Duration(seconds: 60);
   static const _uploadTimeout = Duration(seconds: 60);
 
   static String _normalizeBaseUrl(String raw) {
@@ -405,7 +408,7 @@ class BridgeApi {
           'initialPrompt': ?initialPrompt,
         },
         queryParameters: _queryWithSession(session),
-        options: Options(receiveTimeout: _createAgentTimeout),
+        options: Options(receiveTimeout: createAgentTimeout),
       );
       final data = res.data;
       if (data is! Map<String, dynamic>) {
