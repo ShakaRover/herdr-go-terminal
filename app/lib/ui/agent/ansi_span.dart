@@ -1,6 +1,7 @@
 /// ANSI 模型 → Flutter TextSpan 的映射。渲染只发生在这里。
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../ansi/ansi.dart';
@@ -9,6 +10,14 @@ Color toColor(AnsiColor c) => Color.fromARGB(255, c.r, c.g, c.b);
 
 const _mirrorBgColor = Color.fromARGB(255, 0x0a, 0x0a, 0x0a);
 const _mirrorFgColor = Color.fromARGB(255, 0xfa, 0xfa, 0xfa);
+
+String get terminalFontFamily => switch (defaultTargetPlatform) {
+  TargetPlatform.iOS || TargetPlatform.macOS => 'Menlo',
+  TargetPlatform.android => 'monospace',
+  TargetPlatform.windows => 'Consolas',
+  TargetPlatform.linux => 'DejaVu Sans Mono',
+  TargetPlatform.fuchsia => 'Roboto Mono',
+};
 
 TextStyle segmentStyle(AnsiSegment seg, {double fontSize = 12.5}) {
   final fg = seg.fg != null ? toColor(seg.fg!) : _mirrorFgColor;
@@ -20,13 +29,15 @@ TextStyle segmentStyle(AnsiSegment seg, {double fontSize = 12.5}) {
     fontWeight: seg.bold ? FontWeight.w600 : null,
     fontStyle: seg.italic ? FontStyle.italic : null,
     decoration: switch ((seg.underline, seg.strike)) {
-      (true, true) => TextDecoration.combine(
-          [TextDecoration.underline, TextDecoration.lineThrough]),
+      (true, true) => TextDecoration.combine([
+        TextDecoration.underline,
+        TextDecoration.lineThrough,
+      ]),
       (true, false) => TextDecoration.underline,
       (false, true) => TextDecoration.lineThrough,
       _ => null,
     },
-    fontFamily: 'monospace',
+    fontFamily: terminalFontFamily,
     fontSize: fontSize,
     height: 1.25,
   );
@@ -38,14 +49,20 @@ InlineSpan linesToSpan(List<StyledLine> lines, {double fontSize = 12.5}) {
   for (var i = 0; i < lines.length; i++) {
     final line = lines[i];
     for (final seg in line.segments) {
-      children.add(TextSpan(
-        text: seg.text,
-        style: segmentStyle(seg, fontSize: fontSize),
-      ));
+      children.add(
+        TextSpan(
+          text: seg.text,
+          style: segmentStyle(seg, fontSize: fontSize),
+        ),
+      );
     }
     if (i < lines.length - 1) {
-      children.add(TextSpan(
-          text: '\n', style: TextStyle(fontSize: fontSize, height: 1.25)));
+      children.add(
+        TextSpan(
+          text: '\n',
+          style: TextStyle(fontSize: fontSize, height: 1.25),
+        ),
+      );
     }
   }
   return TextSpan(children: children);
@@ -63,6 +80,6 @@ class AnsiSpan extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SelectableText.rich(
-        TextSpan(children: [linesToSpan(lines, fontSize: fontSize)]),
-      );
+    TextSpan(children: [linesToSpan(lines, fontSize: fontSize)]),
+  );
 }

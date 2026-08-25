@@ -358,23 +358,38 @@ void main() {
     });
   });
 
-  test('resizePane 发送手机终端尺寸和 session', () async {
-    final (h, api) = await _start((req) => _json(req, 200, {'ok': true}));
+  test('holdPaneSize 获取并续租手机终端尺寸', () async {
+    final (h, api) = await _start(
+      (req) => _json(req, 200, {'ok': true, 'leaseId': 'lease-1'}),
+    );
     addTearDown(h.stop);
 
-    final result = await api.resizePane(
+    final leaseId = await api.holdPaneSize(
       'w1:p1',
       cols: 48,
       rows: 31,
       session: 'work',
+      leaseId: 'lease-1',
     );
 
-    expect(result.success, isTrue);
+    expect(leaseId, 'lease-1');
     final req = h.requests.single;
     expect(req.method, 'POST');
     expect(req.uri.path, '/api/v1/pane/w1:p1/resize');
     expect(req.uri.queryParameters['session'], 'work');
-    expect(req.bodyJson, {'cols': 48, 'rows': 31});
+    expect(req.bodyJson, {'cols': 48, 'rows': 31, 'leaseId': 'lease-1'});
+  });
+
+  test('releasePaneSize 删除对应租约', () async {
+    final (h, api) = await _start((req) => _json(req, 200, {'ok': true}));
+    addTearDown(h.stop);
+
+    await api.releasePaneSize('w1:p1', 'lease-1', session: 'work');
+
+    final req = h.requests.single;
+    expect(req.method, 'DELETE');
+    expect(req.uri.path, '/api/v1/pane/w1:p1/resize/lease-1');
+    expect(req.uri.queryParameters['session'], 'work');
   });
 
   test('409 prompt_changed 转为 promptChanged failure', () async {

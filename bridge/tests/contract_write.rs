@@ -30,6 +30,12 @@ fn get(uri: &str) -> Request<Body> {
         .body(Body::empty()).unwrap()
 }
 
+fn delete(uri: &str) -> Request<Body> {
+    Request::builder().method("DELETE").uri(uri)
+        .header("host", "127.0.0.1:8787")
+        .body(Body::empty()).unwrap()
+}
+
 fn agent_manifests(kinds: &[&str]) -> serde_json::Value {
     serde_json::json!({
         "type": "agent_manifest_status",
@@ -348,7 +354,7 @@ async fn resize_rejects_sizes_outside_the_phone_viewport_bounds() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn resize_uses_short_lived_controller_and_audits_success() {
+async fn resize_holds_controller_until_the_phone_releases_its_lease() {
     use std::os::unix::fs::PermissionsExt;
 
     let controller_dir = tempfile::tempdir().unwrap();
@@ -360,8 +366,10 @@ capture=$(dirname -- "$0")/capture
 printf 'socket=%s\n' "$HERDR_SOCKET_PATH" > "$capture"
 for argument in "$@"; do printf 'arg=%s\n' "$argument" >> "$capture"; done
 printf '%s\n' '{"type":"terminal.frame","data":""}'
-IFS= read -r command
-printf 'stdin=%s\n' "$command" >> "$capture"
+while IFS= read -r command; do
+  printf 'stdin=%s\n' "$command" >> "$capture"
+  [ "$command" = '{"type":"terminal.release"}' ] && exit 0
+done
 "#,
     )
     .unwrap();
@@ -384,6 +392,7 @@ printf 'stdin=%s\n' "$command" >> "$capture"
     let app = herdrgo_bridge::http::build_router(state);
 
     let response = app
+        .clone()
         .oneshot(post_json(
             "/api/v1/pane/w1:p1/resize?session=default",
             r#"{"cols":48,"rows":31}"#,
@@ -392,20 +401,58 @@ printf 'stdin=%s\n' "$command" >> "$capture"
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let capture =
-        std::fs::read_to_string(controller_dir.path().join("capture")).unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let lease_id = json["leaseId"].as_str().unwrap();
+    let capture_path = controller_dir.path().join("capture");
+    let capture = std::fs::read_to_string(&capture_path).unwrap();
     assert!(capture.contains(&format!("socket={}", mock.socket_path.display())));
     assert!(capture.contains("arg=w1:p1\n"));
     assert!(capture.contains("arg=--cols\narg=48\narg=--rows\narg=31\n"));
-    assert!(!capture.contains("arg=--takeover\n"));
+    assert!(capture.contains("arg=--takeover\n"));
+    assert!(!capture.contains("terminal.release"));
+
+    let renew = app
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/pane/w1:p1/resize?session=default",
+            &format!(r#"{{"cols":52,"rows":30,"leaseId":"{lease_id}"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(renew.status(), StatusCode::OK);
+
+    let release = app
+        .clone()
+        .oneshot(delete(&format!(
+            "/api/v1/pane/w1:p1/resize/{lease_id}?session=default"
+        )))
+        .await
+        .unwrap();
+    assert_eq!(release.status(), StatusCode::OK);
+    let capture = std::fs::read_to_string(capture_path).unwrap();
+    assert!(capture.contains(
+        "stdin={\"type\":\"terminal.resize\",\"cols\":52,\"rows\":30}\n"
+    ));
     assert!(capture.contains("stdin={\"type\":\"terminal.release\"}\n"));
 
+    let expired = app
+        .oneshot(post_json(
+            "/api/v1/pane/w1:p1/resize?session=default",
+            &format!(r#"{{"cols":52,"rows":30,"leaseId":"{lease_id}"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(expired.status(), StatusCode::CONFLICT);
+
     let audit = std::fs::read_to_string(state_dir.path().join("audit.log")).unwrap();
-    let line: serde_json::Value =
-        serde_json::from_str(audit.lines().next().unwrap()).unwrap();
-    assert_eq!(line["action"], "resize");
-    assert_eq!(line["paneId"], "w1:p1");
-    assert_eq!(line["detail"], "48x31");
+    let lines = audit.lines().map(|line| {
+        serde_json::from_str::<serde_json::Value>(line).unwrap()
+    }).collect::<Vec<_>>();
+    assert_eq!(lines[0]["action"], "resize_acquire");
+    assert_eq!(lines[0]["paneId"], "w1:p1");
+    assert_eq!(lines[0]["detail"], "48x31");
+    assert_eq!(lines[1]["action"], "resize_release");
 }
 
 #[tokio::test]

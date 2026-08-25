@@ -12,6 +12,7 @@ use crate::herdr::client::HerdrClient;
 use crate::journal::JournalRegistry;
 use crate::sessions::SessionRegistry;
 use crate::state::engine::StateEngine;
+use crate::terminal_resize::TerminalLeaseManager;
 
 pub struct SessionRuntime {
     pub name: String,
@@ -32,6 +33,7 @@ pub struct AppState {
     pub registry: Arc<SessionRegistry>,
     pub audit: Arc<AuditLog>,
     pub journal: Arc<JournalRegistry>,
+    pub terminal_leases: TerminalLeaseManager,
 }
 
 impl AppState {
@@ -51,6 +53,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/pane/{id}/reply", axum::routing::post(routes::reply_pane))
         .route("/api/v1/pane/{id}/keys", axum::routing::post(routes::keys_pane))
         .route("/api/v1/pane/{id}/resize", axum::routing::post(routes::resize_pane))
+        .route(
+            "/api/v1/pane/{id}/resize/{lease_id}",
+            axum::routing::delete(routes::release_pane_resize),
+        )
         .route("/api/v1/pane/{id}/close", axum::routing::post(routes::close_pane))
         .route("/api/v1/pane/{id}/rename", axum::routing::post(routes::rename_pane))
         .route("/api/v1/pane/{id}/upload", axum::routing::post(routes::upload_pane))
@@ -71,6 +77,7 @@ pub async fn test_app_state(cfg: Arc<Config>) -> (AppState, tokio::sync::watch::
     let registry_loop = registry.clone();
     tokio::spawn(async move { registry_loop.refresh_loop(rx).await });
     let journal = Arc::new(JournalRegistry::new(&cfg));
-    let state = AppState { cfg, registry, audit, journal };
+    let terminal_leases = TerminalLeaseManager::new(cfg.herdr_bin_path.clone());
+    let state = AppState { cfg, registry, audit, journal, terminal_leases };
     (state, tx)
 }

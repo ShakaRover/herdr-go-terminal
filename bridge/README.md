@@ -29,7 +29,8 @@ session（缺省为 primary）。写端点（POST）受 device gate 约束（见
 | GET | `/api/v1/pane/{id}/history` | 从 agent 自己的会话日志分页读历史，`?limit=&before=` 游标分页 |
 | POST | `/api/v1/pane/{id}/reply` | 发送文本，body `{text?, submit?, expectedPrompt?}`；带 `expectedPrompt` 时先做 prompt-binding 校验，不匹配返回 409 `prompt_changed` |
 | POST | `/api/v1/pane/{id}/keys` | 发送按键，body `{keys: [...], expectedPrompt?}`，同样支持 prompt-binding |
-| POST | `/api/v1/pane/{id}/resize` | 用 `{cols, rows}` 短暂建立 terminal controller（不抢占现有 controller），收到首个重绘帧后立即 release；用于手机详情页按屏幕宽度调整输出 |
+| POST | `/api/v1/pane/{id}/resize` | 用 `{cols, rows, leaseId?}` 获取或续期 terminal controller 租约；首次请求会 takeover，返回 `{leaseId}`，租约 20 秒未续期会自动释放 |
+| DELETE | `/api/v1/pane/{id}/resize/{leaseId}` | 离开手机详情页或进入后台时释放 terminal controller，让电脑端恢复控制 |
 | POST | `/api/v1/pane/{id}/close` | 关闭 pane |
 | POST | `/api/v1/pane/{id}/rename` | 重命名 pane，body `{label: string|null}`（`null` 清除自定义名） |
 | POST | `/api/v1/pane/{id}/upload` | multipart 上传图片（字段名 `file`，≤10MB），落盘到 state 目录并返回 `{ok, path}` |

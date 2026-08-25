@@ -15,7 +15,7 @@ pub struct Config {
     /// HTTP 直连模式的绑定端口（EasyTier 模式下不使用）。
     pub http_port: u16,
     pub socket_path: PathBuf,
-    /// Herdr CLI used for the short-lived terminal resize controller.
+    /// Herdr CLI used for the leased phone terminal controller.
     pub herdr_bin_path: PathBuf,
     pub state_dir: PathBuf,
     pub poll_ms: u64,

@@ -401,7 +401,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get terminalAutoResizeHelp =>
-      'Resize the shared Herdr terminal when you open an agent. Turn this off to keep the computer\'s terminal width.';
+      'Temporarily control the shared Herdr terminal while an agent is open, then return control when you leave. Turn this off to always keep the computer\'s terminal width.';
 
   @override
   String get systemLanguage => 'System default';

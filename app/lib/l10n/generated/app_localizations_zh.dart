@@ -365,7 +365,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get terminalAutoResizeHelp =>
-      '打开 agent 时调整共享 Herdr 终端的尺寸；关闭后保持电脑端的终端宽度。';
+      '打开 agent 期间临时控制共享 Herdr 终端，离开后归还控制权；关闭此选项可始终保持电脑端的终端宽度。';
 
   @override
   String get systemLanguage => '跟随系统';

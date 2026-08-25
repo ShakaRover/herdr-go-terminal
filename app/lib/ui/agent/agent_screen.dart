@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -27,8 +29,8 @@ _TerminalGridSize _terminalGridSize(
 ) {
   final painter = TextPainter(
     text: TextSpan(
-      text: 'M',
-      style: segmentStyle(const AnsiSegment(text: 'M')),
+      text: '0',
+      style: segmentStyle(const AnsiSegment(text: '0')),
     ),
     textDirection: Directionality.of(context),
     textScaler: MediaQuery.textScalerOf(context),
@@ -62,9 +64,20 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   /// 用户停留在底部时，新内容到达自动跟随；上翻后不再抢滚动条。
   bool _stickToBottom = true;
   bool _sending = false;
-  bool _resizeInFlight = false;
-  int? _lastResizeCols;
-  _TerminalGridSize? _pendingResize;
+  bool _foreground = true;
+  bool _resizeEligible = false;
+  bool _leaseRequestInFlight = false;
+  bool _leaseSyncQueued = false;
+  bool _leaseSyncAgain = false;
+  bool _renewLease = false;
+  int _leaseEpoch = 0;
+  String? _terminalLeaseId;
+  String? _leaseSession;
+  BridgeApi? _leaseApi;
+  _TerminalGridSize? _viewportSize;
+  _TerminalGridSize? _leasedSize;
+  Timer? _leaseHeartbeat;
+  AppLifecycleListener? _lifecycleListener;
 
   /// 最近一次 build 时识别到的尾部对话框（供回复发送前的误批准拦截）。
   PromptRegion? _lastPromptRegion;
@@ -84,6 +97,18 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   @override
   void initState() {
     super.initState();
+    _lifecycleListener = AppLifecycleListener(
+      onStateChange: (state) {
+        final foreground = state == AppLifecycleState.resumed;
+        if (_foreground == foreground) return;
+        _foreground = foreground;
+        if (foreground) {
+          _queueLeaseSync();
+        } else {
+          unawaited(_releaseTerminalLease());
+        }
+      },
+    );
     _scrollController.addListener(() {
       if (!_scrollController.hasClients) return;
       final pos = _scrollController.position;
@@ -96,6 +121,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   @override
   void dispose() {
+    _lifecycleListener?.dispose();
+    unawaited(_releaseTerminalLease());
     _scrollController.dispose();
     _replyController.dispose();
     super.dispose();
@@ -109,48 +136,98 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     });
   }
 
-  void _scheduleTerminalResize(
+  void _updateTerminalViewport(
     BuildContext context,
     BoxConstraints constraints, {
     required bool enabled,
   }) {
+    final eligibilityChanged = _resizeEligible != enabled;
+    _resizeEligible = enabled;
     if (!enabled) {
-      _pendingResize = null;
-      _lastResizeCols = null;
+      _viewportSize = null;
+      if (eligibilityChanged || _terminalLeaseId != null) {
+        _queueLeaseSync();
+      }
       return;
     }
     final size = _terminalGridSize(context, constraints);
-    if (_lastResizeCols == size.cols || _pendingResize?.cols == size.cols) {
-      return;
+    final widthChanged = _viewportSize?.cols != size.cols;
+    _viewportSize = size;
+    if (eligibilityChanged || widthChanged || _terminalLeaseId == null) {
+      _queueLeaseSync();
     }
-    _pendingResize = size;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingResize());
   }
 
-  Future<void> _applyPendingResize() async {
-    if (!mounted || _resizeInFlight) return;
-    if (!ref.read(terminalAutoResizeProvider)) {
-      _pendingResize = null;
+  bool get _wantsTerminalLease =>
+      mounted && _foreground && _resizeEligible && _viewportSize != null;
+
+  void _queueLeaseSync({bool renew = false}) {
+    _renewLease = _renewLease || renew;
+    if (_leaseSyncQueued) return;
+    _leaseSyncQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _leaseSyncQueued = false;
+      unawaited(_syncTerminalLease());
+    });
+  }
+
+  void _ensureLeaseHeartbeat() {
+    _leaseHeartbeat ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_wantsTerminalLease) {
+        _queueLeaseSync(renew: true);
+      }
+    });
+  }
+
+  Future<void> _syncTerminalLease() async {
+    if (_leaseRequestInFlight) {
+      _leaseSyncAgain = true;
       return;
     }
-    final size = _pendingResize;
+    if (!_wantsTerminalLease) {
+      await _releaseTerminalLease();
+      return;
+    }
     final api = ref.read(apiProvider(widget.bridgeId));
-    if (size == null) return;
-    if (api == null) {
-      _pendingResize = null;
+    final size = _viewportSize;
+    if (api == null || size == null) {
+      await _releaseTerminalLease();
       return;
     }
-    _pendingResize = null;
-    _lastResizeCols = size.cols;
-    _resizeInFlight = true;
+    final session = ref.read(sessionFilterProvider(widget.bridgeId));
+    if (_terminalLeaseId != null &&
+        (_leaseApi != api || _leaseSession != session)) {
+      await _releaseTerminalLease();
+    }
+
+    final existingLease = _terminalLeaseId;
+    final previousSize = _leasedSize;
+    final renew = _renewLease;
+    _renewLease = false;
+    if (existingLease != null && !renew && previousSize?.cols == size.cols) {
+      return;
+    }
+
+    _ensureLeaseHeartbeat();
+    final requestEpoch = _leaseEpoch;
+    _leaseRequestInFlight = true;
     try {
-      await api.resizePane(
+      final leaseId = await api.holdPaneSize(
         widget.paneId,
         cols: size.cols,
         rows: size.rows,
-        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+        session: session,
+        leaseId: existingLease,
       );
-      if (mounted) {
+      if (!_wantsTerminalLease || requestEpoch != _leaseEpoch) {
+        await api.releasePaneSize(widget.paneId, leaseId, session: session);
+        return;
+      }
+      _terminalLeaseId = leaseId;
+      _leaseApi = api;
+      _leaseSession = session;
+      _leasedSize = size;
+      if (existingLease == null || previousSize?.cols != size.cols) {
         await ref
             .read(
               paneReadProvider((
@@ -161,14 +238,38 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             .refresh();
       }
     } on ApiException {
-      // Automatic sizing is best-effort; the original-width mirror remains usable.
+      // Best effort: the heartbeat retries acquisition if a lease expires or
+      // the bridge is temporarily unreachable.
+      _terminalLeaseId = null;
+      _leaseApi = null;
+      _leaseSession = null;
+      _leasedSize = null;
     } finally {
-      _resizeInFlight = false;
-      if (_pendingResize != null) {
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _applyPendingResize(),
-        );
+      _leaseRequestInFlight = false;
+      if (_leaseSyncAgain) {
+        _leaseSyncAgain = false;
+        _queueLeaseSync();
       }
+    }
+  }
+
+  Future<void> _releaseTerminalLease() async {
+    _leaseEpoch += 1;
+    _leaseHeartbeat?.cancel();
+    _leaseHeartbeat = null;
+    _renewLease = false;
+    final leaseId = _terminalLeaseId;
+    final api = _leaseApi;
+    final session = _leaseSession;
+    _terminalLeaseId = null;
+    _leaseApi = null;
+    _leaseSession = null;
+    _leasedSize = null;
+    if (leaseId == null || api == null) return;
+    try {
+      await api.releasePaneSize(widget.paneId, leaseId, session: session);
+    } on ApiException {
+      // The bridge TTL releases the controller if teardown cannot reach it.
     }
   }
 
@@ -298,6 +399,21 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         )
         .refresh();
     await ref.read(bridgeSnapshotProvider(widget.bridgeId).notifier).refresh();
+  }
+
+  Future<void> _openHistory(String title) async {
+    await _releaseTerminalLease();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => HistoryScreen(
+          bridgeId: widget.bridgeId,
+          paneId: widget.paneId,
+          title: title,
+        ),
+      ),
+    );
+    if (mounted) _queueLeaseSync();
   }
 
   /// 相册选图 → 上传到宿主机 → 返回的路径插进回复框（agent 按路径读图）。
@@ -447,15 +563,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             IconButton(
               tooltip: l10n.historyTooltip,
               icon: const Icon(Icons.history),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => HistoryScreen(
-                    bridgeId: widget.bridgeId,
-                    paneId: widget.paneId,
-                    title: pane?.displayName ?? widget.paneId,
-                  ),
-                ),
-              ),
+              onPressed: () => _openHistory(pane?.displayName ?? widget.paneId),
             ),
         ],
       ),
@@ -484,7 +592,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                _scheduleTerminalResize(
+                _updateTerminalViewport(
                   context,
                   constraints,
                   enabled: terminalAutoResize && pane != null && !readOnly,

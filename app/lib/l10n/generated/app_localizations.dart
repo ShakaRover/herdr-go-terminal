@@ -731,7 +731,7 @@ abstract class AppLocalizations {
   /// No description provided for @terminalAutoResizeHelp.
   ///
   /// In en, this message translates to:
-  /// **'Resize the shared Herdr terminal when you open an agent. Turn this off to keep the computer\'s terminal width.'**
+  /// **'Temporarily control the shared Herdr terminal while an agent is open, then return control when you leave. Turn this off to always keep the computer\'s terminal width.'**
   String get terminalAutoResizeHelp;
 
   /// No description provided for @systemLanguage.

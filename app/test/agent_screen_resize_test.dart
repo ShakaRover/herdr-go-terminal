@@ -1,5 +1,7 @@
 library;
 
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,12 +14,22 @@ import 'package:herdrgo/state/settings.dart';
 import 'package:herdrgo/ui/agent/agent_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-typedef _ResizeCall = ({String paneId, int cols, int rows, String? session});
+typedef _HoldCall = ({
+  String paneId,
+  int cols,
+  int rows,
+  String? session,
+  String? leaseId,
+});
+typedef _ReleaseCall = ({String paneId, String leaseId, String? session});
 
 class _FakeBridgeApi extends BridgeApi {
   _FakeBridgeApi() : super(baseUrl: 'http://127.0.0.1:1');
 
-  final resizeCalls = <_ResizeCall>[];
+  final holdCalls = <_HoldCall>[];
+  final releaseCalls = <_ReleaseCall>[];
+  var _nextLease = 1;
+  Completer<void>? holdGate;
 
   @override
   Future<Snapshot> getSnapshot({
@@ -58,14 +70,31 @@ class _FakeBridgeApi extends BridgeApi {
   );
 
   @override
-  Future<ActionResult> resizePane(
+  Future<String> holdPaneSize(
     String paneId, {
     required int cols,
     required int rows,
     String? session,
+    String? leaseId,
   }) async {
-    resizeCalls.add((paneId: paneId, cols: cols, rows: rows, session: session));
-    return const ActionResult.ok();
+    holdCalls.add((
+      paneId: paneId,
+      cols: cols,
+      rows: rows,
+      session: session,
+      leaseId: leaseId,
+    ));
+    await holdGate?.future;
+    return leaseId ?? 'lease-${_nextLease++}';
+  }
+
+  @override
+  Future<void> releasePaneSize(
+    String paneId,
+    String leaseId, {
+    String? session,
+  }) async {
+    releaseCalls.add((paneId: paneId, leaseId: leaseId, session: session));
   }
 }
 
@@ -103,7 +132,7 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
 }
 
 void main() {
-  testWidgets('resizes on entry and width change but not height-only change', (
+  testWidgets('holds lease on entry and resizes it only when width changes', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -113,34 +142,80 @@ void main() {
     final api = _FakeBridgeApi();
 
     await _pumpAgent(tester, api, autoResize: null);
-    await _pumpUntil(tester, () => api.resizeCalls.isNotEmpty);
+    await _pumpUntil(tester, () => api.holdCalls.isNotEmpty);
 
-    final first = api.resizeCalls.single;
+    final first = api.holdCalls.single;
     expect(first.paneId, 'w1:p1');
+    expect(first.leaseId, isNull);
     expect(first.cols, inInclusiveRange(20, 300));
     expect(first.rows, inInclusiveRange(5, 200));
 
     tester.view.physicalSize = const Size(390, 700);
     await tester.pump(const Duration(milliseconds: 100));
-    expect(api.resizeCalls, hasLength(1));
+    expect(api.holdCalls, hasLength(1));
 
     tester.view.physicalSize = const Size(844, 390);
-    await _pumpUntil(tester, () => api.resizeCalls.length == 2);
-    expect(api.resizeCalls.last.cols, isNot(first.cols));
+    await _pumpUntil(tester, () => api.holdCalls.length == 2);
+    expect(api.holdCalls.last.cols, isNot(first.cols));
+    expect(api.holdCalls.last.leaseId, 'lease-1');
+
+    await tester.pumpWidget(const SizedBox());
+    await _pumpUntil(tester, () => api.releaseCalls.isNotEmpty);
+    expect(api.releaseCalls.single.leaseId, 'lease-1');
   });
 
-  testWidgets('persisted off option suppresses automatic resize', (
+  testWidgets('renews the held lease before the bridge TTL', (tester) async {
+    final api = _FakeBridgeApi();
+    await _pumpAgent(tester, api, autoResize: null);
+    await _pumpUntil(tester, () => api.holdCalls.isNotEmpty);
+
+    await tester.pump(const Duration(seconds: 5));
+    await _pumpUntil(tester, () => api.holdCalls.length == 2);
+
+    expect(api.holdCalls.last.leaseId, 'lease-1');
+  });
+
+  testWidgets('releases in background and reacquires after resume', (
     tester,
   ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
+    final api = _FakeBridgeApi();
+    await _pumpAgent(tester, api, autoResize: null);
+    await _pumpUntil(tester, () => api.holdCalls.isNotEmpty);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await _pumpUntil(tester, () => api.releaseCalls.isNotEmpty);
+    expect(api.releaseCalls.single.leaseId, 'lease-1');
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpUntil(tester, () => api.holdCalls.length == 2);
+    expect(api.holdCalls.last.leaseId, isNull);
+  });
+
+  testWidgets('releases a lease acquired while the page is closing', (
+    tester,
+  ) async {
+    final api = _FakeBridgeApi()..holdGate = Completer<void>();
+    await _pumpAgent(tester, api, autoResize: null);
+    await _pumpUntil(tester, () => api.holdCalls.isNotEmpty);
+
+    await tester.pumpWidget(const SizedBox());
+    api.holdGate!.complete();
+    await _pumpUntil(tester, () => api.releaseCalls.isNotEmpty);
+
+    expect(api.releaseCalls.single.leaseId, 'lease-1');
+  });
+
+  testWidgets('persisted off option never acquires a controller lease', (
+    tester,
+  ) async {
     final api = _FakeBridgeApi();
 
     await _pumpAgent(tester, api, autoResize: false);
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(api.resizeCalls, isEmpty);
+    expect(api.holdCalls, isEmpty);
+    expect(api.releaseCalls, isEmpty);
   });
 }

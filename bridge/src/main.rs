@@ -72,6 +72,9 @@ async fn main() {
         registry,
         audit: Arc::new(herdrgo_bridge::audit::AuditLog::new(&cfg.state_dir)),
         journal: Arc::new(herdrgo_bridge::journal::JournalRegistry::new(&cfg)),
+        terminal_leases: herdrgo_bridge::terminal_resize::TerminalLeaseManager::new(
+            cfg.herdr_bin_path.clone(),
+        ),
     };
     // uploads 清扫：启动一次 + 每 6h；独立 task，与 runtime 无关。
     {

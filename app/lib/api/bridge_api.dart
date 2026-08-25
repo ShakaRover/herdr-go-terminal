@@ -375,17 +375,55 @@ class BridgeApi {
     'expectedPrompt': ?expectedPrompt,
   }, session: session);
 
-  /// Temporarily attach at the phone viewport size. The bridge releases the
-  /// controller after Herdr emits the first resized frame.
-  Future<ActionResult> resizePane(
+  /// Acquire or renew the controller lease that keeps this pane at the phone
+  /// viewport size. A missing [leaseId] takes over from the current client.
+  Future<String> holdPaneSize(
     String paneId, {
     required int cols,
     required int rows,
     String? session,
-  }) => _postAction('/api/v1/pane/$paneId/resize', {
-    'cols': cols,
-    'rows': rows,
-  }, session: session);
+    String? leaseId,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/api/v1/pane/$paneId/resize',
+        queryParameters: _queryWithSession(session),
+        data: {'cols': cols, 'rows': rows, 'leaseId': ?leaseId},
+        options: Options(receiveTimeout: _mutationTimeout),
+      );
+      final data = res.data;
+      final returnedLease = data is Map<String, dynamic>
+          ? data['leaseId']
+          : null;
+      if (returnedLease is! String || returnedLease.isEmpty) {
+        throw ApiException(
+          _localizations.invalidJsonResponse,
+          statusCode: res.statusCode,
+        );
+      }
+      return returnedLease;
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
+
+  /// Release a phone-size controller lease. The bridge treats stale leases as
+  /// already released, so this is safe during page teardown.
+  Future<void> releasePaneSize(
+    String paneId,
+    String leaseId, {
+    String? session,
+  }) async {
+    try {
+      await _dio.delete(
+        '/api/v1/pane/$paneId/resize/$leaseId',
+        queryParameters: _queryWithSession(session),
+        options: Options(receiveTimeout: _mutationTimeout),
+      );
+    } on DioException catch (e) {
+      throw _wrap(e);
+    }
+  }
 
   Future<ActionResult> closePane(String paneId, {String? session}) =>
       _postAction('/api/v1/pane/$paneId/close', null, session: session);

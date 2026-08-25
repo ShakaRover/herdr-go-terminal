@@ -365,9 +365,11 @@ pub struct KeysBody {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResizeBody {
     pub cols: u16,
     pub rows: u16,
+    pub lease_id: Option<String>,
 }
 
 fn validate_expected_prompt(ep: &Option<String>) -> Result<(), ApiError> {
@@ -454,25 +456,63 @@ pub async fn resize_pane(
             "terminal size must be 20-300 columns and 5-200 rows",
         ));
     }
-    crate::terminal_resize::resize_once(
-        &state.cfg.herdr_bin_path,
-        rt.client.socket_path(),
-        &id,
-        body.cols,
-        body.rows,
-    )
-    .await
-    .map_err(|error| ApiError::new(
-        StatusCode::BAD_GATEWAY,
-        "terminal_resize_failed",
-        format!("terminal resize failed: {error}"),
-    ))?;
-    state.audit.log(
-        "resize", Some(&id), q.session.as_deref(), device.device.as_deref(),
-        &format!("{}x{}", body.cols, body.rows),
-    );
+    let lease_id = if let Some(lease_id) = body.lease_id {
+        state
+            .terminal_leases
+            .resize(
+                &lease_id,
+                rt.client.socket_path(),
+                &id,
+                body.cols,
+                body.rows,
+            )
+            .await
+            .map_err(terminal_resize_error)?;
+        lease_id
+    } else {
+        let lease_id = state
+            .terminal_leases
+            .acquire(rt.client.socket_path(), &id, body.cols, body.rows)
+            .await
+            .map_err(terminal_resize_error)?;
+        state.audit.log(
+            "resize_acquire", Some(&id), q.session.as_deref(), device.device.as_deref(),
+            &format!("{}x{}", body.cols, body.rows),
+        );
+        rt.engine.poke();
+        lease_id
+    };
     maybe_mark_seen(&rt, &headers, &id, true);
-    rt.engine.poke();
+    Ok(json_response(
+        StatusCode::OK,
+        serde_json::json!({"ok": true, "leaseId": lease_id}),
+    ))
+}
+
+fn terminal_resize_error(error: crate::terminal_resize::TerminalResizeError) -> ApiError {
+    let (status, code) = match error {
+        crate::terminal_resize::TerminalResizeError::UnknownLease => {
+            (StatusCode::CONFLICT, "terminal_lease_expired")
+        }
+        _ => (StatusCode::BAD_GATEWAY, "terminal_resize_failed"),
+    };
+    ApiError::new(status, code, format!("terminal resize failed: {error}"))
+}
+
+pub async fn release_pane_resize(
+    State(state): State<AppState>, headers: HeaderMap,
+    Path((id, lease_id)): Path<(String, String)>, Query(q): Query<SessionQuery>,
+) -> Result<Response, ApiError> {
+    let device = check_access(&state.cfg, &headers, AccessLevel::Write)?;
+    let rt = state.runtime(q.session.as_deref())?;
+    state
+        .terminal_leases
+        .release(&lease_id, rt.client.socket_path(), &id)
+        .await
+        .map_err(terminal_resize_error)?;
+    state.audit.log(
+        "resize_release", Some(&id), q.session.as_deref(), device.device.as_deref(), "",
+    );
     Ok(json_response(StatusCode::OK, serde_json::json!({"ok": true})))
 }
 

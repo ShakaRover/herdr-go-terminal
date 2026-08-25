@@ -130,7 +130,7 @@
   "bridgeEnableHelp": "Use each switch to control whether that bridge connects. Enable multiple bridges for multi-host mode.",
   "language": "Language",
   "terminalAutoResize": "Fit terminal output to phone",
-  "terminalAutoResizeHelp": "Resize the shared Herdr terminal when you open an agent. Turn this off to keep the computer's terminal width.",
+  "terminalAutoResizeHelp": "Temporarily control the shared Herdr terminal while an agent is open, then return control when you leave. Turn this off to always keep the computer's terminal width.",
   "systemLanguage": "System default",
   "simplifiedChinese": "简体中文",
   "english": "English",
