@@ -124,6 +124,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final l10n = context.l10n;
     final localePreference = ref.watch(appLocaleProvider);
     final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
+    final terminalFontSize = ref.watch(terminalFontSizeProvider);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.connectionSettings)),
       body: ListView(
@@ -164,6 +165,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (enabled) => ref
                 .read(terminalAutoResizeProvider.notifier)
                 .setEnabled(enabled),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.terminalFontSize),
+            subtitle: Text(l10n.terminalFontSizeHelp),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${terminalFontSize.toStringAsFixed(1)} pt'),
+                IconButton(
+                  tooltip: l10n.terminalFontSizeReset,
+                  icon: const Icon(Icons.restart_alt),
+                  onPressed: terminalFontSize == terminalDefaultFontSize
+                      ? null
+                      : () =>
+                            ref.read(terminalFontSizeProvider.notifier).reset(),
+                ),
+              ],
+            ),
+          ),
+          Slider(
+            value: terminalFontSize,
+            min: terminalMinFontSize,
+            max: terminalMaxFontSize,
+            divisions: 65,
+            onChanged: (value) =>
+                ref.read(terminalFontSizeProvider.notifier).preview(value),
+            onChangeEnd: (value) =>
+                ref.read(terminalFontSizeProvider.notifier).setFontSize(value),
           ),
           const Divider(),
           Row(

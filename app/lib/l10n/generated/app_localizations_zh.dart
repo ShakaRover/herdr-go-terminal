@@ -368,6 +368,15 @@ class AppLocalizationsZh extends AppLocalizations {
       '打开 agent 期间临时控制共享 Herdr 终端，离开后归还控制权；关闭此选项可始终保持电脑端的终端宽度。';
 
   @override
+  String get terminalFontSize => '终端文字大小';
+
+  @override
+  String get terminalFontSizeHelp => '在终端输出区双指缩放，或在此精确调整。';
+
+  @override
+  String get terminalFontSizeReset => '恢复默认终端字号';
+
+  @override
   String get systemLanguage => '跟随系统';
 
   @override

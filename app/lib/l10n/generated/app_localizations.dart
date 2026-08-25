@@ -734,6 +734,24 @@ abstract class AppLocalizations {
   /// **'Temporarily control the shared Herdr terminal while an agent is open, then return control when you leave. Turn this off to always keep the computer\'s terminal width.'**
   String get terminalAutoResizeHelp;
 
+  /// No description provided for @terminalFontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal text size'**
+  String get terminalFontSize;
+
+  /// No description provided for @terminalFontSizeHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinch the terminal output with two fingers, or adjust it here.'**
+  String get terminalFontSizeHelp;
+
+  /// No description provided for @terminalFontSizeReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset terminal text size'**
+  String get terminalFontSizeReset;
+
   /// No description provided for @systemLanguage.
   ///
   /// In en, this message translates to:

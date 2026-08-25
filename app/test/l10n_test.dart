@@ -12,6 +12,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       appLocalePreferenceKey: AppLocalePreference.english.name,
       terminalAutoResizePreferenceKey: false,
+      terminalFontSizePreferenceKey: 11.0,
     });
     final prefs = await SharedPreferences.getInstance();
 
@@ -29,6 +30,9 @@ void main() {
     );
     expect(tileFinder, findsOneWidget);
     expect(tester.widget<SwitchListTile>(tileFinder).value, isFalse);
+    expect(find.text('Terminal text size'), findsOneWidget);
+    expect(find.text('11.0 pt'), findsOneWidget);
+    expect(tester.widget<Slider>(find.byType(Slider)).value, 11.0);
 
     await tester.tap(tileFinder);
     await tester.pump();

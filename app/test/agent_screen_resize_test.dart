@@ -102,9 +102,11 @@ Future<void> _pumpAgent(
   WidgetTester tester,
   _FakeBridgeApi api, {
   required bool? autoResize,
+  double? fontSize,
 }) async {
   SharedPreferences.setMockInitialValues({
     terminalAutoResizePreferenceKey: ?autoResize,
+    terminalFontSizePreferenceKey: ?fontSize,
   });
   final prefs = await SharedPreferences.getInstance();
   await tester.pumpWidget(
@@ -205,6 +207,96 @@ void main() {
     await _pumpUntil(tester, () => api.releaseCalls.isNotEmpty);
 
     expect(api.releaseCalls.single.leaseId, 'lease-1');
+  });
+
+  testWidgets('pinch previews locally then resizes once and persists', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final api = _FakeBridgeApi();
+    await _pumpAgent(tester, api, autoResize: null);
+    await _pumpUntil(tester, () => api.holdCalls.isNotEmpty);
+    final initial = api.holdCalls.single;
+    final target = find.byKey(const Key('terminal-output-gesture-area'));
+    final center = tester.getCenter(target);
+
+    final first = await tester.startGesture(
+      center - const Offset(30, 0),
+      pointer: 10,
+    );
+    final second = await tester.startGesture(
+      center + const Offset(30, 0),
+      pointer: 11,
+    );
+    await tester.pump();
+    await first.moveTo(center - const Offset(60, 0));
+    await second.moveTo(center + const Offset(60, 0));
+    await tester.pump();
+
+    expect(find.textContaining('pt ·'), findsOneWidget);
+    expect(api.holdCalls, hasLength(1));
+
+    await first.up();
+    await second.up();
+    await _pumpUntil(tester, () => api.holdCalls.length == 2);
+
+    expect(find.textContaining('pt ·'), findsNothing);
+    expect(api.holdCalls.last.leaseId, 'lease-1');
+    expect(api.holdCalls.last.cols, lessThan(initial.cols));
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getDouble(terminalFontSizePreferenceKey), 16.0);
+  });
+
+  testWidgets('pinch with auto resize off only changes local text size', (
+    tester,
+  ) async {
+    final api = _FakeBridgeApi();
+    await _pumpAgent(tester, api, autoResize: false);
+    final target = find.byKey(const Key('terminal-output-gesture-area'));
+    await _pumpUntil(tester, () => target.evaluate().isNotEmpty);
+    final center = tester.getCenter(target);
+
+    final first = await tester.startGesture(
+      center - const Offset(30, 0),
+      pointer: 20,
+    );
+    final second = await tester.startGesture(
+      center + const Offset(30, 0),
+      pointer: 21,
+    );
+    await first.moveTo(center - const Offset(45, 0));
+    await second.moveTo(center + const Offset(45, 0));
+    await first.up();
+    await second.up();
+    await tester.pump();
+
+    expect(api.holdCalls, isEmpty);
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getDouble(terminalFontSizePreferenceKey),
+      greaterThan(terminalDefaultFontSize),
+    );
+  });
+
+  testWidgets('one pointer does not start terminal zoom', (tester) async {
+    final api = _FakeBridgeApi();
+    await _pumpAgent(tester, api, autoResize: null);
+    await _pumpUntil(tester, () => api.holdCalls.isNotEmpty);
+    final target = find.byKey(const Key('terminal-output-gesture-area'));
+    final center = tester.getCenter(target);
+
+    final gesture = await tester.startGesture(center, pointer: 30);
+    await gesture.moveBy(const Offset(0, -40));
+    await gesture.up();
+    await tester.pump();
+
+    expect(find.textContaining('pt ·'), findsNothing);
+    expect(api.holdCalls, hasLength(1));
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getDouble(terminalFontSizePreferenceKey), isNull);
   });
 
   testWidgets('persisted off option never acquires a controller lease', (

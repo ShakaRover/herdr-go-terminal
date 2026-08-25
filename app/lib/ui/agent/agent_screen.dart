@@ -25,12 +25,13 @@ const _mirrorPadding = EdgeInsets.fromLTRB(12, 12, 12, 16);
 
 _TerminalGridSize _terminalGridSize(
   BuildContext context,
-  BoxConstraints constraints,
-) {
+  BoxConstraints constraints, {
+  required double fontSize,
+}) {
   final painter = TextPainter(
     text: TextSpan(
       text: '0',
-      style: segmentStyle(const AnsiSegment(text: '0')),
+      style: segmentStyle(const AnsiSegment(text: '0'), fontSize: fontSize),
     ),
     textDirection: Directionality.of(context),
     textScaler: MediaQuery.textScalerOf(context),
@@ -78,6 +79,12 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   _TerminalGridSize? _leasedSize;
   Timer? _leaseHeartbeat;
   AppLifecycleListener? _lifecycleListener;
+  final _terminalPointers = <int, Offset>{};
+  int? _pinchPointerA;
+  int? _pinchPointerB;
+  double? _pinchStartDistance;
+  double? _pinchStartFontSize;
+  double? _pinchFontSize;
 
   /// 最近一次 build 时识别到的尾部对话框（供回复发送前的误批准拦截）。
   PromptRegion? _lastPromptRegion;
@@ -140,6 +147,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     BuildContext context,
     BoxConstraints constraints, {
     required bool enabled,
+    required double fontSize,
   }) {
     final eligibilityChanged = _resizeEligible != enabled;
     _resizeEligible = enabled;
@@ -150,12 +158,69 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       }
       return;
     }
-    final size = _terminalGridSize(context, constraints);
+    final size = _terminalGridSize(context, constraints, fontSize: fontSize);
     final widthChanged = _viewportSize?.cols != size.cols;
     _viewportSize = size;
     if (eligibilityChanged || widthChanged || _terminalLeaseId == null) {
       _queueLeaseSync();
     }
+  }
+
+  bool get _isPinching => _pinchPointerA != null;
+
+  void _handleTerminalPointerDown(PointerDownEvent event) {
+    _terminalPointers[event.pointer] = event.localPosition;
+    if (_isPinching || _terminalPointers.length != 2) return;
+    final pointers = _terminalPointers.keys.toList();
+    final first = _terminalPointers[pointers[0]]!;
+    final second = _terminalPointers[pointers[1]]!;
+    final distance = (first - second).distance;
+    if (distance == 0) return;
+    setState(() {
+      _pinchPointerA = pointers[0];
+      _pinchPointerB = pointers[1];
+      _pinchStartDistance = distance;
+      _pinchStartFontSize = ref.read(terminalFontSizeProvider);
+      _pinchFontSize = _pinchStartFontSize;
+    });
+  }
+
+  void _handleTerminalPointerMove(PointerMoveEvent event) {
+    if (!_terminalPointers.containsKey(event.pointer)) return;
+    _terminalPointers[event.pointer] = event.localPosition;
+    final first = _terminalPointers[_pinchPointerA];
+    final second = _terminalPointers[_pinchPointerB];
+    final startDistance = _pinchStartDistance;
+    final startFontSize = _pinchStartFontSize;
+    if (first == null ||
+        second == null ||
+        startDistance == null ||
+        startFontSize == null) {
+      return;
+    }
+    final fontSize = (startFontSize * (first - second).distance / startDistance)
+        .clamp(terminalMinFontSize, terminalMaxFontSize)
+        .toDouble();
+    if ((_pinchFontSize! - fontSize).abs() < 0.01) return;
+    setState(() => _pinchFontSize = fontSize);
+  }
+
+  void _handleTerminalPointerEnd(PointerEvent event) {
+    _terminalPointers.remove(event.pointer);
+    if (event.pointer != _pinchPointerA && event.pointer != _pinchPointerB) {
+      return;
+    }
+    final fontSize = _pinchFontSize;
+    _pinchPointerA = null;
+    _pinchPointerB = null;
+    _pinchStartDistance = null;
+    _pinchStartFontSize = null;
+    if (fontSize == null) return;
+    final persist = ref
+        .read(terminalFontSizeProvider.notifier)
+        .setFontSize(fontSize);
+    setState(() => _pinchFontSize = null);
+    unawaited(persist);
   }
 
   bool get _wantsTerminalLease =>
@@ -502,6 +567,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         .firstOrNull;
     final readOnly = snap?.readOnly ?? false;
     final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
+    final storedTerminalFontSize = ref.watch(terminalFontSizeProvider);
+    final terminalFontSize = _pinchFontSize ?? storedTerminalFontSize;
 
     // 新内容到达且用户在底部 → 跟随。
     ref.listen(paneReadProvider(paneKey), (prev, next) {
@@ -592,11 +659,21 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                _updateTerminalViewport(
+                final resizeEnabled =
+                    terminalAutoResize && pane != null && !readOnly;
+                final previewGrid = _terminalGridSize(
                   context,
                   constraints,
-                  enabled: terminalAutoResize && pane != null && !readOnly,
+                  fontSize: terminalFontSize,
                 );
+                if (!_isPinching || !resizeEnabled) {
+                  _updateTerminalViewport(
+                    context,
+                    constraints,
+                    enabled: resizeEnabled,
+                    fontSize: terminalFontSize,
+                  );
+                }
                 return text.isEmpty && readState.error == null
                     ? Center(
                         child: Column(
@@ -611,14 +688,69 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                           ],
                         ),
                       )
-                    : SingleChildScrollView(
-                        controller: _scrollController,
-                        padding: _mirrorPadding,
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: SelectableText.rich(
-                            TextSpan(children: [linesToSpan(mirrorLines)]),
-                          ),
+                    : Listener(
+                        key: const Key('terminal-output-gesture-area'),
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: _handleTerminalPointerDown,
+                        onPointerMove: _handleTerminalPointerMove,
+                        onPointerUp: _handleTerminalPointerEnd,
+                        onPointerCancel: _handleTerminalPointerEnd,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            SingleChildScrollView(
+                              controller: _scrollController,
+                              physics: _isPinching
+                                  ? const NeverScrollableScrollPhysics()
+                                  : null,
+                              padding: _mirrorPadding,
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: SelectableText.rich(
+                                  TextSpan(
+                                    children: [
+                                      linesToSpan(
+                                        mirrorLines,
+                                        fontSize: terminalFontSize,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (_isPinching)
+                              Positioned(
+                                top: 12,
+                                left: 0,
+                                right: 0,
+                                child: IgnorePointer(
+                                  child: Center(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.78,
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        child: Text(
+                                          '${terminalFontSize.toStringAsFixed(1)} pt'
+                                          ' · ${previewGrid.cols}×${previewGrid.rows}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       );
               },

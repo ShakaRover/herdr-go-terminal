@@ -404,6 +404,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Temporarily control the shared Herdr terminal while an agent is open, then return control when you leave. Turn this off to always keep the computer\'s terminal width.';
 
   @override
+  String get terminalFontSize => 'Terminal text size';
+
+  @override
+  String get terminalFontSizeHelp =>
+      'Pinch the terminal output with two fingers, or adjust it here.';
+
+  @override
+  String get terminalFontSizeReset => 'Reset terminal text size';
+
+  @override
   String get systemLanguage => 'System default';
 
   @override

@@ -19,6 +19,16 @@ final sharedPrefsProvider = Provider<SharedPreferences>(
 
 const appLocalePreferenceKey = 'app_locale_v1';
 const terminalAutoResizePreferenceKey = 'terminal_auto_resize_v1';
+const terminalFontSizePreferenceKey = 'terminal_font_size_v1';
+const terminalDefaultFontSize = 12.5;
+const terminalMinFontSize = 9.5;
+const terminalMaxFontSize = 16.0;
+
+double normalizeTerminalFontSize(double value) {
+  if (!value.isFinite) return terminalDefaultFontSize;
+  final clamped = value.clamp(terminalMinFontSize, terminalMaxFontSize);
+  return (clamped * 10).roundToDouble() / 10;
+}
 
 enum AppLocalePreference {
   system,
@@ -74,6 +84,32 @@ class TerminalAutoResizeNotifier extends Notifier<bool> {
 final terminalAutoResizeProvider =
     NotifierProvider<TerminalAutoResizeNotifier, bool>(
       TerminalAutoResizeNotifier.new,
+    );
+
+class TerminalFontSizeNotifier extends Notifier<double> {
+  @override
+  double build() => normalizeTerminalFontSize(
+    ref.watch(sharedPrefsProvider).getDouble(terminalFontSizePreferenceKey) ??
+        terminalDefaultFontSize,
+  );
+
+  void preview(double fontSize) {
+    state = normalizeTerminalFontSize(fontSize);
+  }
+
+  Future<void> setFontSize(double fontSize) async {
+    state = normalizeTerminalFontSize(fontSize);
+    await ref
+        .read(sharedPrefsProvider)
+        .setDouble(terminalFontSizePreferenceKey, state);
+  }
+
+  Future<void> reset() => setFontSize(terminalDefaultFontSize);
+}
+
+final terminalFontSizeProvider =
+    NotifierProvider<TerminalFontSizeNotifier, double>(
+      TerminalFontSizeNotifier.new,
     );
 
 /// profile 列表的本地持久化仓库。

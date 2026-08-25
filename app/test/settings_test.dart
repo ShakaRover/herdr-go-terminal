@@ -15,12 +15,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 用给定的 prefs 初始值建 container。
 Future<ProviderContainer> buildContainer(
-    Map<String, Object> initialValues) async {
+  Map<String, Object> initialValues,
+) async {
   SharedPreferences.setMockInitialValues(initialValues);
   final prefs = await SharedPreferences.getInstance();
-  final container = ProviderContainer(overrides: [
-    sharedPrefsProvider.overrideWithValue(prefs),
-  ]);
+  final container = ProviderContainer(
+    overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+  );
   addTearDown(container.dispose);
   return container;
 }
@@ -73,6 +74,33 @@ void main() {
     });
   });
 
+  group('terminalFontSizeProvider', () {
+    test('默认字号可持久化并恢复', () async {
+      final container = await buildContainer({});
+
+      expect(container.read(terminalFontSizeProvider), 12.5);
+      await container.read(terminalFontSizeProvider.notifier).setFontSize(10.7);
+
+      expect(container.read(terminalFontSizeProvider), 10.7);
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getDouble(terminalFontSizePreferenceKey),
+        10.7,
+      );
+
+      await container.read(terminalFontSizeProvider.notifier).reset();
+      expect(container.read(terminalFontSizeProvider), 12.5);
+    });
+
+    test('读取时限制异常和越界字号', () async {
+      final tooLarge = await buildContainer({
+        terminalFontSizePreferenceKey: 99.0,
+      });
+      expect(tooLarge.read(terminalFontSizeProvider), 16.0);
+    });
+  });
+
   group('遗留键清理', () {
     test('无任何遗留键时 prefs 不被触碰', () async {
       final container = await buildContainer({'unrelated': 'x'});
@@ -112,8 +140,10 @@ void main() {
       });
       container.read(profileStoreProvider);
 
-      expect(container.read(sharedPrefsProvider).getString('bridge_settings_v2'),
-          isNull);
+      expect(
+        container.read(sharedPrefsProvider).getString('bridge_settings_v2'),
+        isNull,
+      );
     });
   });
 
@@ -122,7 +152,9 @@ void main() {
       final container = await buildContainer({});
       expect(container.read(enabledProfilesProvider), isEmpty);
       expect(
-          container.read(enabledProfilesProvider.notifier).isConfigured, isFalse);
+        container.read(enabledProfilesProvider.notifier).isConfigured,
+        isFalse,
+      );
     });
 
     test('只含 enabled profile；setEnabled 后列表与 isConfigured 联动', () async {
@@ -133,8 +165,10 @@ void main() {
       await store.add(_profile2);
       await notifier.reload();
 
-      expect(container.read(enabledProfilesProvider).map((p) => p.id),
-          ['p1', 'p2']);
+      expect(container.read(enabledProfilesProvider).map((p) => p.id), [
+        'p1',
+        'p2',
+      ]);
       expect(notifier.isConfigured, isTrue);
 
       // disable 一条 → 列表只剩另一条。
