@@ -1,4 +1,6 @@
 use std::env;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -262,14 +264,33 @@ pub fn default_easytier_virtual_ip() -> String {
     "10.126.0.1/24".to_string()
 }
 
-/// 读 state 目录里持久化的值；缺失或为空时用 `gen` 生成并写回（0600）。
-/// 用于 secret / network id 这类"首次生成、之后稳定"的配置。
+/// 读 state 目录里持久化的值；缺失或为空时用 `gen` 生成并原子写回（0600）。
+/// 用于 secret / network id 这类"首次生成、之后稳定"的配置。跨进程
+/// 文件锁保证 service 与 `pair` 同时首启时也只会提交一个值。
 /// 生成且写盘失败时返回 None（调用方按报错处理，避免用每次不同的随机值组网）。
 fn persist_or_generate(
     state_dir: &std::path::Path,
     name: &str,
     gen: impl FnOnce() -> String,
 ) -> Option<String> {
+    std::fs::create_dir_all(state_dir).ok()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(state_dir, std::fs::Permissions::from_mode(0o700)).ok()?;
+    }
+
+    let lock_path = state_dir.join(format!(".{name}.lock"));
+    let mut lock_options = OpenOptions::new();
+    lock_options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        lock_options.mode(0o600);
+    }
+    let lock_file = lock_options.open(lock_path).ok()?;
+    lock_file.lock().ok()?;
+
     let path = state_dir.join(name);
     if let Ok(s) = std::fs::read_to_string(&path) {
         let s = s.trim().to_string();
@@ -277,13 +298,26 @@ fn persist_or_generate(
             return Some(s);
         }
     }
+
     let v = gen();
-    std::fs::create_dir_all(state_dir).ok()?;
-    std::fs::write(&path, format!("{v}\n")).ok()?;
+    let temporary = state_dir.join(format!(".{name}.{}.tmp", uuid::Uuid::new_v4().simple()));
+    let mut temporary_options = OpenOptions::new();
+    temporary_options.write(true).create_new(true);
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        use std::os::unix::fs::OpenOptionsExt;
+        temporary_options.mode(0o600);
+    }
+    let write_result = (|| -> std::io::Result<()> {
+        let mut temporary_file = temporary_options.open(&temporary)?;
+        temporary_file.write_all(format!("{v}\n").as_bytes())?;
+        temporary_file.sync_all()?;
+        drop(temporary_file);
+        std::fs::rename(&temporary, &path)
+    })();
+    if write_result.is_err() {
+        std::fs::remove_file(&temporary).ok();
+        return None;
     }
     Some(v)
 }
@@ -429,6 +463,34 @@ pub(crate) mod tests {
         env::set_var("HERDRGO_BRIDGE_SECRET", "explicit");
         let c3 = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c3.easytier_secret.as_deref(), Some("explicit"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn persisted_identity_is_stable_across_concurrent_process_equivalents() {
+        let dir = std::env::temp_dir().join(format!("herdr-race-{}", uuid::Uuid::new_v4()));
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let handles = (0..8)
+            .map(|_| {
+                let dir = dir.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    persist_or_generate(&dir, "identity", || {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        uuid::Uuid::new_v4().to_string()
+                    })
+                    .unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+        let values = handles.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>();
+
+        assert!(values.iter().all(|value| value == &values[0]));
+        assert_eq!(
+            std::fs::read_to_string(dir.join("identity")).unwrap().trim(),
+            values[0]
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

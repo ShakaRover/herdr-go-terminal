@@ -64,11 +64,11 @@ acquire_lock() {
                 fi
                 ;;
         esac
-        rm -f "$lock_dir/pid"
-        rmdir "$lock_dir" 2>/dev/null ||
-            fail "cannot recover stale control lock: $lock_dir"
-        mkdir "$lock_dir" 2>/dev/null ||
-            fail "another service operation started concurrently"
+        # Do not reclaim a stale-looking lock automatically. The directory is
+        # the atomic ownership record; deleting it after a separate read would
+        # let two contenders remove each other's newly acquired lock. Normal
+        # exits and handled signals clean it through the trap above.
+        fail "stale control lock: $lock_dir (confirm no operation is running, then remove it)"
     fi
     printf '%s\n' "$$" > "$lock_dir/pid"
     lock_held=true
@@ -385,14 +385,23 @@ uninstall_service() {
     acquire_lock
     case "$platform_name" in
         Linux)
-            systemctl --user disable --now "$service_name" 2>/dev/null || true
             unit=$(systemd_unit_path)
+            if [ -f "$unit" ] || systemctl --user is-active --quiet "$service_name"; then
+                systemctl --user disable --now "$service_name" ||
+                    fail "could not stop and disable $service_name"
+            fi
             rm -f "$unit"
-            systemctl --user daemon-reload
+            systemctl --user daemon-reload || fail "could not reload the systemd user manager"
             ;;
         Darwin)
-            launchctl bootout "gui/$(id -u)" "$(launch_plist_path)" 2>/dev/null || true
-            rm -f "$(launch_plist_path)"
+            domain="gui/$(id -u)"
+            service="$domain/$launch_label"
+            plist=$(launch_plist_path)
+            if launchctl print "$service" >/dev/null 2>&1; then
+                launchctl bootout "$domain" "$plist" ||
+                    fail "could not unload $launch_label"
+            fi
+            rm -f "$plist"
             ;;
     esac
     rm -f \

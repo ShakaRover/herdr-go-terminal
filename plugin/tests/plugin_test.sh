@@ -77,6 +77,11 @@ EOF
 cat > "$fake_bin/systemctl" <<'EOF'
 #!/bin/sh
 printf 'systemctl %s\n' "$*" >> "$FAKE_SERVICE_LOG"
+if [ "${FAKE_SERVICE_STOP_FAIL:-}" = yes ]; then
+    case "$*" in
+        *"disable --now herdrgo-bridge.service"*) exit 1 ;;
+    esac
+fi
 case "$*" in
     *is-active*) exit 0 ;;
     *status*) printf 'active (running)\n' ;;
@@ -91,6 +96,9 @@ EOF
 cat > "$fake_bin/launchctl" <<'EOF'
 #!/bin/sh
 printf 'launchctl %s\n' "$*" >> "$FAKE_SERVICE_LOG"
+if [ "${FAKE_SERVICE_STOP_FAIL:-}" = yes ] && [ "${1:-}" = bootout ]; then
+    exit 1
+fi
 if [ "${1:-}" = print ]; then
     printf 'state = running\n'
 fi
@@ -231,6 +239,24 @@ test_linux_control() {
     [ "$(sed -n '1p' "$state_dir/easytier_secret")" = stable-secret ] ||
         fail "setup changed the EasyTier secret"
 
+    mkdir "$state_dir/control.lock"
+    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" restart >/dev/null 2>&1; then
+        fail "a control lock without a pid was reclaimed"
+    fi
+    [ -d "$state_dir/control.lock" ] || fail "a contender removed the active control lock"
+    rmdir "$state_dir/control.lock"
+
+    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        FAKE_SERVICE_STOP_FAIL=yes HOME="$home_dir" \
+        HERDR_PLUGIN_STATE_DIR="$state_dir" HERDRGO_UNINSTALL_CONFIRM=yes \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" uninstall-service >/dev/null 2>&1; then
+        fail "Linux uninstall ignored a service stop failure"
+    fi
+    assert_file "$unit"
+    assert_file "$state_dir/runtime/herdrgo-bridge"
+
     PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
         HERDRGO_UNINSTALL_CONFIRM=yes \
@@ -270,6 +296,15 @@ test_macos_control() {
     if command -v plutil >/dev/null 2>&1; then
         plutil -lint "$plist" >/dev/null
     fi
+
+    if PATH="$fake_bin:$PATH" FAKE_OS=Darwin FAKE_SERVICE_LOG="$service_log" \
+        FAKE_SERVICE_STOP_FAIL=yes HOME="$home_dir" \
+        HERDR_PLUGIN_STATE_DIR="$state_dir" HERDRGO_UNINSTALL_CONFIRM=yes \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" uninstall-service >/dev/null 2>&1; then
+        fail "macOS uninstall ignored a service stop failure"
+    fi
+    assert_file "$plist"
+    assert_file "$state_dir/runtime/herdrgo-bridge"
 
     PATH="$fake_bin:$PATH" FAKE_OS=Darwin FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
