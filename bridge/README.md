@@ -9,6 +9,9 @@ herdr 的 REST 桥接服务（Rust / axum）：连接本机 herdr 的 Unix socke
 plane 虚拟 TCP，不监听任何 OS 端口、不需要 TUN/root；app 扫码即连。
 无 push/websocket，app 侧轮询。
 
+服务启动不会输出 secret。需要配对时在私有终端运行
+`herdrgo-bridge pair`，它会读取现有 state 并显示二维码和配对 JSON 后退出。
+
 ## v1 端点
 
 所有端点带 `/api/v1` 前缀；除 `config` 外都支持 `?session=` 选择 herdr
@@ -43,7 +46,17 @@ cargo build --release
 # 产物：bridge/target/release/herdrgo-bridge
 ```
 
-## 部署（systemd user 单元）
+## 推荐部署（Herdr plugin）
+
+```bash
+herdr plugin install KKRainbow/herdr-go
+herdr plugin action invoke kkrainbow.herdrgo.setup
+```
+
+setup 会安装 systemd user service（Linux）或 LaunchAgent（macOS），启动后在
+交互式 pane 显示二维码。重复 setup 会原子升级运行副本并保留配对状态。
+
+## 手动部署（systemd user 单元）
 
 ```bash
 install -Dm755 target/release/herdrgo-bridge ~/.local/bin/herdrgo-bridge
@@ -51,7 +64,8 @@ mkdir -p ~/.config/systemd/user
 cp systemd/herdrgo-bridge.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now herdrgo-bridge
-journalctl --user -u herdrgo-bridge -n 20   # 查看启动日志与配对提示
+herdrgo-bridge pair                         # 在私有终端显示配对二维码
+journalctl --user -u herdrgo-bridge -n 20   # 只包含服务日志，不包含配对凭据
 ```
 
 单元内置了 socket 路径与 state 目录两个默认值；需要覆盖时写
@@ -111,9 +125,11 @@ systemctl --user enable --now herdrgo-bridge
 
 ## 配置（CLI 与环境变量）
 
-权威来源是 `bridge/src/config.rs` 的 `Cli`（clap derive）。每个环境变量都
-有对应的 CLI 参数（kebab-case，如 `HERDRGO_BRIDGE_PORT` ↔ `--port`），优先级
-**CLI > 环境变量 > 默认值**。列表类参数接受逗号分隔或重复传参；布尔参数
+权威来源是 `bridge/src/config.rs` 的 `Cli`（clap derive）。除启动前加载配置文件的
+`HERDRGO_BRIDGE_ENV_FILE` 外，每个环境变量都有对应的 CLI 参数（kebab-case，如
+`HERDRGO_BRIDGE_PORT` ↔ `--port`），优先级
+**CLI > 进程环境变量 > `HERDRGO_BRIDGE_ENV_FILE` 指定的配置文件 > 默认值**。
+配置文件使用 dotenv `KEY=value` 语法，不执行 shell 代码。列表类参数接受逗号分隔或重复传参；布尔参数
 接受 `on/off`、`1/0`、`true/false`。类型或取值非法时启动即报错退出；
 低于下限的数值 clamp 到下限并告警。环境变量值解析前会去除首尾空白，
 空白值视为未设置。
@@ -138,6 +154,7 @@ herdrgo-bridge --server tcp://et.example.com:11010 --port 23000
 | 变量 / CLI 参数 | 默认 | 说明 |
 | --- | --- | --- |
 | `HERDR_SOCKET_PATH` | `~/.config/herdr/herdr.sock`（遵循 `XDG_CONFIG_HOME`） | herdr API socket |
+| `HERDRGO_BRIDGE_ENV_FILE` | 空 | 启动前读取的 dotenv 配置文件；现有进程环境优先，不执行 shell 代码 |
 | `HERDRGO_BRIDGE_HOST` / `--host` | `127.0.0.1` | HTTP 直连绑定地址（仅 `--secret ""` 时监听） |
 | `HERDRGO_BRIDGE_HTTP_PORT` / `--http-port` | `8787` | HTTP 直连绑定端口（仅 `--secret ""` 时监听） |
 | `HERDRGO_BRIDGE_STATE_DIR` | `~/.local/state/herdrgo-bridge`（遵循 `XDG_STATE_HOME`） | 状态目录（audit、activity、上传、持久化 secret/network id） |
@@ -179,8 +196,9 @@ HERDRGO_BRIDGE_SECRET=你指定的secret
 HERDRGO_BRIDGE_SERVER=tcp://et.example.com:11010
 ```
 
-启动即打印配对二维码 + 明文 JSON（含 server/networkName/secret/virtualIp/
-port，app 扫码即连）。**secret 即网络钥匙，二维码等同凭据，只在宿主机终端
+执行 `herdrgo-bridge pair` 会打印配对二维码 + 明文 JSON（含
+server/networkName/secret/virtualIp/port，app 扫码即连）；普通 bridge 服务
+启动不输出这些内容。**secret 即网络钥匙，二维码等同凭据，只在宿主机私有终端
 就地展示，勿截图外泄。**
 
 注意：bridge 是虚拟网内唯一静态节点（virtualIp 缺省 `10.126.0.1/24`，可用

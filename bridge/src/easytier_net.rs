@@ -147,6 +147,18 @@ pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
     }))
 }
 
+/// 生成人工展示用的二维码与配对 JSON。服务启动路径不调用本函数，避免
+/// EasyTier secret 进入 systemd journal 或 launchd 日志。
+pub fn pairing_output(cfg: &Config) -> anyhow::Result<String> {
+    let payload = pairing_payload(cfg)?;
+    let code = qrcode::QrCode::new(payload.to_string()).context("encode pairing qr")?;
+    let image = code
+        .render::<qrcode::render::unicode::Dense1x2>()
+        .build();
+    let json = serde_json::to_string_pretty(&payload).context("encode pairing json")?;
+    Ok(format!("{image}\n{json}\n"))
+}
+
 /// 探测本机内网 IPv4：向 8.8.8.8:80 发 UDP connect（不产生实际流量），
 /// 读回内核选路的本地源地址。返回 None 表示无可用非回环 IPv4。
 pub fn lan_ipv4() -> Option<std::net::Ipv4Addr> {
@@ -262,6 +274,16 @@ mod tests {
         assert_eq!(v["virtualIp"], "10.126.0.1");
         assert_eq!(v["port"], 8787);
         assert!(uuid::Uuid::parse_str(v["networkName"].as_str().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn pairing_output_contains_qr_and_json() {
+        let _g = crate::config::tests_lock();
+        let cfg = fresh_cfg("tcp://et.example.com:11010");
+        let output = super::pairing_output(&cfg).unwrap();
+        assert!(output.contains("\"secret\": \"s3cret\""));
+        assert!(output.contains("\"networkName\""));
+        assert!(output.contains('█'));
     }
 
     #[test]

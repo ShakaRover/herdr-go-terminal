@@ -2,20 +2,29 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
+    let cli = herdrgo_bridge::config::Cli::parse_cli();
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "herdrgo_bridge=info".into()),
         )
         .init();
-    herdrgo_bridge::config::sanitize_env();
-    let cli = herdrgo_bridge::config::Cli::parse_cli();
     let cfg = Arc::new(herdrgo_bridge::config::Config::from_cli(&cli));
     std::fs::create_dir_all(&cfg.state_dir).expect("create state dir");
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&cfg.state_dir, std::fs::Permissions::from_mode(0o700))
             .expect("chmod state dir");
+    }
+    if cli.command == Some(herdrgo_bridge::config::BridgeCommand::Pair) {
+        match herdrgo_bridge::easytier_net::pairing_output(&cfg) {
+            Ok(output) => print!("{output}"),
+            Err(error) => {
+                eprintln!("pairing payload unavailable: {error:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
     }
     tracing::info!(
         socket = %cfg.socket_path.display(),
@@ -74,19 +83,6 @@ async fn main() {
         // net 需活到 serve 返回之后再 drop（EasyTier 实例随 net 销毁而停止）。
         let net = herdrgo_bridge::easytier_net::start_easytier(&cfg).await.expect("start easytier");
         tracing::info!(%net.virtual_addr, "listening on easytier data plane");
-        // 启动即打印配对二维码 + 明文 JSON；载荷生成失败（缺
-        // secret）只告警，不阻塞 bridge 启动。
-        match herdrgo_bridge::easytier_net::pairing_payload(&cfg) {
-            Ok(payload) => match qrcode::QrCode::new(payload.to_string()) {
-                Ok(code) => {
-                    let img = code.render::<qrcode::render::unicode::Dense1x2>().build();
-                    println!("{img}");
-                    println!("{}", serde_json::to_string_pretty(&payload).unwrap());
-                }
-                Err(e) => tracing::warn!("pairing qr encode failed: {e}"),
-            },
-            Err(e) => tracing::warn!("pairing payload unavailable: {e:#}"),
-        }
         let listener = net.take_listener().expect("take listener");
         axum::serve(listener, app.into_make_service()).await.expect("serve");
         drop(net);

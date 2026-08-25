@@ -1,0 +1,75 @@
+id = "kkrainbow.herdrgo"
+name = "HerdrGo"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Native mobile remote control bridge for Herdr"
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["sh", "plugin/install.sh"]
+
+[[actions]]
+id = "setup"
+title = "Set up HerdrGo bridge"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-action.sh", "setup-ui"]
+
+[[actions]]
+id = "pair"
+title = "Pair HerdrGo"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-action.sh", "pair-ui"]
+
+[[actions]]
+id = "status"
+title = "Show HerdrGo status"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-action.sh", "status-ui"]
+
+[[actions]]
+id = "start"
+title = "Start HerdrGo bridge"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-ctl.sh", "start"]
+
+[[actions]]
+id = "stop"
+title = "Stop HerdrGo bridge"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-ctl.sh", "stop"]
+
+[[actions]]
+id = "restart"
+title = "Restart HerdrGo bridge"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-ctl.sh", "restart"]
+
+[[actions]]
+id = "uninstall-service"
+title = "Uninstall HerdrGo bridge service"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-action.sh", "uninstall-service-ui"]
+
+[[panes]]
+id = "setup-ui"
+title = "HerdrGo Setup"
+placement = "zoomed"
+command = ["sh", "plugin/herdrgo-ctl.sh", "setup"]
+
+[[panes]]
+id = "pair-ui"
+title = "Pair HerdrGo"
+placement = "overlay"
+command = ["sh", "plugin/herdrgo-ctl.sh", "pair"]
+
+[[panes]]
+id = "status-ui"
+title = "HerdrGo Status"
+placement = "overlay"
+command = ["sh", "plugin/herdrgo-ctl.sh", "status"]
+
+[[panes]]
+id = "uninstall-service-ui"
+title = "Uninstall HerdrGo bridge service"
+placement = "zoomed"
+command = ["sh", "plugin/herdrgo-ctl.sh", "uninstall-service"]

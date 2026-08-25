@@ -18,12 +18,13 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive", "env"] }
+dotenvy = "0.15"
 qrcode = { version = "0.14", default-features = false }
 url = "2"
-easytier = { path = "../../EasyTier/easytier", default-features = false, features = [
+easytier = { git = "https://github.com/EasyTier/EasyTier.git", rev = "81487c363a56779e745eae927e130a813535c71e", default-features = false, features = [
     "smoltcp", "aes-gcm", "dhcp-ipv4", "tracing-log", "endpoint-discovery",
 ] }
-easytier-core = { path = "../../EasyTier/easytier-core", default-features = false, features = [
+easytier-core = { git = "https://github.com/EasyTier/EasyTier.git", rev = "81487c363a56779e745eae927e130a813535c71e", default-features = false, features = [
     "endpoint-discovery",
 ] }
 

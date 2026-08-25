@@ -20,10 +20,10 @@ nobody to click it. HerdrGo lets you watch the whole herd from your phone:
 see at a glance who's working and who's blocked waiting on you, then tap in to
 reply, send keys, or approve — from anywhere.
 
-Pairing is a single QR scan. The bridge runs on your host, prints a QR code on
-startup, and the app connects over an EasyTier virtual network — no TUN, no
-root, no VPN permission. The network secret is generated and persisted
-automatically, so it works out of the box with zero arguments.
+Pairing is a single QR scan. A Herdr plugin installs the bridge as a user
+service and opens the QR code in an interactive setup pane. The app connects
+over an EasyTier virtual network — no TUN, no root, no VPN permission. The
+network secret is generated and persisted automatically.
 
 ## Screenshots
 
@@ -80,6 +80,33 @@ data plane, and the app embeds EasyTier too to forward a local port into the
 virtual network — all in userspace, no TUN or root. The network secret is the
 only credential: keep the QR code private.
 
+## Install the bridge
+
+On the computer running Herdr (Herdr 0.8.2+):
+
+```bash
+herdr plugin install KKRainbow/herdr-go
+herdr plugin action invoke kkrainbow.herdrgo.setup
+```
+
+The setup action installs a systemd user service on Linux or a LaunchAgent on
+macOS, starts it, and displays the pairing QR code. Re-running setup upgrades
+the bridge without changing the existing EasyTier secret, so paired phones keep
+working. No Rust toolchain or root access is required.
+
+Useful actions:
+
+```bash
+herdr plugin action invoke kkrainbow.herdrgo.pair
+herdr plugin action invoke kkrainbow.herdrgo.status
+herdr plugin action invoke kkrainbow.herdrgo.restart
+herdr plugin action invoke kkrainbow.herdrgo.uninstall-service
+```
+
+Run `uninstall-service` before `herdr plugin uninstall kkrainbow.herdrgo`.
+Service removal keeps the pairing state so a later reinstall can reconnect
+without scanning again.
+
 ## Build
 
 The toolchain is pinned in `.toolchain/` (Flutter 3.47.0 + Android SDK 36;
@@ -115,7 +142,7 @@ On iOS, `app/tool/build_ios_easytier.sh` (run on macOS) builds the thin
 `easytier-ios` C ABI static library from the same EasyTier repo branch and
 copies it into `app/ios/Frameworks/`.
 
-## Deploy the bridge
+## Build or deploy the bridge manually
 
 The bridge runs on the herdr host:
 
@@ -129,9 +156,10 @@ A systemd unit is available under `bridge/systemd/`. The bridge **enters
 EasyTier mode with zero configuration by default**: it generates and persists a
 network secret, joins via the default relay `txt://herdrgo.et-link.cc`, and
 serves the REST API over the data-plane virtual TCP — listening on no OS port,
-needing no TUN/root. It prints the pairing QR code on startup; scan it from the
-app to connect (the app likewise uses embedded EasyTier + a local port forward,
-no VpnService). The only common options are `--secret` / `--server` / `--port`
+needing no TUN/root. Run `herdrgo-bridge pair` in a private terminal to display
+the pairing QR code; normal service startup never writes the secret to service
+logs. The app likewise uses embedded EasyTier + a local port forward, with no
+VpnService. The only common options are `--secret` / `--server` / `--port`
 (`--help`); advanced options are under `--help-advance`. The secret is the
 network credential — treat it like a key, show it only in the host terminal,
 never leak it. See `bridge/README.md`.

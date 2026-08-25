@@ -1,0 +1,39 @@
+name: Bridge CI
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - "bridge/**"
+      - "plugin/**"
+      - "herdr-plugin.toml"
+      - ".github/workflows/bridge-*.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "bridge/**"
+      - "plugin/**"
+      - "herdr-plugin.toml"
+      - ".github/workflows/bridge-*.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes protobuf-compiler socat
+
+      - name: Test bridge
+        run: cargo test --locked --manifest-path bridge/Cargo.toml
+
+      - name: Test plugin
+        run: sh plugin/tests/plugin_test.sh

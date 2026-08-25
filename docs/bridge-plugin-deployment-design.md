@@ -1,6 +1,6 @@
 # HerdrGo Bridge 插件化部署设计
 
-状态：已确认，待实现  
+状态：已实现，待发布首个 Release  
 日期：2026-08-25
 
 ## 1. 背景
@@ -242,7 +242,8 @@ Linux 使用 systemd user unit：
 - `HERDR_SOCKET_PATH` 使用 Herdr 注入值；缺省回落到
   `~/.config/herdr/herdr.sock`。
 - `HERDRGO_BRIDGE_STATE_DIR` 指向 `$HERDR_PLUGIN_STATE_DIR`。
-- 使用可选的 `$HERDR_PLUGIN_CONFIG_DIR/env` 作为 `EnvironmentFile`。
+- `HERDRGO_BRIDGE_ENV_FILE` 指向可选的 `$HERDR_PLUGIN_CONFIG_DIR/env`；由 bridge
+  按 dotenv `KEY=value` 语法安全解析，不通过 shell 执行配置内容。
 - `Restart=on-failure`、`RestartSec=5`、`StartLimitIntervalSec=0`。
 - 保留 `NoNewPrivileges=yes` 与 `PrivateTmp=yes`。
 - 通过 `systemctl --user enable --now` 安装和启动，不使用 system unit。
@@ -266,7 +267,7 @@ macOS 使用用户域 LaunchAgent：
 - `ProgramArguments` 指向稳定 runtime 二进制。
 - `RunAtLoad=true`。
 - 仅在异常退出时由 `KeepAlive` 重启，用户主动 stop 后不立即复活。
-- 环境变量与 Linux 保持同一语义。
+- 环境变量与 Linux 保持同一语义，plist 只保存配置文件路径，不展开其中的 secret。
 - stdout/stderr 写到 `$HERDR_PLUGIN_STATE_DIR/logs/`，文件中不得包含配对凭据。
 - 通过 `launchctl bootstrap/bootout/kickstart` 操作 `gui/$(id -u)` 用户域。
 - 不写 `/Library/LaunchDaemons`，不使用 `sudo`。
@@ -386,3 +387,16 @@ herdr plugin action invoke kkrainbow.herdrgo.setup
 5. 接入四平台 Release CI。
 6. 更新中文/英文 README 的安装、升级和卸载说明。
 7. 在 Linux 与 macOS 上完成真实 plugin 安装和手机扫码验收。
+
+## 18. 实现落点
+
+- `herdr-plugin.toml` 声明公开 action 和内部 pane。
+- `plugin/install.sh` 下载与校验四平台 Release 产物。
+- `plugin/herdrgo-action.sh` 把单行 action 调用转换为内部 pane。
+- `plugin/herdrgo-ctl.sh` 管理稳定运行副本、systemd user unit 和 LaunchAgent。
+- `herdrgo-bridge pair` 独立展示凭据；普通服务启动不再输出二维码或配对 JSON。
+- `.github/workflows/bridge-ci.yml` 运行 bridge 与 plugin 自动测试。
+- `.github/workflows/bridge-release.yml` 构建四平台产物、SHA256 和来源记录。
+
+公开安装命令生效前，还需要将实现推送到 GitHub 并创建与 manifest 版本一致的
+`v0.1.0` tag，由 Release workflow 生成首批下载资产。发布不属于本地实现提交的一部分。

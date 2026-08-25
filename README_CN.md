@@ -19,9 +19,9 @@ agent 卡在审批弹窗上没人点。HerdrGo 让你在手机上盯住整群 ag
 卡住了等你拍板，一眼看清；点进去就能回话、发键、批准操作，人在哪都能让它们
 继续跑。
 
-配对只要扫一个二维码。bridge 跑在宿主机上，启动即打印二维码，app 一扫就通过
-EasyTier 虚拟网直连——不用配 TUN、不用 root、不用申请 VPN 权限，secret 自动生成
-并持久化，零参数开箱即用。
+配对只要扫一个二维码。Herdr plugin 会在宿主机上把 bridge 安装为用户服务，并在
+交互式 setup pane 中显示二维码；app 一扫就通过 EasyTier 虚拟网直连——不用配
+TUN、不用 root、不用申请 VPN 权限，secret 自动生成并持久化。
 
 ## 截图
 
@@ -69,6 +69,32 @@ app 不直接连 herdr socket，一切读写都经过 bridge；bridge 内嵌 Eas
 REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 把本地端口转发进虚拟网络，
 全程用户态。
 
+## 安装 bridge
+
+在运行 Herdr 的电脑上执行（需要 Herdr 0.8.2+）：
+
+```bash
+herdr plugin install KKRainbow/herdr-go
+herdr plugin action invoke kkrainbow.herdrgo.setup
+```
+
+setup 会在 Linux 安装 systemd user service，在 macOS 安装 LaunchAgent，随后启动
+服务并显示配对二维码。重复执行 setup 会升级 bridge，但不会改变现有 EasyTier
+secret，已经配对的手机无需重新扫码。整个过程不需要 Rust 工具链或 root 权限。
+
+常用操作：
+
+```bash
+herdr plugin action invoke kkrainbow.herdrgo.pair
+herdr plugin action invoke kkrainbow.herdrgo.status
+herdr plugin action invoke kkrainbow.herdrgo.restart
+herdr plugin action invoke kkrainbow.herdrgo.uninstall-service
+```
+
+删除 plugin 前先执行 `uninstall-service`，再执行
+`herdr plugin uninstall kkrainbow.herdrgo`。移除服务默认保留配对状态，之后重装
+无需重新扫码。
+
 ## 构建
 
 工具链固定在仓库的 `.toolchain/`（Flutter 3.47.0 + Android SDK 36，
@@ -102,7 +128,7 @@ app/tool/sync_easytier.sh   # 幂等；EASYTIER_REPO 可覆盖 EasyTier 仓库�
 iOS 侧由 `app/tool/build_ios_easytier.sh`（仅 macOS）从同一 EasyTier 分支
 构建薄的 `easytier-ios` C ABI 静态库，拷入 `app/ios/Frameworks/`。
 
-## 部署 bridge
+## 手动构建或部署 bridge
 
 bridge 部署在 herdr 宿主机上：
 
@@ -115,8 +141,9 @@ cargo build --release
 常驻运行可用 `bridge/systemd/` 下的 systemd 单元。bridge **默认零配置即进入
 EasyTier 模式**：自动生成并持久化网络 secret，经默认中继
 `txt://herdrgo.et-link.cc` 组网，REST API 走 data plane 虚拟 TCP，不监听 OS
-端口、不需要 TUN/root。启动时打印配对二维码，app 扫码即连（app 侧同样经
-内嵌 EasyTier + 本地端口转发，不申请 VpnService）。常用选项只有
+端口、不需要 TUN/root。需要配对时在私有终端执行 `herdrgo-bridge pair` 显示
+二维码；普通服务启动不会把 secret 写入服务日志。app 侧同样经内嵌 EasyTier +
+本地端口转发，不申请 VpnService。常用选项只有
 `--secret` / `--server` / `--port`（`--help`），高级选项见 `--help-advance`。
 secret 即网络凭据，等同钥匙，只在宿主机终端就地展示、勿泄露。详见
 `bridge/README.md`。

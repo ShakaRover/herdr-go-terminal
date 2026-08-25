@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, Subcommand};
 
 // 部分字段由后续任务（HTTP server、transcript 索引）消费，M1 阶段允许 dead_code。
 #[allow(dead_code)]
@@ -45,6 +45,9 @@ pub struct Config {
 #[derive(Parser, Debug)]
 #[command(name = "herdrgo-bridge", version = Config::build_id())]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<BridgeCommand>,
+
     /// 中继/发现服务器（可重复或逗号分隔，默认 txt://herdrgo.et-link.cc）
     #[arg(long, env = "HERDRGO_BRIDGE_SERVER", value_delimiter = ',')]
     pub server: Vec<String>,
@@ -126,6 +129,12 @@ pub struct Cli {
     pub easytier_test_listeners: Vec<String>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Subcommand)]
+pub enum BridgeCommand {
+    /// 显示手机扫码所需的二维码和配对 JSON 后退出
+    Pair,
+}
+
 impl Cli {
     /// 仅从进程环境解析（忽略 argv）。供测试与库调用方使用。
     pub fn from_process_env() -> Self {
@@ -136,6 +145,10 @@ impl Cli {
     /// 解析进程 argv。`--help` 只显示常用三项；`--help-advance` 打印完整
     /// 帮助（含隐藏的高级选项）后以 0 退出。
     pub fn parse_cli() -> Self {
+        if let Err(error) = load_process_env_file() {
+            eprintln!("load bridge environment file: {error:#}");
+            std::process::exit(2);
+        }
         sanitize_env();
         let cli = Self::parse();
         if cli.help_advance {
@@ -148,6 +161,20 @@ impl Cli {
         }
         cli
     }
+}
+
+/// 从服务管理器指定的配置文件补充进程环境。已存在的进程环境保持优先，
+/// 文件按 dotenv 的 `KEY=value` 语法解析，不执行 shell 代码。
+pub fn load_process_env_file() -> anyhow::Result<()> {
+    let Some(path) = env::var_os("HERDRGO_BRIDGE_ENV_FILE")
+        .map(PathBuf::from)
+        .and_then(norm_path)
+    else {
+        return Ok(());
+    };
+    dotenvy::from_path(&path)
+        .map_err(|_| anyhow::anyhow!("cannot parse {}", path.display()))?;
+    Ok(())
 }
 /// 解析前规范化进程环境：env 值 trim 后为空视为未设置（兼容旧
 /// env_string 语义，避免 `HERDRGO_BRIDGE_PORT=` 之类被 clap 硬报错）。
@@ -366,6 +393,7 @@ pub(crate) mod tests {
             "HERDRGO_BRIDGE_HOST", "HERDRGO_BRIDGE_PORT", "HERDR_SOCKET_PATH",
             "HERDRGO_BRIDGE_HTTP_PORT", "HERDRGO_BRIDGE_SERVER",
             "HERDRGO_BRIDGE_SECRET",
+            "HERDRGO_BRIDGE_ENV_FILE",
             "HERDRGO_BRIDGE_STATE_DIR", "HERDRGO_BRIDGE_POLL_MS",
             "HERDRGO_BRIDGE_POLL_IDLE_MS", "HERDRGO_BRIDGE_READ_LINES",
             "HERDRGO_BRIDGE_SUBMIT_KEYS", "HERDRGO_BRIDGE_ALLOWED_ORIGINS",
@@ -402,6 +430,57 @@ pub(crate) mod tests {
         let c3 = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c3.easytier_secret.as_deref(), Some("explicit"));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn process_env_file_fills_missing_values_without_overriding_env() {
+        let _g = tests_lock();
+        clear();
+        let dir = std::env::temp_dir().join(format!("herdr-env-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("env");
+        std::fs::write(
+            &path,
+            "HERDRGO_BRIDGE_SERVER=tcp://file.example:11010\n\
+             HERDRGO_BRIDGE_PORT=23000\n",
+        )
+        .unwrap();
+        env::set_var("HERDRGO_BRIDGE_ENV_FILE", &path);
+        env::set_var("HERDRGO_BRIDGE_PORT", "24000");
+
+        load_process_env_file().unwrap();
+
+        assert_eq!(
+            env::var("HERDRGO_BRIDGE_SERVER").unwrap(),
+            "tcp://file.example:11010"
+        );
+        assert_eq!(env::var("HERDRGO_BRIDGE_PORT").unwrap(), "24000");
+        clear();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn process_env_file_parse_error_does_not_echo_values() {
+        let _g = tests_lock();
+        clear();
+        let dir = std::env::temp_dir().join(format!("herdr-env-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("env");
+        std::fs::write(&path, "HERDRGO_BRIDGE_SECRET='do-not-log\n").unwrap();
+        env::set_var("HERDRGO_BRIDGE_ENV_FILE", &path);
+
+        let error = load_process_env_file().unwrap_err().to_string();
+
+        assert!(error.contains(path.to_str().unwrap()));
+        assert!(!error.contains("do-not-log"));
+        clear();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn pair_subcommand_is_parsed() {
+        let cli = Cli::parse_from(["herdrgo-bridge", "pair"]);
+        assert_eq!(cli.command, Some(BridgeCommand::Pair));
     }
 
     #[test]

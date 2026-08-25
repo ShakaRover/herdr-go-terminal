@@ -1073,8 +1073,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
+
+[[package]]
 name = "easytier"
 version = "2.6.4"
+source = "git+https://github.com/EasyTier/EasyTier.git?rev=81487c363a56779e745eae927e130a813535c71e#81487c363a56779e745eae927e130a813535c71e"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1154,6 +1161,7 @@ dependencies = [
 [[package]]
 name = "easytier-core"
 version = "2.6.4"
+source = "git+https://github.com/EasyTier/EasyTier.git?rev=81487c363a56779e745eae927e130a813535c71e#81487c363a56779e745eae927e130a813535c71e"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1217,6 +1225,7 @@ dependencies = [
 [[package]]
 name = "easytier-proto"
 version = "2.6.4"
+source = "git+https://github.com/EasyTier/EasyTier.git?rev=81487c363a56779e745eae927e130a813535c71e#81487c363a56779e745eae927e130a813535c71e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1798,6 +1807,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "dotenvy",
  "easytier",
  "easytier-core",
  "qrcode",
