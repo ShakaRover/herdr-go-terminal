@@ -361,6 +361,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get language => '语言';
 
   @override
+  String get terminalAutoResize => '终端输出适配手机宽度';
+
+  @override
+  String get terminalAutoResizeHelp =>
+      '打开 agent 时调整共享 Herdr 终端的尺寸；关闭后保持电脑端的终端宽度。';
+
+  @override
   String get systemLanguage => '跟随系统';
 
   @override

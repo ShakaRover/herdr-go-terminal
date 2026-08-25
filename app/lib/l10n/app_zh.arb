@@ -104,6 +104,8 @@
   "deleteTooltip": "删除",
   "bridgeEnableHelp": "开关控制是否连接该 bridge；多条同时开启即为多宿主机模式。",
   "language": "语言",
+  "terminalAutoResize": "终端输出适配手机宽度",
+  "terminalAutoResizeHelp": "打开 agent 时调整共享 Herdr 终端的尺寸；关闭后保持电脑端的终端宽度。",
   "systemLanguage": "跟随系统",
   "simplifiedChinese": "简体中文",
   "english": "English",

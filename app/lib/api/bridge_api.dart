@@ -375,6 +375,18 @@ class BridgeApi {
     'expectedPrompt': ?expectedPrompt,
   }, session: session);
 
+  /// Temporarily attach at the phone viewport size. The bridge releases the
+  /// controller after Herdr emits the first resized frame.
+  Future<ActionResult> resizePane(
+    String paneId, {
+    required int cols,
+    required int rows,
+    String? session,
+  }) => _postAction('/api/v1/pane/$paneId/resize', {
+    'cols': cols,
+    'rows': rows,
+  }, session: session);
+
   Future<ActionResult> closePane(String paneId, {String? session}) =>
       _postAction('/api/v1/pane/$paneId/close', null, session: session);
 

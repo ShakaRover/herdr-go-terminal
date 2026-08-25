@@ -323,6 +323,92 @@ async fn keys_with_expected_prompt_passes_and_sends() {
 }
 
 #[tokio::test]
+async fn resize_rejects_sizes_outside_the_phone_viewport_bounds() {
+    let (_mock, app, _sd) = write_app(serde_json::Map::new()).await;
+
+    let too_narrow = app
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/pane/w1:p1/resize",
+            r#"{"cols":19,"rows":30}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(too_narrow.status(), StatusCode::BAD_REQUEST);
+
+    let too_tall = app
+        .oneshot(post_json(
+            "/api/v1/pane/w1:p1/resize",
+            r#"{"cols":48,"rows":201}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(too_tall.status(), StatusCode::BAD_REQUEST);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn resize_uses_short_lived_controller_and_audits_success() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let controller_dir = tempfile::tempdir().unwrap();
+    let herdr_bin = controller_dir.path().join("herdr");
+    std::fs::write(
+        &herdr_bin,
+        r#"#!/bin/sh
+capture=$(dirname -- "$0")/capture
+printf 'socket=%s\n' "$HERDR_SOCKET_PATH" > "$capture"
+for argument in "$@"; do printf 'arg=%s\n' "$argument" >> "$capture"; done
+printf '%s\n' '{"type":"terminal.frame","data":""}'
+IFS= read -r command
+printf 'stdin=%s\n' "$command" >> "$capture"
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(
+        &herdr_bin,
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+
+    let mock = common::MockHerdr::start(serde_json::Map::new()).await;
+    let state_dir = tempfile::tempdir().unwrap();
+    let mut cfg = herdrgo_bridge::config::Config::from_cli(
+        &herdrgo_bridge::config::Cli::from_process_env(),
+    );
+    cfg.socket_path = mock.socket_path.clone();
+    cfg.herdr_bin_path = herdr_bin;
+    cfg.state_dir = state_dir.path().to_path_buf();
+    let (state, _sd) =
+        herdrgo_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
+    let app = herdrgo_bridge::http::build_router(state);
+
+    let response = app
+        .oneshot(post_json(
+            "/api/v1/pane/w1:p1/resize?session=default",
+            r#"{"cols":48,"rows":31}"#,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let capture =
+        std::fs::read_to_string(controller_dir.path().join("capture")).unwrap();
+    assert!(capture.contains(&format!("socket={}", mock.socket_path.display())));
+    assert!(capture.contains("arg=w1:p1\n"));
+    assert!(capture.contains("arg=--cols\narg=48\narg=--rows\narg=31\n"));
+    assert!(!capture.contains("arg=--takeover\n"));
+    assert!(capture.contains("stdin={\"type\":\"terminal.release\"}\n"));
+
+    let audit = std::fs::read_to_string(state_dir.path().join("audit.log")).unwrap();
+    let line: serde_json::Value =
+        serde_json::from_str(audit.lines().next().unwrap()).unwrap();
+    assert_eq!(line["action"], "resize");
+    assert_eq!(line["paneId"], "w1:p1");
+    assert_eq!(line["detail"], "48x31");
+}
+
+#[tokio::test]
 async fn close_and_rename_passthrough() {
     let mut script = serde_json::Map::new();
     script.insert("pane.close".into(), serde_json::json!({"type": "ok"}));

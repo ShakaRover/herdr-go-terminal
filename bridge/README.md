@@ -29,6 +29,7 @@ session（缺省为 primary）。写端点（POST）受 device gate 约束（见
 | GET | `/api/v1/pane/{id}/history` | 从 agent 自己的会话日志分页读历史，`?limit=&before=` 游标分页 |
 | POST | `/api/v1/pane/{id}/reply` | 发送文本，body `{text?, submit?, expectedPrompt?}`；带 `expectedPrompt` 时先做 prompt-binding 校验，不匹配返回 409 `prompt_changed` |
 | POST | `/api/v1/pane/{id}/keys` | 发送按键，body `{keys: [...], expectedPrompt?}`，同样支持 prompt-binding |
+| POST | `/api/v1/pane/{id}/resize` | 用 `{cols, rows}` 短暂建立 terminal controller（不抢占现有 controller），收到首个重绘帧后立即 release；用于手机详情页按屏幕宽度调整输出 |
 | POST | `/api/v1/pane/{id}/close` | 关闭 pane |
 | POST | `/api/v1/pane/{id}/rename` | 重命名 pane，body `{label: string|null}`（`null` 清除自定义名） |
 | POST | `/api/v1/pane/{id}/upload` | multipart 上传图片（字段名 `file`，≤10MB），落盘到 state 目录并返回 `{ok, path}` |
@@ -156,6 +157,7 @@ herdrgo-bridge --server tcp://et.example.com:11010 --port 23000
 | 变量 / CLI 参数 | 默认 | 说明 |
 | --- | --- | --- |
 | `HERDR_SOCKET_PATH` | `~/.config/herdr/herdr.sock`（遵循 `XDG_CONFIG_HOME`） | herdr API socket |
+| `HERDR_BIN_PATH` / `--herdr-bin-path` | `herdr` | herdr CLI 路径；plugin setup 会固定为当前可执行文件的绝对路径 |
 | `HERDRGO_BRIDGE_ENV_FILE` | 空 | 启动前读取的 dotenv 配置文件；现有进程环境优先，不执行 shell 代码 |
 | `HERDRGO_BRIDGE_HOST` / `--host` | `127.0.0.1` | HTTP 直连绑定地址（仅 `--secret ""` 时监听） |
 | `HERDRGO_BRIDGE_HTTP_PORT` / `--http-port` | `8787` | HTTP 直连绑定端口（仅 `--secret ""` 时监听） |

@@ -123,6 +123,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final localePreference = ref.watch(appLocaleProvider);
+    final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.connectionSettings)),
       body: ListView(
@@ -153,6 +154,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
+          ),
+          const Divider(),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.terminalAutoResize),
+            subtitle: Text(l10n.terminalAutoResizeHelp),
+            value: terminalAutoResize,
+            onChanged: (enabled) => ref
+                .read(terminalAutoResizeProvider.notifier)
+                .setEnabled(enabled),
           ),
           const Divider(),
           Row(

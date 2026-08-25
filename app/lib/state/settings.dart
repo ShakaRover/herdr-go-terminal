@@ -18,6 +18,7 @@ final sharedPrefsProvider = Provider<SharedPreferences>(
 );
 
 const appLocalePreferenceKey = 'app_locale_v1';
+const terminalAutoResizePreferenceKey = 'terminal_auto_resize_v1';
 
 enum AppLocalePreference {
   system,
@@ -54,6 +55,25 @@ class AppLocaleNotifier extends Notifier<AppLocalePreference> {
 final appLocaleProvider =
     NotifierProvider<AppLocaleNotifier, AppLocalePreference>(
       AppLocaleNotifier.new,
+    );
+
+class TerminalAutoResizeNotifier extends Notifier<bool> {
+  @override
+  bool build() =>
+      ref.watch(sharedPrefsProvider).getBool(terminalAutoResizePreferenceKey) ??
+      true;
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    await ref
+        .read(sharedPrefsProvider)
+        .setBool(terminalAutoResizePreferenceKey, enabled);
+  }
+}
+
+final terminalAutoResizeProvider =
+    NotifierProvider<TerminalAutoResizeNotifier, bool>(
+      TerminalAutoResizeNotifier.new,
     );
 
 /// profile 列表的本地持久化仓库。

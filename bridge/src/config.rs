@@ -15,6 +15,8 @@ pub struct Config {
     /// HTTP 直连模式的绑定端口（EasyTier 模式下不使用）。
     pub http_port: u16,
     pub socket_path: PathBuf,
+    /// Herdr CLI used for the short-lived terminal resize controller.
+    pub herdr_bin_path: PathBuf,
     pub state_dir: PathBuf,
     pub poll_ms: u64,
     pub poll_idle_ms: u64,
@@ -71,6 +73,9 @@ pub struct Cli {
     /// herdr API socket
     #[arg(long, env = "HERDR_SOCKET_PATH", hide = true)]
     pub socket_path: Option<PathBuf>,
+    /// herdr CLI used by the terminal resize endpoint
+    #[arg(long, env = "HERDR_BIN_PATH", hide = true)]
+    pub herdr_bin_path: Option<PathBuf>,
     /// 状态目录（audit、activity、上传）
     #[arg(long, env = "HERDRGO_BRIDGE_STATE_DIR", hide = true)]
     pub state_dir: Option<PathBuf>,
@@ -355,6 +360,10 @@ impl Config {
             host: cli.host.clone().and_then(norm_string).unwrap_or_else(|| "127.0.0.1".into()),
             http_port: clamp_min(cli.http_port.unwrap_or(8787).into(), 1, "http-port") as u16,
             socket_path: cli.socket_path.clone().and_then(norm_path).unwrap_or_else(default_socket_path),
+            herdr_bin_path: cli.herdr_bin_path
+                .clone()
+                .and_then(norm_path)
+                .unwrap_or_else(|| PathBuf::from("herdr")),
             poll_ms: clamp_min(cli.poll_ms.unwrap_or(1500), 250, "poll-ms"),
             poll_idle_ms: clamp_min(cli.poll_idle_ms.unwrap_or(12000), 1000, "poll-idle-ms"),
             read_lines: clamp_min(cli.read_lines.unwrap_or(200).into(), 1, "read-lines") as u32,
@@ -429,6 +438,7 @@ pub(crate) mod tests {
     pub(crate) fn clear() {
         for k in [
             "HERDRGO_BRIDGE_HOST", "HERDRGO_BRIDGE_PORT", "HERDR_SOCKET_PATH",
+            "HERDR_BIN_PATH",
             "HERDRGO_BRIDGE_HTTP_PORT", "HERDRGO_BRIDGE_SERVER",
             "HERDRGO_BRIDGE_SECRET",
             "HERDRGO_BRIDGE_ENV_FILE",
@@ -642,6 +652,7 @@ pub(crate) mod tests {
         assert!(c.multi_session);
         assert!(c.transcript);
         assert!(c.device_header.is_none());
+        assert_eq!(c.herdr_bin_path, PathBuf::from("herdr"));
     }
 
     #[test]
@@ -695,8 +706,10 @@ pub(crate) mod tests {
         let _g = tests_lock();
         clear();
         env::set_var("HERDRGO_BRIDGE_PORT", "9000");
+        env::set_var("HERDR_BIN_PATH", "/opt/herdr/bin/herdr");
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c.easytier_listen_port, 9000);
+        assert_eq!(c.herdr_bin_path, PathBuf::from("/opt/herdr/bin/herdr"));
         clear();
     }
 

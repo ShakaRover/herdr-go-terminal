@@ -397,6 +397,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get language => 'Language';
 
   @override
+  String get terminalAutoResize => 'Fit terminal output to phone';
+
+  @override
+  String get terminalAutoResizeHelp =>
+      'Resize the shared Herdr terminal when you open an agent. Turn this off to keep the computer\'s terminal width.';
+
+  @override
   String get systemLanguage => 'System default';
 
   @override

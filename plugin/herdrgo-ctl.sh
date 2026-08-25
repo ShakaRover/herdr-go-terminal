@@ -38,6 +38,7 @@ runtime_bridge="$runtime_dir/herdrgo-bridge"
 runtime_ctl="$runtime_dir/herdrgo-ctl.sh"
 metadata_config_dir="$runtime_dir/plugin-config-dir"
 metadata_socket_path="$runtime_dir/herdr-socket-path"
+metadata_herdr_bin_path="$runtime_dir/herdr-bin-path"
 lock_dir="$state_dir/control.lock"
 lock_owner_name=".control.lock.$$"
 lock_owner_dir="$state_dir/$lock_owner_name"
@@ -128,11 +129,18 @@ acquire_lock() {
 read_metadata() {
     config_dir=${HERDR_PLUGIN_CONFIG_DIR:-}
     socket_path=${HERDR_SOCKET_PATH:-}
+    herdr_bin_path=${HERDR_BIN_PATH:-}
     if [ -z "$config_dir" ] && [ -f "$metadata_config_dir" ]; then
         config_dir=$(sed -n '1p' "$metadata_config_dir")
     fi
     if [ -z "$socket_path" ] && [ -f "$metadata_socket_path" ]; then
         socket_path=$(sed -n '1p' "$metadata_socket_path")
+    fi
+    if [ -z "$herdr_bin_path" ] && [ -f "$metadata_herdr_bin_path" ]; then
+        herdr_bin_path=$(sed -n '1p' "$metadata_herdr_bin_path")
+    fi
+    if [ -z "$herdr_bin_path" ]; then
+        herdr_bin_path=$(command -v herdr 2>/dev/null || true)
     fi
 }
 
@@ -148,6 +156,7 @@ export_bridge_env() {
     export HERDRGO_BRIDGE_STATE_DIR="$state_dir"
     export HERDRGO_BRIDGE_ENV_FILE="$config_dir/env"
     export HERDR_SOCKET_PATH="$socket_path"
+    export HERDR_BIN_PATH="$herdr_bin_path"
 }
 
 install_runtime_file() {
@@ -195,6 +204,7 @@ write_systemd_unit() {
     temporary="$unit.tmp.$$"
     bridge_value=$(systemd_escape "$runtime_bridge")
     socket_value=$(systemd_escape "$socket_path")
+    herdr_bin_value=$(systemd_escape "$herdr_bin_path")
     state_value=$(systemd_escape "$state_dir")
     env_value=$(systemd_escape "$config_dir/env")
     cat > "$temporary" <<EOF
@@ -211,6 +221,7 @@ RestartSec=5
 NoNewPrivileges=yes
 PrivateTmp=yes
 Environment="HERDR_SOCKET_PATH=$socket_value"
+Environment="HERDR_BIN_PATH=$herdr_bin_value"
 Environment="HERDRGO_BRIDGE_STATE_DIR=$state_value"
 Environment="HERDRGO_BRIDGE_ENV_FILE=$env_value"
 
@@ -227,6 +238,7 @@ write_launch_plist() {
     temporary="$plist.tmp.$$"
     bridge_value=$(xml_escape "$runtime_bridge")
     socket_value=$(xml_escape "$socket_path")
+    herdr_bin_value=$(xml_escape "$herdr_bin_path")
     state_value=$(xml_escape "$state_dir")
     env_value=$(xml_escape "$config_dir/env")
     stdout_value=$(xml_escape "$state_dir/logs/bridge.stdout.log")
@@ -246,6 +258,8 @@ write_launch_plist() {
   <dict>
     <key>HERDR_SOCKET_PATH</key>
     <string>$socket_value</string>
+    <key>HERDR_BIN_PATH</key>
+    <string>$herdr_bin_value</string>
     <key>HERDRGO_BRIDGE_STATE_DIR</key>
     <string>$state_value</string>
     <key>HERDRGO_BRIDGE_ENV_FILE</key>
@@ -371,6 +385,8 @@ setup_service() {
     [ -x "$candidate" ] || fail "candidate bridge is missing; reinstall the plugin"
     [ -f "$control_script" ] || fail "plugin control script is missing"
     [ -S "$HERDR_SOCKET_PATH" ] || fail "Herdr socket is unavailable: $HERDR_SOCKET_PATH"
+    read_metadata
+    [ -x "$herdr_bin_path" ] || fail "Herdr executable is unavailable"
 
     acquire_lock
     umask 077
@@ -385,7 +401,8 @@ setup_service() {
     install_runtime_file "$control_script" "$runtime_ctl" 755
     printf '%s\n' "$HERDR_PLUGIN_CONFIG_DIR" > "$metadata_config_dir"
     printf '%s\n' "$HERDR_SOCKET_PATH" > "$metadata_socket_path"
-    chmod 600 "$metadata_config_dir" "$metadata_socket_path"
+    printf '%s\n' "$herdr_bin_path" > "$metadata_herdr_bin_path"
+    chmod 600 "$metadata_config_dir" "$metadata_socket_path" "$metadata_herdr_bin_path"
     read_metadata
     export_bridge_env
     "$runtime_bridge" --version
@@ -458,7 +475,7 @@ uninstall_service() {
     rm -f \
         "$runtime_bridge" "$runtime_bridge.previous" \
         "$runtime_ctl" "$runtime_ctl.previous" \
-        "$metadata_config_dir" "$metadata_socket_path"
+        "$metadata_config_dir" "$metadata_socket_path" "$metadata_herdr_bin_path"
     rmdir "$runtime_dir" 2>/dev/null || true
     printf 'HerdrGo service removed. Pairing state remains in %s\n' "$state_dir"
     pause_for_close

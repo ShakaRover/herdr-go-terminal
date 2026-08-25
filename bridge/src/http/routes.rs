@@ -364,6 +364,12 @@ pub struct KeysBody {
     pub expected_prompt: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct ResizeBody {
+    pub cols: u16,
+    pub rows: u16,
+}
+
 fn validate_expected_prompt(ep: &Option<String>) -> Result<(), ApiError> {
     if let Some(s) = ep {
         if s.chars().count() > 8192 {
@@ -430,6 +436,43 @@ pub async fn keys_pane(
     rt.client.pane_send_keys(&id, &keys).await.map_err(|e| ApiError::herdr(&e))?;
     state.audit.log("keys", Some(&id), q.session.as_deref(), device.device.as_deref(), &keys.join(" "));
     maybe_mark_seen(&rt, &headers, &id, true);
+    Ok(json_response(StatusCode::OK, serde_json::json!({"ok": true})))
+}
+
+pub async fn resize_pane(
+    State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>,
+    Query(q): Query<SessionQuery>, body: Result<axum::Json<ResizeBody>, axum::extract::rejection::JsonRejection>,
+) -> Result<Response, ApiError> {
+    let device = check_access(&state.cfg, &headers, AccessLevel::Write)?;
+    let rt = state.runtime(q.session.as_deref())?;
+    let axum::Json(body) = body.map_err(|_| ApiError::new(
+        StatusCode::BAD_REQUEST, "bad_request", "invalid json body"))?;
+    if !(20..=300).contains(&body.cols) || !(5..=200).contains(&body.rows) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "bad_terminal_size",
+            "terminal size must be 20-300 columns and 5-200 rows",
+        ));
+    }
+    crate::terminal_resize::resize_once(
+        &state.cfg.herdr_bin_path,
+        rt.client.socket_path(),
+        &id,
+        body.cols,
+        body.rows,
+    )
+    .await
+    .map_err(|error| ApiError::new(
+        StatusCode::BAD_GATEWAY,
+        "terminal_resize_failed",
+        format!("terminal resize failed: {error}"),
+    ))?;
+    state.audit.log(
+        "resize", Some(&id), q.session.as_deref(), device.device.as_deref(),
+        &format!("{}x{}", body.cols, body.rows),
+    );
+    maybe_mark_seen(&rt, &headers, &id, true);
+    rt.engine.poke();
     Ok(json_response(StatusCode::OK, serde_json::json!({"ok": true})))
 }
 

@@ -8,4 +8,5 @@ pub mod journal;
 pub mod prompt;
 pub mod sessions;
 pub mod state;
+pub mod terminal_resize;
 pub mod uploads;

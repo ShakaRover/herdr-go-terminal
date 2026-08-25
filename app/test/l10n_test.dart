@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herdrgo/main.dart';
@@ -5,6 +6,37 @@ import 'package:herdrgo/state/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('terminal auto-resize option reflects and persists its switch', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      appLocalePreferenceKey: AppLocalePreference.english.name,
+      terminalAutoResizePreferenceKey: false,
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+        child: const HerdrApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final tileFinder = find.widgetWithText(
+      SwitchListTile,
+      'Fit terminal output to phone',
+    );
+    expect(tileFinder, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(tileFinder).value, isFalse);
+
+    await tester.tap(tileFinder);
+    await tester.pump();
+
+    expect(tester.widget<SwitchListTile>(tileFinder).value, isTrue);
+    expect(prefs.getBool(terminalAutoResizePreferenceKey), isTrue);
+  });
+
   testWidgets('language selection updates the app and persists', (
     tester,
   ) async {

@@ -50,6 +50,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/pane/{id}/history", axum::routing::get(routes::pane_history))
         .route("/api/v1/pane/{id}/reply", axum::routing::post(routes::reply_pane))
         .route("/api/v1/pane/{id}/keys", axum::routing::post(routes::keys_pane))
+        .route("/api/v1/pane/{id}/resize", axum::routing::post(routes::resize_pane))
         .route("/api/v1/pane/{id}/close", axum::routing::post(routes::close_pane))
         .route("/api/v1/pane/{id}/rename", axum::routing::post(routes::rename_pane))
         .route("/api/v1/pane/{id}/upload", axum::routing::post(routes::upload_pane))

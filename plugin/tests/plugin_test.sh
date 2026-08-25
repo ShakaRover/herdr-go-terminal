@@ -121,8 +121,13 @@ fi
 exit "$status"
 EOF
 
+cat > "$fake_bin/herdr" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+
 chmod 755 "$fake_bin/uname" "$fake_bin/curl" "$fake_bin/systemctl" \
-    "$fake_bin/loginctl" "$fake_bin/launchctl" "$fake_bin/ln"
+    "$fake_bin/loginctl" "$fake_bin/launchctl" "$fake_bin/ln" "$fake_bin/herdr"
 
 make_bridge() {
     path=$1
@@ -293,6 +298,7 @@ test_linux_control() {
     assert_file "$state_dir/runtime/herdrgo-bridge"
     assert_contains "$unit" "$state_dir/runtime/herdrgo-bridge"
     assert_contains "$unit" "HERDRGO_BRIDGE_ENV_FILE=$config_dir/env"
+    assert_contains "$unit" "HERDR_BIN_PATH=$fake_bin/herdr"
     assert_not_contains "$unit" do-not-copy
     assert_contains "$output" PAIRING-v1
     assert_contains "$service_log" "systemctl --user daemon-reload"
@@ -375,6 +381,7 @@ test_macos_control() {
     assert_contains "$plist" "kkrainbow.herdrgo.bridge"
     assert_contains "$plist" "state &amp; dir/runtime/herdrgo-bridge"
     assert_contains "$plist" "config &amp; dir/env"
+    assert_contains "$plist" "$fake_bin/herdr"
     assert_not_contains "$plist" do-not-copy
     assert_contains "$service_log" "launchctl bootstrap"
     if command -v plutil >/dev/null 2>&1; then
@@ -397,10 +404,16 @@ test_macos_control() {
     assert_not_file "$plist"
 }
 
+test_static_systemd_unit() {
+    unit="$repo_root/bridge/systemd/herdrgo-bridge.service"
+    assert_contains "$unit" 'Environment=HERDR_BIN_PATH=%h/.local/bin/herdr'
+}
+
 test_install
 test_action
 test_signal_cleans_atomic_lock_claim
 test_signal_stops_control
 test_linux_control
 test_macos_control
+test_static_systemd_unit
 printf 'plugin tests passed\n'

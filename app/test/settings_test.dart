@@ -46,6 +46,33 @@ const _profile2 = RemoteProfile(
 );
 
 void main() {
+  group('terminalAutoResizeProvider', () {
+    test('默认开启并持久化用户选择', () async {
+      final container = await buildContainer({});
+
+      expect(container.read(terminalAutoResizeProvider), isTrue);
+      await container
+          .read(terminalAutoResizeProvider.notifier)
+          .setEnabled(false);
+
+      expect(container.read(terminalAutoResizeProvider), isFalse);
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getBool(terminalAutoResizePreferenceKey),
+        isFalse,
+      );
+    });
+
+    test('读取已关闭的持久化选项', () async {
+      final container = await buildContainer({
+        terminalAutoResizePreferenceKey: false,
+      });
+
+      expect(container.read(terminalAutoResizeProvider), isFalse);
+    });
+  });
+
   group('遗留键清理', () {
     test('无任何遗留键时 prefs 不被触碰', () async {
       final container = await buildContainer({'unrelated': 'x'});

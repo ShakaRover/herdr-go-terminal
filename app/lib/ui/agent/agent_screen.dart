@@ -10,11 +10,39 @@ import '../../blocks/prompt_select.dart';
 import '../../l10n/l10n.dart';
 import '../../state/bridges.dart';
 import '../../state/pane_read.dart';
+import '../../state/settings.dart';
 import '../../state/snapshot.dart';
 import '../history/history_screen.dart';
 import '../status_style.dart';
 import 'ansi_span.dart';
 import 'rename_pane_dialog.dart';
+
+typedef _TerminalGridSize = ({int cols, int rows});
+
+const _mirrorPadding = EdgeInsets.fromLTRB(12, 12, 12, 16);
+
+_TerminalGridSize _terminalGridSize(
+  BuildContext context,
+  BoxConstraints constraints,
+) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: 'M',
+      style: segmentStyle(const AnsiSegment(text: 'M')),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final usableWidth = constraints.maxWidth - _mirrorPadding.horizontal;
+  final usableHeight = constraints.maxHeight - _mirrorPadding.vertical;
+  final cols = (usableWidth / painter.width).floor().clamp(20, 300).toInt();
+  final rows = (usableHeight / painter.preferredLineHeight)
+      .floor()
+      .clamp(5, 200)
+      .toInt();
+  return (cols: cols, rows: rows);
+}
 
 /// agent 详情：输出镜像 + 回复框 + 特殊按键条。
 class AgentScreen extends ConsumerStatefulWidget {
@@ -34,6 +62,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   /// 用户停留在底部时，新内容到达自动跟随；上翻后不再抢滚动条。
   bool _stickToBottom = true;
   bool _sending = false;
+  bool _resizeInFlight = false;
+  int? _lastResizeCols;
+  _TerminalGridSize? _pendingResize;
 
   /// 最近一次 build 时识别到的尾部对话框（供回复发送前的误批准拦截）。
   PromptRegion? _lastPromptRegion;
@@ -76,6 +107,69 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
+  }
+
+  void _scheduleTerminalResize(
+    BuildContext context,
+    BoxConstraints constraints, {
+    required bool enabled,
+  }) {
+    if (!enabled) {
+      _pendingResize = null;
+      _lastResizeCols = null;
+      return;
+    }
+    final size = _terminalGridSize(context, constraints);
+    if (_lastResizeCols == size.cols || _pendingResize?.cols == size.cols) {
+      return;
+    }
+    _pendingResize = size;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingResize());
+  }
+
+  Future<void> _applyPendingResize() async {
+    if (!mounted || _resizeInFlight) return;
+    if (!ref.read(terminalAutoResizeProvider)) {
+      _pendingResize = null;
+      return;
+    }
+    final size = _pendingResize;
+    final api = ref.read(apiProvider(widget.bridgeId));
+    if (size == null) return;
+    if (api == null) {
+      _pendingResize = null;
+      return;
+    }
+    _pendingResize = null;
+    _lastResizeCols = size.cols;
+    _resizeInFlight = true;
+    try {
+      await api.resizePane(
+        widget.paneId,
+        cols: size.cols,
+        rows: size.rows,
+        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+      );
+      if (mounted) {
+        await ref
+            .read(
+              paneReadProvider((
+                bridgeId: widget.bridgeId,
+                paneId: widget.paneId,
+              )).notifier,
+            )
+            .refresh();
+      }
+    } on ApiException {
+      // Automatic sizing is best-effort; the original-width mirror remains usable.
+    } finally {
+      _resizeInFlight = false;
+      if (_pendingResize != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _applyPendingResize(),
+        );
+      }
+    }
   }
 
   Future<void> _sendReply() async {
@@ -291,6 +385,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         .where((p) => p.paneId == widget.paneId)
         .firstOrNull;
     final readOnly = snap?.readOnly ?? false;
+    final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
 
     // 新内容到达且用户在底部 → 跟随。
     ref.listen(paneReadProvider(paneKey), (prev, next) {
@@ -387,30 +482,39 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               ),
             ),
           Expanded(
-            child: text.isEmpty && readState.error == null
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(
-                          l10n.readingOutput,
-                          style: Theme.of(context).textTheme.bodyMedium,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                _scheduleTerminalResize(
+                  context,
+                  constraints,
+                  enabled: terminalAutoResize && pane != null && !readOnly,
+                );
+                return text.isEmpty && readState.error == null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.readingOutput,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  )
-                : SingleChildScrollView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: SelectableText.rich(
-                        TextSpan(children: [linesToSpan(mirrorLines)]),
-                      ),
-                    ),
-                  ),
+                      )
+                    : SingleChildScrollView(
+                        controller: _scrollController,
+                        padding: _mirrorPadding,
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: SelectableText.rich(
+                            TextSpan(children: [linesToSpan(mirrorLines)]),
+                          ),
+                        ),
+                      );
+              },
+            ),
           ),
           if (!readOnly && promptRegion != null)
             _PromptCard(

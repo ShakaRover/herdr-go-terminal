@@ -358,6 +358,25 @@ void main() {
     });
   });
 
+  test('resizePane 发送手机终端尺寸和 session', () async {
+    final (h, api) = await _start((req) => _json(req, 200, {'ok': true}));
+    addTearDown(h.stop);
+
+    final result = await api.resizePane(
+      'w1:p1',
+      cols: 48,
+      rows: 31,
+      session: 'work',
+    );
+
+    expect(result.success, isTrue);
+    final req = h.requests.single;
+    expect(req.method, 'POST');
+    expect(req.uri.path, '/api/v1/pane/w1:p1/resize');
+    expect(req.uri.queryParameters['session'], 'work');
+    expect(req.bodyJson, {'cols': 48, 'rows': 31});
+  });
+
   test('409 prompt_changed 转为 promptChanged failure', () async {
     final (h, api) = await _start(
       (req) => _json(req, 409, {
