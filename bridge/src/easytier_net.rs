@@ -147,16 +147,35 @@ pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
     }))
 }
 
-/// 生成人工展示用的二维码与配对 JSON。服务启动路径不调用本函数，避免
-/// EasyTier secret 进入 systemd journal 或 launchd 日志。
+/// 生成人工展示用的二维码与可读摘要。明文 secret 只嵌入二维码，
+/// 不在终端重复打印。服务启动路径不调用本函数。
 pub fn pairing_output(cfg: &Config) -> anyhow::Result<String> {
     let payload = pairing_payload(cfg)?;
     let code = qrcode::QrCode::new(payload.to_string()).context("encode pairing qr")?;
     let image = code
         .render::<qrcode::render::unicode::Dense1x2>()
         .build();
+    let virtual_ip = payload["virtualIp"].as_str().context("pairing virtual ip")?;
+    let port = payload["port"].as_u64().context("pairing port")?;
+    let network_name = payload["networkName"].as_str().context("pairing network name")?;
+    let servers = payload["server"].as_array().context("pairing servers")?;
+    let mut details = format!(
+        "{image}\n\nPairing details\n  Bridge:  {virtual_ip}:{port}\n  Network: {network_name}\n  Routes:\n"
+    );
+    for server in servers {
+        let server = server.as_str().context("pairing server")?;
+        details.push_str(&format!("    - {server}\n"));
+    }
+    details.push_str("\nCredentials are embedded in the QR code and are not printed.\n");
+    Ok(details)
+}
+
+/// 输出机器可读的完整配对载荷。包含 secret，只供显式
+/// `pair --json` 调试或手工导入使用。
+pub fn pairing_json_output(cfg: &Config) -> anyhow::Result<String> {
+    let payload = pairing_payload(cfg)?;
     let json = serde_json::to_string_pretty(&payload).context("encode pairing json")?;
-    Ok(format!("{image}\n{json}\n"))
+    Ok(format!("{json}\n"))
 }
 
 /// 探测本机内网 IPv4：向 8.8.8.8:80 发 UDP connect（不产生实际流量），
@@ -277,13 +296,28 @@ mod tests {
     }
 
     #[test]
-    fn pairing_output_contains_qr_and_json() {
+    fn pairing_output_is_human_readable_and_hides_secret() {
         let _g = crate::config::tests_lock();
         let cfg = fresh_cfg("tcp://et.example.com:11010");
         let output = super::pairing_output(&cfg).unwrap();
+        assert!(output.contains('█'));
+        assert!(output.contains("Pairing details"));
+        assert!(output.contains("Bridge:  10.126.0.1:8787"));
+        assert!(output.contains("Network:"));
+        assert!(output.contains("- tcp://et.example.com:11010"));
+        assert!(output.contains("Credentials are embedded in the QR code"));
+        assert!(!output.contains("s3cret"));
+        assert!(!output.contains("\"secret\""));
+    }
+
+    #[test]
+    fn pairing_json_output_contains_raw_payload() {
+        let _g = crate::config::tests_lock();
+        let cfg = fresh_cfg("tcp://et.example.com:11010");
+        let output = super::pairing_json_output(&cfg).unwrap();
         assert!(output.contains("\"secret\": \"s3cret\""));
         assert!(output.contains("\"networkName\""));
-        assert!(output.contains('█'));
+        assert!(!output.contains('█'));
     }
 
     #[test]

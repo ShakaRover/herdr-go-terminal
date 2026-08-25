@@ -16,8 +16,13 @@ async fn main() {
         std::fs::set_permissions(&cfg.state_dir, std::fs::Permissions::from_mode(0o700))
             .expect("chmod state dir");
     }
-    if cli.command == Some(herdrgo_bridge::config::BridgeCommand::Pair) {
-        match herdrgo_bridge::easytier_net::pairing_output(&cfg) {
+    if let Some(herdrgo_bridge::config::BridgeCommand::Pair { json }) = cli.command {
+        let output = if json {
+            herdrgo_bridge::easytier_net::pairing_json_output(&cfg)
+        } else {
+            herdrgo_bridge::easytier_net::pairing_output(&cfg)
+        };
+        match output {
             Ok(output) => print!("{output}"),
             Err(error) => {
                 eprintln!("pairing payload unavailable: {error:#}");

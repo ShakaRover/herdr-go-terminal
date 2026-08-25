@@ -283,6 +283,8 @@ EasyTier secret 长期写入 journal 或 launchd 日志，公开发行前必须�
 
 - 服务模式启动时不输出二维码、secret 或完整配对 JSON。
 - bridge 提供独立的配对输出入口，由 `setup` 和 `pair` 在交互式 pane 中调用。
+  默认只显示二维码和可读连接摘要，不重复打印明文 secret；完整载荷只由
+  显式 `pair --json` 输出。
 - 配对入口复用 bridge 内部的配置解析和 `pairing_payload` 生成逻辑，不在 shell
   脚本中重复拼接协议字段。
 - secret 只从 state 目录读取，不写入命令行参数、unit 文件或 plist。
@@ -394,7 +396,8 @@ herdr plugin action invoke kkrainbow.herdrgo.setup
 - `plugin/install.sh` 下载与校验四平台 Release 产物。
 - `plugin/herdrgo-action.sh` 把单行 action 调用转换为内部 pane。
 - `plugin/herdrgo-ctl.sh` 管理稳定运行副本、systemd user unit 和 LaunchAgent。
-- `herdrgo-bridge pair` 独立展示凭据；普通服务启动不再输出二维码或配对 JSON。
+- `herdrgo-bridge pair` 显示二维码和可读摘要，`pair --json` 显式输出完整载荷；
+  普通服务启动不再输出二维码或配对 JSON。
 - `.github/workflows/bridge-ci.yml` 运行 bridge 与 plugin 自动测试。
 - `.github/workflows/bridge-release.yml` 构建四平台产物、SHA256 和来源记录。
 

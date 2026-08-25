@@ -10,7 +10,9 @@ plane 虚拟 TCP，不监听任何 OS 端口、不需要 TUN/root；app 扫码�
 无 push/websocket，app 侧轮询。
 
 服务启动不会输出 secret。需要配对时在私有终端运行
-`herdrgo-bridge pair`，它会读取现有 state 并显示二维码和配对 JSON 后退出。
+`herdrgo-bridge pair`，它会读取现有 state，显示二维码和人类可读的
+连接摘要后退出，不在终端打印明文 secret。仅调试或手工导入时使用
+`herdrgo-bridge pair --json` 输出完整载荷。
 
 ## v1 端点
 
@@ -196,10 +198,11 @@ HERDRGO_BRIDGE_SECRET=你指定的secret
 HERDRGO_BRIDGE_SERVER=tcp://et.example.com:11010
 ```
 
-执行 `herdrgo-bridge pair` 会打印配对二维码 + 明文 JSON（含
-server/networkName/secret/virtualIp/port，app 扫码即连）；普通 bridge 服务
-启动不输出这些内容。**secret 即网络钥匙，二维码等同凭据，只在宿主机私有终端
-就地展示，勿截图外泄。**
+执行 `herdrgo-bridge pair` 会打印配对二维码和可读连接摘要，不重复
+打印明文 secret；`herdrgo-bridge pair --json` 才会输出含
+server/networkName/secret/virtualIp/port 的完整载荷。普通 bridge 服务启动
+不输出这些内容。**secret 即网络钥匙，二维码等同凭据，只在宿主机
+私有终端就地展示，勿截图外泄。**
 
 注意：bridge 是虚拟网内唯一静态节点（virtualIp 缺省 `10.126.0.1/24`，可用
 `HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP` 覆盖），手机端走 DHCP 自动避让，二维码

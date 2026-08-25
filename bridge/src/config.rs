@@ -133,8 +133,12 @@ pub struct Cli {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Subcommand)]
 pub enum BridgeCommand {
-    /// 显示手机扫码所需的二维码和配对 JSON 后退出
-    Pair,
+    /// 显示手机扫码所需的二维码后退出
+    Pair {
+        /// 输出含完整凭据的原始配对 JSON（仅限调试/手工导入）
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 impl Cli {
@@ -542,7 +546,10 @@ pub(crate) mod tests {
     #[test]
     fn pair_subcommand_is_parsed() {
         let cli = Cli::parse_from(["herdrgo-bridge", "pair"]);
-        assert_eq!(cli.command, Some(BridgeCommand::Pair));
+        assert_eq!(cli.command, Some(BridgeCommand::Pair { json: false }));
+
+        let cli = Cli::parse_from(["herdrgo-bridge", "pair", "--json"]);
+        assert_eq!(cli.command, Some(BridgeCommand::Pair { json: true }));
     }
 
     #[test]
