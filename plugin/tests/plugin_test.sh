@@ -109,8 +109,20 @@ if [ "${1:-}" = print ]; then
 fi
 EOF
 
+cat > "$fake_bin/ln" <<'EOF'
+#!/bin/sh
+/bin/ln "$@"
+status=$?
+if [ "$status" -eq 0 ] && [ "${FAKE_LOCK_TERM_ON_ACQUIRE:-}" = yes ]; then
+    case "$*" in
+        *control.lock*) kill -TERM "$PPID" ;;
+    esac
+fi
+exit "$status"
+EOF
+
 chmod 755 "$fake_bin/uname" "$fake_bin/curl" "$fake_bin/systemctl" \
-    "$fake_bin/loginctl" "$fake_bin/launchctl"
+    "$fake_bin/loginctl" "$fake_bin/launchctl" "$fake_bin/ln"
 
 make_bridge() {
     path=$1
@@ -228,6 +240,33 @@ test_signal_stops_control() {
     [ ! -d "$state_dir/control.lock" ] || fail "signal did not clean the control lock"
 }
 
+test_signal_cleans_atomic_lock_claim() {
+    case_root="$test_root/lock-signal"
+    plugin_root="$case_root/plugin"
+    state_dir="$case_root/state"
+    config_dir="$case_root/config"
+    home_dir="$case_root/home"
+    socket_path="$test_root/lock-signal.sock"
+    service_log="$case_root/service.log"
+    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$config_dir" "$home_dir"
+    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgo-bridge" lock-signal
+    start_socket "$socket_path"
+
+    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        FAKE_LOCK_TERM_ON_ACQUIRE=yes HOME="$home_dir" USER=tester \
+        HERDR_PLUGIN_ROOT="$plugin_root" HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
+        fail "setup survived TERM at the atomic lock claim"
+    fi
+    [ ! -e "$state_dir/control.lock" ] && [ ! -L "$state_dir/control.lock" ] ||
+        fail "TERM at lock claim left control.lock behind"
+    for owner in "$state_dir"/.control.lock.*; do
+        [ ! -e "$owner" ] || fail "TERM at lock claim left its owner behind"
+    done
+}
+
 test_linux_control() {
     case_root="$test_root/linux case"
     plugin_root="$case_root/plugin"
@@ -278,6 +317,20 @@ test_linux_control() {
     fi
     [ -d "$state_dir/control.lock" ] || fail "a contender removed the active control lock"
     rmdir "$state_dir/control.lock"
+
+    active_owner="$state_dir/.control.lock.$$"
+    mkdir "$active_owner"
+    printf '%s\n' "$$" > "$active_owner/pid"
+    ln -s "$(basename -- "$active_owner")" "$state_dir/control.lock"
+    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" restart >/dev/null 2>&1; then
+        fail "a live atomic control lock did not exclude a contender"
+    fi
+    [ "$(readlink "$state_dir/control.lock")" = "$(basename -- "$active_owner")" ] ||
+        fail "a contender replaced the live atomic control lock"
+    rm -f "$state_dir/control.lock" "$active_owner/pid"
+    rmdir "$active_owner"
 
     if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         FAKE_SERVICE_STOP_FAIL=yes HOME="$home_dir" \
@@ -346,6 +399,7 @@ test_macos_control() {
 
 test_install
 test_action
+test_signal_cleans_atomic_lock_claim
 test_signal_stops_control
 test_linux_control
 test_macos_control

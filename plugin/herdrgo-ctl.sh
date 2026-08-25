@@ -39,14 +39,30 @@ runtime_ctl="$runtime_dir/herdrgo-ctl.sh"
 metadata_config_dir="$runtime_dir/plugin-config-dir"
 metadata_socket_path="$runtime_dir/herdr-socket-path"
 lock_dir="$state_dir/control.lock"
-lock_held=false
+lock_owner_name=".control.lock.$$"
+lock_owner_dir="$state_dir/$lock_owner_name"
 
 cleanup_lock() {
-    if [ "$lock_held" = true ]; then
-        rm -f "$lock_dir/pid"
-        rmdir "$lock_dir" 2>/dev/null || true
-        lock_held=false
+    current_owner=
+    if [ -L "$lock_dir" ]; then
+        current_owner=$(readlink "$lock_dir" 2>/dev/null || true)
     fi
+    if [ "$current_owner" = "$lock_owner_name" ]; then
+        rm -f "$lock_dir" 2>/dev/null || true
+    fi
+    # POSIX ln treats an existing directory as a destination directory. If a
+    # contender appeared between our checks, remove only the nested link whose
+    # process-unique name and target both belong to this invocation.
+    nested_lock="$lock_dir/$lock_owner_name"
+    nested_owner=
+    if [ -L "$nested_lock" ]; then
+        nested_owner=$(readlink "$nested_lock" 2>/dev/null || true)
+    fi
+    if [ "$nested_owner" = "$lock_owner_name" ]; then
+        rm -f "$nested_lock" 2>/dev/null || true
+    fi
+    rm -f "$lock_owner_dir/pid" 2>/dev/null || true
+    rmdir "$lock_owner_dir" 2>/dev/null || true
 }
 trap cleanup_lock EXIT
 # A signal trap that only returns would let the interrupted operation continue
@@ -58,9 +74,43 @@ trap 'exit 143' TERM
 acquire_lock() {
     mkdir -p "$state_dir"
     chmod 700 "$state_dir"
-    if ! mkdir "$lock_dir" 2>/dev/null; then
+    # Prepare a complete, process-unique owner before atomically publishing it
+    # as control.lock. cleanup_lock can identify this owner even if a signal is
+    # delivered immediately after ln succeeds, so there is no lock_held window.
+    mkdir "$lock_owner_dir" 2>/dev/null ||
+        fail "stale control lock owner: $lock_owner_dir"
+    chmod 700 "$lock_owner_dir"
+    printf '%s\n' "$$" > "$lock_owner_dir/pid"
+    chmod 600 "$lock_owner_dir/pid"
+
+    lock_acquired=false
+    if ln -s "$lock_owner_name" "$lock_dir" 2>/dev/null; then
+        published_owner=
+        if [ -L "$lock_dir" ]; then
+            published_owner=$(readlink "$lock_dir" 2>/dev/null || true)
+        fi
+        if [ "$published_owner" = "$lock_owner_name" ]; then
+            lock_acquired=true
+        fi
+    fi
+
+    if [ "$lock_acquired" != true ]; then
         old_pid=
-        [ ! -f "$lock_dir/pid" ] || old_pid=$(sed -n '1p' "$lock_dir/pid")
+        if [ -L "$lock_dir" ]; then
+            old_owner=$(readlink "$lock_dir" 2>/dev/null || true)
+            old_owner_pid=${old_owner#.control.lock.}
+            case "$old_owner_pid" in
+                '' | *[!0-9]*) ;;
+                *)
+                    [ ! -f "$state_dir/$old_owner/pid" ] ||
+                        old_pid=$(sed -n '1p' "$state_dir/$old_owner/pid")
+                    ;;
+            esac
+        elif [ -f "$lock_dir/pid" ]; then
+            # Recognize the directory lock used by older plugin versions, but
+            # never reclaim it automatically.
+            old_pid=$(sed -n '1p' "$lock_dir/pid")
+        fi
         case "$old_pid" in
             '' | *[!0-9]*) ;;
             *)
@@ -69,14 +119,10 @@ acquire_lock() {
                 fi
                 ;;
         esac
-        # Do not reclaim a stale-looking lock automatically. The directory is
-        # the atomic ownership record; deleting it after a separate read would
-        # let two contenders remove each other's newly acquired lock. Normal
-        # exits and handled signals clean it through the trap above.
-        fail "stale control lock: $lock_dir (confirm no operation is running, then remove it)"
+        # Do not reclaim a stale-looking lock automatically. Deleting it after
+        # a separate read would let two contenders remove a newly acquired lock.
+        fail "stale control lock: $lock_dir (confirm no operation is running, then remove the link and its target)"
     fi
-    printf '%s\n' "$$" > "$lock_dir/pid"
-    lock_held=true
 }
 
 read_metadata() {
