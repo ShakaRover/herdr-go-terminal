@@ -77,6 +77,11 @@ EOF
 cat > "$fake_bin/systemctl" <<'EOF'
 #!/bin/sh
 printf 'systemctl %s\n' "$*" >> "$FAKE_SERVICE_LOG"
+if [ "${FAKE_SERVICE_TERM_ON_RELOAD:-}" = yes ]; then
+    case "$*" in
+        *"daemon-reload"*) kill -TERM "$PPID" ;;
+    esac
+fi
 if [ "${FAKE_SERVICE_STOP_FAIL:-}" = yes ]; then
     case "$*" in
         *"disable --now herdrgo-bridge.service"*) exit 1 ;;
@@ -197,6 +202,32 @@ EOF
         "plugin pane open --plugin kkrainbow.herdrgo --entrypoint setup-ui --focus"
 }
 
+test_signal_stops_control() {
+    case_root="$test_root/signal"
+    plugin_root="$case_root/plugin"
+    state_dir="$case_root/state"
+    config_dir="$case_root/config"
+    home_dir="$case_root/home"
+    socket_path="$test_root/signal.sock"
+    service_log="$case_root/service.log"
+    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$config_dir" "$home_dir"
+    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgo-bridge" signal
+    start_socket "$socket_path"
+
+    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        FAKE_SERVICE_TERM_ON_RELOAD=yes HOME="$home_dir" USER=tester \
+        HERDR_PLUGIN_ROOT="$plugin_root" HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
+        fail "setup survived TERM and continued without its control lock"
+    fi
+    assert_contains "$service_log" "systemctl --user daemon-reload"
+    assert_not_contains "$service_log" "systemctl --user enable"
+    assert_not_contains "$service_log" "systemctl --user restart"
+    [ ! -d "$state_dir/control.lock" ] || fail "signal did not clean the control lock"
+}
+
 test_linux_control() {
     case_root="$test_root/linux case"
     plugin_root="$case_root/plugin"
@@ -315,6 +346,7 @@ test_macos_control() {
 
 test_install
 test_action
+test_signal_stops_control
 test_linux_control
 test_macos_control
 printf 'plugin tests passed\n'

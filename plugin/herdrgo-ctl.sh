@@ -48,7 +48,12 @@ cleanup_lock() {
         lock_held=false
     fi
 }
-trap cleanup_lock EXIT HUP INT TERM
+trap cleanup_lock EXIT
+# A signal trap that only returns would let the interrupted operation continue
+# after releasing its lock. Exit explicitly; the EXIT trap performs cleanup.
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 acquire_lock() {
     mkdir -p "$state_dir"
