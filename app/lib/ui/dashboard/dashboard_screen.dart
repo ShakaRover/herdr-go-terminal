@@ -71,6 +71,24 @@ class DashboardScreen extends ConsumerWidget {
                     conn: conns[safeIndex - 1],
                     state: ref.watch(bridgeSnapshotProvider(focused)),
                   ),
+                if (conns.any(
+                  (conn) => conn.status == ConnStatus.ready && conn.api != null,
+                ))
+                  IconButton(
+                    tooltip: l10n.newAgent,
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      final index = tabController.index;
+                      final initialBridgeId = index > 0 && index <= conns.length
+                          ? conns[index - 1].id
+                          : null;
+                      _openCreateAgent(
+                        context,
+                        ref,
+                        initialBridgeId: initialBridgeId,
+                      );
+                    },
+                  ),
                 IconButton(
                   tooltip: l10n.settingsTooltip,
                   icon: const Icon(Icons.settings_outlined),
@@ -86,26 +104,6 @@ class DashboardScreen extends ConsumerWidget {
                 for (final c in conns) _SingleBridgeTab(conn: c),
               ],
             ),
-            floatingActionButton:
-                conns.any(
-                  (conn) => conn.status == ConnStatus.ready && conn.api != null,
-                )
-                ? FloatingActionButton.extended(
-                    onPressed: () {
-                      final index = tabController.index;
-                      final initialBridgeId = index > 0 && index <= conns.length
-                          ? conns[index - 1].id
-                          : null;
-                      _openCreateAgent(
-                        context,
-                        ref,
-                        initialBridgeId: initialBridgeId,
-                      );
-                    },
-                    icon: const Icon(Icons.add),
-                    label: Text(l10n.newAgent),
-                  )
-                : null,
           );
         },
       ),
