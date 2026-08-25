@@ -40,7 +40,11 @@ herdr plugin install
         ▼
 Herdr 管理的插件目录
         │
-        │ 用户显式打开 setup plugin pane
+        │ 用户调用 setup action
+        ▼
+setup action
+        │
+        │ 插件内部打开 setup pane
         ▼
 setup 控制脚本
         ├── 安装稳定运行副本到 HERDR_PLUGIN_STATE_DIR/runtime/
@@ -63,31 +67,32 @@ plugin 是安装和操作入口，bridge 仍是独立进程。这样既沿用 He
 
 ```bash
 herdr plugin install KKRainbow/herdr-go
-herdr plugin pane open \
-  --plugin kkrainbow.herdrgo \
-  --entrypoint setup \
-  --placement zoomed \
-  --focus
+herdr plugin action invoke kkrainbow.herdrgo.setup
 ```
 
-第二条命令打开交互式 setup pane。setup 成功后直接显示二维码，用户用 HerdrGo 扫码
-即可。选择 pane 而不是普通 action，是因为 Herdr 会捕获 action 的标准输出，二维码和
-交互式错误信息不适合只留在 plugin log 中。
+已经安装插件时只需执行第二条命令。`setup` action 是稳定的用户入口，它在插件内部
+打开交互式 setup pane；用户不需要了解 pane entrypoint、placement 或 focus 参数。
+setup 成功后直接在 pane 中显示二维码，用户用 HerdrGo 扫码即可。
 
-日常操作通过 plugin entrypoint 或 action 完成：
+action 本身只负责启动界面，不输出二维码或执行安装。实际 setup 仍在 pane 中运行，
+因为 Herdr 会捕获普通 action 的标准输出，二维码和交互式错误信息不适合只留在
+plugin log 中。内部 pane 是实现细节，不作为面向用户的命令接口。
+
+日常操作统一通过 action 调用；需要交互或展示详细输出的 action 在内部打开 pane：
 
 | 入口 | 类型 | 行为 |
 | --- | --- | --- |
-| `setup` | pane | 安装或更新运行副本、注册服务、启动并显示二维码 |
-| `pair` | pane | 读取现有状态并重新显示二维码，不重启服务 |
-| `status` | pane | 显示版本、服务状态、配置路径和诊断提示 |
+| `setup` | action → pane | 安装或更新运行副本、注册服务、启动并显示二维码 |
+| `pair` | action → pane | 读取现有状态并重新显示二维码，不重启服务 |
+| `status` | action → pane | 显示版本、服务状态、配置路径和诊断提示 |
 | `start` | action | 启动已安装服务 |
 | `stop` | action | 停止服务但保留安装和配对状态 |
 | `restart` | action | 重启服务 |
-| `uninstall-service` | pane | 停止并移除服务，默认保留配对状态 |
+| `uninstall-service` | action → pane | 停止并移除服务，默认保留配对状态 |
 
 `herdr plugin uninstall kkrainbow.herdrgo` 只删除插件本身。用户应先运行
-`uninstall-service`；文档和卸载界面必须明确这个顺序。
+`herdr plugin action invoke kkrainbow.herdrgo.uninstall-service`；文档和卸载界面必须
+明确这个顺序。
 
 ## 6. Plugin manifest
 
@@ -104,20 +109,38 @@ platforms = ["linux", "macos"]
 [[build]]
 command = ["bash", "plugin/install.sh"]
 
-[[panes]]
+[[actions]]
 id = "setup"
+title = "Set up HerdrGo bridge"
+contexts = ["workspace"]
+command = ["bash", "plugin/herdrgo-action.sh", "setup-ui"]
+
+[[panes]]
+id = "setup-ui"
 title = "HerdrGo Setup"
 placement = "zoomed"
 command = ["bash", "plugin/herdrgo-ctl.sh", "setup"]
 
-[[panes]]
+[[actions]]
 id = "pair"
+title = "Pair HerdrGo"
+contexts = ["workspace"]
+command = ["bash", "plugin/herdrgo-action.sh", "pair-ui"]
+
+[[panes]]
+id = "pair-ui"
 title = "Pair HerdrGo"
 placement = "overlay"
 command = ["bash", "plugin/herdrgo-ctl.sh", "pair"]
 
-[[panes]]
+[[actions]]
 id = "status"
+title = "Show HerdrGo status"
+contexts = ["workspace"]
+command = ["bash", "plugin/herdrgo-action.sh", "status-ui"]
+
+[[panes]]
+id = "status-ui"
 title = "HerdrGo Status"
 placement = "overlay"
 command = ["bash", "plugin/herdrgo-ctl.sh", "status"]
@@ -140,12 +163,22 @@ title = "Restart HerdrGo bridge"
 contexts = ["workspace"]
 command = ["bash", "plugin/herdrgo-ctl.sh", "restart"]
 
-[[panes]]
+[[actions]]
 id = "uninstall-service"
+title = "Uninstall HerdrGo bridge service"
+contexts = ["workspace"]
+command = ["bash", "plugin/herdrgo-action.sh", "uninstall-service-ui"]
+
+[[panes]]
+id = "uninstall-service-ui"
 title = "Uninstall HerdrGo bridge service"
 placement = "zoomed"
 command = ["bash", "plugin/herdrgo-ctl.sh", "uninstall-service"]
 ```
+
+`herdrgo-action.sh` 是很薄的界面启动器：它通过 `HERDR_BIN_PATH` 和
+`HERDR_PLUGIN_ID` 调用 `herdr plugin pane open`，并把 manifest 中声明的 pane 布局留在
+插件内部。用户文档只公开 action id，不公开内部 `*-ui` pane id。
 
 插件最低要求 Herdr 0.8.2，与手机端创建 agent 所需的 Herdr API 版本保持一致。
 
@@ -160,6 +193,7 @@ $HERDR_PLUGIN_ROOT/
 ├── bin/herdrgo-bridge                 # [[build]] 下载的候选版本
 └── plugin/
     ├── install.sh                     # 平台检测、下载和校验
+    ├── herdrgo-action.sh              # action 到交互式 pane 的内部适配层
     └── herdrgo-ctl.sh                 # setup 与服务管理
 
 $HERDR_PLUGIN_STATE_DIR/
@@ -283,11 +317,7 @@ release 构建依赖 CI 机器恰好存在 `../../EasyTier`。
 
 ```bash
 herdr plugin install KKRainbow/herdr-go --yes
-herdr plugin pane open \
-  --plugin kkrainbow.herdrgo \
-  --entrypoint setup \
-  --placement zoomed \
-  --focus
+herdr plugin action invoke kkrainbow.herdrgo.setup
 ```
 
 第二次 setup 将新候选版本复制到稳定 runtime 路径并重启服务。state/config 目录位于
@@ -334,6 +364,8 @@ herdr plugin pane open \
 - 升级 runtime 二进制后服务定义仍引用稳定路径。
 - 服务启动日志不包含 secret 或完整配对 JSON。
 - `pair` 生成的载荷与 app 当前扫码协议兼容。
+- `herdr plugin action invoke kkrainbow.herdrgo.setup` 能打开 setup pane，且用户无需传入
+  pane 布局参数。
 
 人工验收：
 
@@ -354,4 +386,3 @@ herdr plugin pane open \
 5. 接入四平台 Release CI。
 6. 更新中文/英文 README 的安装、升级和卸载说明。
 7. 在 Linux 与 macOS 上完成真实 plugin 安装和手机扫码验收。
-
