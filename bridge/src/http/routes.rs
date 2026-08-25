@@ -494,6 +494,9 @@ fn terminal_resize_error(error: crate::terminal_resize::TerminalResizeError) -> 
         crate::terminal_resize::TerminalResizeError::UnknownLease => {
             (StatusCode::CONFLICT, "terminal_lease_expired")
         }
+        crate::terminal_resize::TerminalResizeError::LeaseInUse => {
+            (StatusCode::CONFLICT, "terminal_lease_in_use")
+        }
         _ => (StatusCode::BAD_GATEWAY, "terminal_resize_failed"),
     };
     ApiError::new(status, code, format!("terminal resize failed: {error}"))

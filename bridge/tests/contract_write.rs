@@ -412,6 +412,18 @@ done
     assert!(capture.contains("arg=--takeover\n"));
     assert!(!capture.contains("terminal.release"));
 
+    let occupied = app
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/pane/w1:p1/resize?session=default",
+            r#"{"cols":72,"rows":24}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(occupied.status(), StatusCode::CONFLICT);
+    let capture = std::fs::read_to_string(&capture_path).unwrap();
+    assert!(!capture.contains("terminal.release"));
+
     let renew = app
         .clone()
         .oneshot(post_json(

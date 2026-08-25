@@ -12,6 +12,7 @@ use tokio::time::{timeout, Instant};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_LEASE_TIMEOUT: Duration = Duration::from_secs(20);
+const STDERR_CAPTURE_LIMIT: usize = 8 * 1024;
 
 #[derive(Debug)]
 pub enum TerminalResizeError {
@@ -20,6 +21,7 @@ pub enum TerminalResizeError {
     Process(String),
     Timeout,
     UnknownLease,
+    LeaseInUse,
 }
 
 impl std::fmt::Display for TerminalResizeError {
@@ -30,6 +32,9 @@ impl std::fmt::Display for TerminalResizeError {
             TerminalResizeError::Process(message) => write!(f, "herdr: {message}"),
             TerminalResizeError::Timeout => write!(f, "timeout"),
             TerminalResizeError::UnknownLease => write!(f, "terminal resize lease expired"),
+            TerminalResizeError::LeaseInUse => {
+                write!(f, "terminal already has an active phone lease")
+            }
         }
     }
 }
@@ -104,15 +109,15 @@ impl TerminalLeaseManager {
             pane_id: pane_id.to_string(),
         };
 
-        let previous = {
-            let mut leases = self.inner.leases.lock().await;
-            let lease_id = leases
-                .iter()
-                .find_map(|(lease_id, entry)| (entry.pane == pane).then(|| lease_id.clone()));
-            lease_id.and_then(|lease_id| leases.remove(&lease_id))
-        };
-        if let Some(previous) = previous {
-            request_release(previous.commands).await?;
+        if self
+            .inner
+            .leases
+            .lock()
+            .await
+            .values()
+            .any(|entry| entry.pane == pane)
+        {
+            return Err(TerminalResizeError::LeaseInUse);
         }
 
         let started = timeout(
@@ -255,12 +260,7 @@ async fn start_controller(
         .stderr
         .take()
         .ok_or_else(|| TerminalResizeError::Io("herdr control stderr is unavailable".into()))?;
-    let stderr_task = tokio::spawn(async move {
-        let mut reader = BufReader::new(stderr);
-        let mut bytes = Vec::new();
-        let _ = reader.read_to_end(&mut bytes).await;
-        String::from_utf8_lossy(&bytes).trim().to_string()
-    });
+    let stderr_task = tokio::spawn(capture_output(stderr, STDERR_CAPTURE_LIMIT));
 
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
@@ -289,10 +289,7 @@ async fn start_controller(
             "expected terminal.frame".into(),
         ));
     }
-    let stdout_task = tokio::spawn(async move {
-        let mut bytes = Vec::new();
-        let _ = reader.read_to_end(&mut bytes).await;
-    });
+    let stdout_task = tokio::spawn(drain_output(reader));
 
     Ok(StartedController {
         child,
@@ -300,6 +297,32 @@ async fn start_controller(
         stdout_task,
         stderr_task,
     })
+}
+
+async fn drain_output(mut output: impl tokio::io::AsyncRead + Unpin) {
+    let mut buffer = [0_u8; 8192];
+    loop {
+        match output.read(&mut buffer).await {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+    }
+}
+
+async fn capture_output(mut output: impl tokio::io::AsyncRead + Unpin, limit: usize) -> String {
+    let mut captured = Vec::with_capacity(limit);
+    let mut buffer = [0_u8; 4096];
+    loop {
+        match output.read(&mut buffer).await {
+            Ok(0) | Err(_) => break,
+            Ok(read) if captured.len() < limit => {
+                let keep = read.min(limit - captured.len());
+                captured.extend_from_slice(&buffer[..keep]);
+            }
+            Ok(_) => {}
+        }
+    }
+    String::from_utf8_lossy(&captured).trim().to_string()
 }
 
 enum LeaseEnd {
@@ -493,6 +516,22 @@ done
         manager.acquire(&socket, "w1:p3", 48, 31).await.unwrap();
 
         wait_for_capture(&dir.path().join("capture"), "terminal.release").await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rejects_a_second_phone_lease_for_the_same_pane() {
+        let (dir, herdr_bin) = make_fake_controller(controller_script());
+        let manager = TerminalLeaseManager::new(herdr_bin);
+        let socket = dir.path().join("session.sock");
+        let lease = manager.acquire(&socket, "w1:p3", 48, 31).await.unwrap();
+
+        let error = manager.acquire(&socket, "w1:p3", 72, 24).await.unwrap_err();
+
+        assert!(matches!(error, TerminalResizeError::LeaseInUse));
+        let capture = std::fs::read_to_string(dir.path().join("capture")).unwrap();
+        assert!(!capture.contains("terminal.release"));
+        manager.release(&lease, &socket, "w1:p3").await.unwrap();
     }
 
     #[cfg(unix)]
