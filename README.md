@@ -85,7 +85,7 @@ only credential: keep the QR code private.
 On the computer running Herdr (Herdr 0.8.2+):
 
 ```bash
-herdr plugin install KKRainbow/herdr-go
+herdr plugin install herdr-go/herdr-go
 herdr plugin action invoke kkrainbow.herdrgo.setup
 ```
 
@@ -110,7 +110,7 @@ without scanning again.
 ## Install the Android app
 
 Download the universal APK from the
-[latest GitHub release](https://github.com/KKRainbow/herdr-go/releases/latest).
+[latest GitHub release](https://github.com/herdr-go/herdr-go/releases/latest).
 The APK contains both arm64-v8a and x86_64 native libraries.
 
 ## Build

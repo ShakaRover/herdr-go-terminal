@@ -53,7 +53,7 @@ cargo build --release
 ## 推荐部署（Herdr plugin）
 
 ```bash
-herdr plugin install KKRainbow/herdr-go
+herdr plugin install herdr-go/herdr-go
 herdr plugin action invoke kkrainbow.herdrgo.setup
 ```
 

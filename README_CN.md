@@ -74,7 +74,7 @@ REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 把本地端口转
 在运行 Herdr 的电脑上执行（需要 Herdr 0.8.2+）：
 
 ```bash
-herdr plugin install KKRainbow/herdr-go
+herdr plugin install herdr-go/herdr-go
 herdr plugin action invoke kkrainbow.herdrgo.setup
 ```
 
@@ -97,7 +97,7 @@ herdr plugin action invoke kkrainbow.herdrgo.uninstall-service
 
 ## 安装 Android app
 
-从 [GitHub 最新 Release](https://github.com/KKRainbow/herdr-go/releases/latest)
+从 [GitHub 最新 Release](https://github.com/herdr-go/herdr-go/releases/latest)
 下载通用 APK。APK 同时包含 arm64-v8a 和 x86_64 原生库。
 
 ## 构建

@@ -66,7 +66,7 @@ plugin 是安装和操作入口，bridge 仍是独立进程。这样既沿用 He
 首次安装只需要两步：
 
 ```bash
-herdr plugin install KKRainbow/herdr-go
+herdr plugin install herdr-go/herdr-go
 herdr plugin action invoke kkrainbow.herdrgo.setup
 ```
 
@@ -319,7 +319,7 @@ release 构建依赖 CI 机器恰好存在 `../../EasyTier`。
 升级流程：
 
 ```bash
-herdr plugin install KKRainbow/herdr-go --yes
+herdr plugin install herdr-go/herdr-go --yes
 herdr plugin action invoke kkrainbow.herdrgo.setup
 ```
 

@@ -25,7 +25,7 @@ esac
 
 archive="herdrgo-bridge-${version}-${target}.tar.gz"
 checksum="$archive.sha256"
-base_url=${HERDRGO_RELEASE_BASE_URL:-"https://github.com/KKRainbow/herdr-go/releases/download/v$version"}
+base_url=${HERDRGO_RELEASE_BASE_URL:-"https://github.com/herdr-go/herdr-go/releases/download/v$version"}
 tmp_dir=$(mktemp -d "$plugin_root/.herdrgo-install.XXXXXX")
 candidate="$plugin_root/bin/.herdrgo-bridge.$$"
 
