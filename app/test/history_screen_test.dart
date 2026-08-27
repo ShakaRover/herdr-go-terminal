@@ -68,6 +68,30 @@ Future<void> _pumpHistory(WidgetTester tester, BridgeApi api) async {
 }
 
 void main() {
+  testWidgets('iPad landscape constrains history to a readable column', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1194, 834);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await _pumpHistory(
+      tester,
+      _FakeHistoryApi([
+        HistoryPage(
+          entries: _entries('history', 2),
+          hasMore: false,
+          total: 2,
+          fileTruncated: false,
+        ),
+      ]),
+    );
+
+    final listView = tester.widget<ListView>(find.byType(ListView));
+    expect(listView.padding, const EdgeInsets.fromLTRB(249, 12, 249, 12));
+  });
+
   testWidgets('历史页异步加载后锚定最新消息并显示滚动条', (tester) async {
     final entries = _entries('history', 20);
     final api = _DelayedHistoryApi();

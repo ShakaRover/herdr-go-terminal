@@ -19,6 +19,7 @@ import '../../state/snapshot.dart';
 import '../agent/agent_screen.dart';
 import '../agent/ansi_span.dart';
 import '../agent/rename_pane_dialog.dart';
+import '../content_pane.dart';
 import '../status_style.dart';
 
 /// 长按弹出的预览卡：最近一屏 ANSI + 状态 + 上下文按钮/通用动作 + pin +
@@ -47,8 +48,9 @@ class AgentPreviewSheet extends ConsumerStatefulWidget {
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) =>
-        AgentPreviewSheet(bridgeId: bridgeId, pane: pane, pinned: pinned),
+    builder: (_) => ContentPane(
+      child: AgentPreviewSheet(bridgeId: bridgeId, pane: pane, pinned: pinned),
+    ),
   );
 
   @override

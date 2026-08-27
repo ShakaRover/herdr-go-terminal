@@ -5,6 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../l10n/l10n.dart';
 import '../../model/remote_profile.dart';
+import '../content_pane.dart';
 
 /// 全屏扫码页：识别 bridge 打印的 EasyTier 配对二维码。
 /// 扫到合法的配对载荷后 pop 并返回解析好的 [RemoteProfile]，否则 pop null。
@@ -72,11 +73,18 @@ class _ScanPairingScreenState extends State<ScanPairingScreen> {
       body: Column(
         children: [
           Expanded(
-            child: MobileScanner(controller: _controller, onDetect: _onDetect),
+            child: ContentPane(
+              child: MobileScanner(
+                controller: _controller,
+                onDetect: _onDetect,
+              ),
+            ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(context.l10n.scanPairingHelp),
+          ContentPane(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(context.l10n.scanPairingHelp),
+            ),
           ),
         ],
       ),

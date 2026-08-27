@@ -15,6 +15,7 @@ import '../../state/pane_read.dart';
 import '../../state/settings.dart';
 import '../../state/snapshot.dart';
 import '../history/history_screen.dart';
+import '../content_pane.dart';
 import '../status_style.dart';
 import 'ansi_span.dart';
 import 'rename_pane_dialog.dart';
@@ -757,12 +758,17 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             ),
           ),
           if (!readOnly && promptRegion != null)
-            _PromptCard(
-              model: promptRegion.model,
-              enabled: !_sending,
-              onTap: (opt) => _tapPromptOption(promptRegion.model, opt),
+            ContentPane(
+              child: _PromptCard(
+                model: promptRegion.model,
+                enabled: !_sending,
+                onTap: (opt) => _tapPromptOption(promptRegion.model, opt),
+              ),
             ),
-          if (!readOnly) ...[const Divider(height: 1), _buildComposer(context)],
+          if (!readOnly) ...[
+            const Divider(height: 1),
+            ContentPane(child: _buildComposer(context)),
+          ],
         ],
       ),
     );

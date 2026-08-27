@@ -6,6 +6,7 @@ import '../../l10n/l10n.dart';
 import '../../model/history.dart';
 import '../../state/bridges.dart';
 import '../../state/snapshot.dart';
+import '../content_pane.dart';
 
 /// 对话历史页：从 agent 自己的会话日志分页读取（非终端滚屏）。
 class HistoryScreen extends ConsumerStatefulWidget {
@@ -114,7 +115,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       child: ListView(
         controller: _scrollController,
         reverse: true,
-        padding: const EdgeInsets.all(12),
+        padding: contentPanePadding(context, const EdgeInsets.all(12)),
         children: [
           // reverse 列表以 offset 0 锚定底部；数据也反向渲染后，视觉顺序仍是
           // 旧消息在上、最新消息在下。加载更早时，新 child 只追加到顶部，

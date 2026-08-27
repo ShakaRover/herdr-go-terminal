@@ -11,6 +11,7 @@ import '../../state/pinned.dart';
 import '../../state/snapshot.dart';
 import '../../util/relative_time.dart';
 import '../agent/agent_screen.dart';
+import '../content_pane.dart';
 import '../settings/settings_screen.dart';
 import '../status_style.dart';
 import 'agent_preview_sheet.dart';
@@ -423,7 +424,7 @@ class _BridgePaneList extends StatelessWidget {
     if (panes.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(32),
+        padding: contentPanePadding(context, const EdgeInsets.all(32)),
         children: [
           const SizedBox(height: 80),
           Icon(
@@ -504,7 +505,10 @@ class _BridgePaneList extends StatelessWidget {
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: contentPanePadding(
+        context,
+        const EdgeInsets.symmetric(horizontal: 12),
+      ),
       children: children,
     );
   }

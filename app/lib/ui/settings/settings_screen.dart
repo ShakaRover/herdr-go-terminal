@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../model/remote_profile.dart';
 import '../../state/settings.dart';
+import '../content_pane.dart';
 import 'scan_pairing_screen.dart';
 
 /// bridge 连接设置：扫码配对的 profile 列表，逐条 enabled 开关 + 显式删除。
@@ -128,7 +129,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.connectionSettings)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: contentPanePadding(context, const EdgeInsets.all(16)),
         children: [
           ListTile(
             contentPadding: EdgeInsets.zero,

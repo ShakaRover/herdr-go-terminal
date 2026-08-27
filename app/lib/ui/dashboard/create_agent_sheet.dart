@@ -5,6 +5,7 @@ import '../../l10n/l10n.dart';
 import '../../model/models.dart';
 import '../../state/bridges.dart';
 import '../../state/snapshot.dart';
+import '../content_pane.dart';
 
 class CreateAgentOutcome {
   const CreateAgentOutcome({
@@ -25,7 +26,8 @@ Future<CreateAgentOutcome?> showCreateAgentSheet(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
-  builder: (_) => CreateAgentSheet(initialBridgeId: initialBridgeId),
+  builder: (_) =>
+      ContentPane(child: CreateAgentSheet(initialBridgeId: initialBridgeId)),
 );
 
 class CreateAgentSheet extends ConsumerStatefulWidget {
