@@ -13,15 +13,15 @@ val releaseSigningValues =
     )
 val missingReleaseSigningValues =
     releaseSigningValues.filterValues { it.isNullOrBlank() }.keys
-val releaseBuildRequested =
-    gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
 
-if (releaseBuildRequested) {
-    require(missingReleaseSigningValues.isEmpty()) {
-        "Release signing is not configured; missing: ${missingReleaseSigningValues.joinToString()}"
-    }
-    require(file(releaseSigningValues.getValue("ANDROID_KEYSTORE_FILE")!!).isFile) {
-        "ANDROID_KEYSTORE_FILE does not point to a file"
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.name.contains("release", ignoreCase = true) }) {
+        require(missingReleaseSigningValues.isEmpty()) {
+            "Release signing is not configured; missing: ${missingReleaseSigningValues.joinToString()}"
+        }
+        require(file(releaseSigningValues.getValue("ANDROID_KEYSTORE_FILE")!!).isFile) {
+            "ANDROID_KEYSTORE_FILE does not point to a file"
+        }
     }
 }
 
@@ -57,6 +57,10 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
+        ndk {
+            abiFilters.clear()
+            abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
+        }
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
