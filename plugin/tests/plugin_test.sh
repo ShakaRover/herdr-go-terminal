@@ -5,6 +5,10 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/herdrgo-plugin-test.XXXXXX")
 socket_pids=
 
+# Exercise the default HOME-relative service path without inheriting a
+# developer or CI runner's XDG override.
+unset XDG_CONFIG_HOME
+
 cleanup() {
     for pid in $socket_pids; do
         kill "$pid" 2>/dev/null || true
