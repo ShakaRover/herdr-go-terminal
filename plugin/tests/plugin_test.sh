@@ -33,6 +33,10 @@ assert_not_file() {
     [ ! -f "$1" ] || fail "unexpected file: $1"
 }
 
+assert_not_dir() {
+    [ ! -d "$1" ] || fail "unexpected directory: $1"
+}
+
 assert_contains() {
     grep -F "$2" "$1" >/dev/null || fail "$1 does not contain: $2"
 }
@@ -93,6 +97,16 @@ if [ "${FAKE_SERVICE_STOP_FAIL:-}" = yes ]; then
         *"disable --now herdrgo-bridge.service"*) exit 1 ;;
     esac
 fi
+if [ "${FAKE_SERVICE_RESTART_FAIL_ONCE:-}" = yes ]; then
+    case "$*" in
+        *"restart herdrgo-bridge.service"*)
+            if [ ! -f "$FAKE_SERVICE_FAILURE_MARKER" ]; then
+                : > "$FAKE_SERVICE_FAILURE_MARKER"
+                exit 1
+            fi
+            ;;
+    esac
+fi
 case "$*" in
     *is-active*) exit 0 ;;
     *status*) printf 'active (running)\n' ;;
@@ -129,6 +143,16 @@ EOF
 
 cat > "$fake_bin/herdr" <<'EOF'
 #!/bin/sh
+[ -z "${FAKE_HERDR_LOG:-}" ] || printf 'herdr %s\n' "$*" >> "$FAKE_HERDR_LOG"
+case "$*" in
+    "plugin list --plugin kkrainbow.herdrgo --json")
+        if [ "${FAKE_LEGACY_PLUGIN_INSTALLED:-}" = yes ]; then
+            printf '%s\n' '{"result":{"plugins":[{"plugin_id":"kkrainbow.herdrgo","enabled":true}]}}'
+        else
+            printf '%s\n' '{"result":{"plugins":[]}}'
+        fi
+        ;;
+esac
 exit 0
 EOF
 
@@ -221,10 +245,199 @@ printf '%s\n' "$*" > "$FAKE_ACTION_LOG"
 EOF
     chmod 755 "$fake_herdr"
     FAKE_ACTION_LOG="$action_log" HERDR_BIN_PATH="$fake_herdr" \
-        HERDR_PLUGIN_ID=kkrainbow.herdrgo \
+        HERDR_PLUGIN_ID=herdrgo \
         sh "$repo_root/plugin/herdrgo-action.sh" setup-ui
     assert_contains "$action_log" \
-        "plugin pane open --plugin kkrainbow.herdrgo --entrypoint setup-ui --focus"
+        "plugin pane open --plugin herdrgo --entrypoint setup-ui --focus"
+}
+
+test_legacy_id_migration() {
+    case_root="$test_root/legacy-id"
+    plugin_root="$case_root/plugin"
+    state_root="$case_root/state/plugins"
+    state_dir="$state_root/herdrgo"
+    legacy_state_dir="$state_root/kkrainbow.herdrgo"
+    config_root="$case_root/config/plugins/config"
+    config_dir="$config_root/herdrgo"
+    legacy_config_dir="$config_root/kkrainbow.herdrgo"
+    home_dir="$case_root/home"
+    socket_path="$test_root/legacy-id.sock"
+    service_log="$case_root/service.log"
+    herdr_log="$case_root/herdr.log"
+    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" \
+        "$state_dir" "$legacy_state_dir/runtime" \
+        "$config_dir" "$legacy_config_dir" "$home_dir"
+    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgo-bridge" migrated
+    printf 'legacy-secret\n' > "$legacy_state_dir/easytier_secret"
+    printf 'legacy-network\n' > "$legacy_state_dir/easytier_network_id"
+    printf '{"legacy":true}\n' > "$legacy_state_dir/activity.json"
+    printf 'HERDRGO_BRIDGE_POLL_MS=750\n' > "$legacy_config_dir/env"
+    start_socket "$socket_path"
+
+    PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        FAKE_HERDR_LOG="$herdr_log" FAKE_LEGACY_PLUGIN_INSTALLED=yes \
+        HOME="$home_dir" USER=tester \
+        HERDR_PLUGIN_ID=herdrgo HERDR_PLUGIN_ROOT="$plugin_root" \
+        HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null
+
+    assert_not_dir "$legacy_state_dir"
+    assert_not_dir "$legacy_config_dir"
+    assert_contains "$state_dir/easytier_secret" legacy-secret
+    assert_contains "$state_dir/easytier_network_id" legacy-network
+    assert_contains "$state_dir/activity.json" '"legacy":true'
+    assert_contains "$config_dir/env" 'HERDRGO_BRIDGE_POLL_MS=750'
+    assert_contains "$service_log" "systemctl --user stop herdrgo-bridge.service"
+    assert_contains "$herdr_log" "herdr plugin disable kkrainbow.herdrgo"
+    assert_contains "$herdr_log" "herdr plugin uninstall kkrainbow.herdrgo"
+
+    unit="$home_dir/.config/systemd/user/herdrgo-bridge.service"
+    assert_contains "$unit" "$state_dir/runtime/herdrgo-bridge"
+    assert_contains "$unit" "HERDRGO_BRIDGE_ENV_FILE=$config_dir/env"
+}
+
+test_legacy_id_conflict() {
+    case_root="$test_root/legacy-id-conflict"
+    plugin_root="$case_root/plugin"
+    state_root="$case_root/state/plugins"
+    state_dir="$state_root/herdrgo"
+    legacy_state_dir="$state_root/kkrainbow.herdrgo"
+    config_root="$case_root/config/plugins/config"
+    config_dir="$config_root/herdrgo"
+    legacy_config_dir="$config_root/kkrainbow.herdrgo"
+    home_dir="$case_root/home"
+    socket_path="$test_root/legacy-id-conflict.sock"
+    service_log="$case_root/service.log"
+    herdr_log="$case_root/herdr.log"
+    legacy_plist="$home_dir/Library/LaunchAgents/kkrainbow.herdrgo.plist"
+    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" \
+        "$state_dir" "$legacy_state_dir" "$config_dir" \
+        "$legacy_config_dir" "$(dirname -- "$legacy_plist")"
+    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgo-bridge" conflict
+    printf 'new-secret\n' > "$state_dir/easytier_secret"
+    printf 'legacy-secret\n' > "$legacy_state_dir/easytier_secret"
+    printf 'HERDRGO_BRIDGE_POLL_MS=500\n' > "$config_dir/env"
+    printf 'HERDRGO_BRIDGE_POLL_MS=750\n' > "$legacy_config_dir/env"
+    printf 'legacy plist\n' > "$legacy_plist"
+    start_socket "$socket_path"
+
+    if PATH="$fake_bin:$PATH" FAKE_OS=Darwin FAKE_SERVICE_LOG="$service_log" \
+        FAKE_HERDR_LOG="$herdr_log" HOME="$home_dir" USER=tester \
+        HERDR_PLUGIN_ID=herdrgo HERDR_PLUGIN_ROOT="$plugin_root" \
+        HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
+        fail "conflicting plugin ID data unexpectedly migrated"
+    fi
+
+    assert_contains "$state_dir/easytier_secret" new-secret
+    assert_contains "$legacy_state_dir/easytier_secret" legacy-secret
+    assert_contains "$config_dir/env" 'HERDRGO_BRIDGE_POLL_MS=500'
+    assert_contains "$legacy_config_dir/env" 'HERDRGO_BRIDGE_POLL_MS=750'
+    assert_file "$legacy_plist"
+    assert_not_file "$home_dir/Library/LaunchAgents/dev.herdr.herdrgo.plist"
+    assert_not_file "$service_log"
+    assert_not_file "$herdr_log"
+}
+
+test_legacy_id_active_lock() {
+    case_root="$test_root/legacy-id-active-lock"
+    plugin_root="$case_root/plugin"
+    state_root="$case_root/state/plugins"
+    state_dir="$state_root/herdrgo"
+    legacy_state_dir="$state_root/kkrainbow.herdrgo"
+    config_root="$case_root/config/plugins/config"
+    config_dir="$config_root/herdrgo"
+    legacy_config_dir="$config_root/kkrainbow.herdrgo"
+    home_dir="$case_root/home"
+    socket_path="$test_root/legacy-id-active-lock.sock"
+    service_log="$case_root/service.log"
+    herdr_log="$case_root/herdr.log"
+    active_owner="$legacy_state_dir/.control.lock.$$"
+    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$state_dir" \
+        "$active_owner" "$config_dir" "$legacy_config_dir" "$home_dir"
+    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgo-bridge" locked
+    printf '%s\n' "$$" > "$active_owner/pid"
+    ln -s "$(basename -- "$active_owner")" "$legacy_state_dir/control.lock"
+    printf 'legacy-secret\n' > "$legacy_state_dir/easytier_secret"
+    : > "$legacy_config_dir/env"
+    start_socket "$socket_path"
+
+    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        FAKE_HERDR_LOG="$herdr_log" FAKE_LEGACY_PLUGIN_INSTALLED=yes \
+        HOME="$home_dir" USER=tester HERDR_PLUGIN_ID=herdrgo \
+        HERDR_PLUGIN_ROOT="$plugin_root" HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
+        fail "legacy migration ignored an active control lock"
+    fi
+
+    assert_contains "$legacy_state_dir/easytier_secret" legacy-secret
+    assert_contains "$herdr_log" "herdr plugin disable kkrainbow.herdrgo"
+    assert_contains "$herdr_log" "herdr plugin enable kkrainbow.herdrgo"
+    assert_not_file "$service_log"
+    [ "$(readlink "$legacy_state_dir/control.lock")" = \
+        "$(basename -- "$active_owner")" ] ||
+        fail "failed migration changed the active legacy lock"
+}
+
+test_legacy_id_rollback() {
+    case_root="$test_root/legacy-id-rollback"
+    plugin_root="$case_root/plugin"
+    state_root="$case_root/state/plugins"
+    state_dir="$state_root/herdrgo"
+    legacy_state_dir="$state_root/kkrainbow.herdrgo"
+    config_root="$case_root/config/plugins/config"
+    config_dir="$config_root/herdrgo"
+    legacy_config_dir="$config_root/kkrainbow.herdrgo"
+    home_dir="$case_root/home"
+    socket_path="$test_root/legacy-id-rollback.sock"
+    service_log="$case_root/service.log"
+    herdr_log="$case_root/herdr.log"
+    failure_marker="$case_root/restart-failed"
+    unit="$home_dir/.config/systemd/user/herdrgo-bridge.service"
+    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$state_dir" \
+        "$legacy_state_dir/runtime" "$config_dir" "$legacy_config_dir" \
+        "$(dirname -- "$unit")"
+    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgo-bridge" candidate
+    make_bridge "$legacy_state_dir/runtime/herdrgo-bridge" legacy
+    cp "$repo_root/plugin/herdrgo-ctl.sh" \
+        "$legacy_state_dir/runtime/herdrgo-ctl.sh"
+    chmod 755 "$legacy_state_dir/runtime/herdrgo-ctl.sh"
+    printf 'legacy-secret\n' > "$legacy_state_dir/easytier_secret"
+    printf 'HERDRGO_BRIDGE_POLL_MS=750\n' > "$legacy_config_dir/env"
+    printf 'legacy unit\n' > "$unit"
+    start_socket "$socket_path"
+
+    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
+        FAKE_SERVICE_RESTART_FAIL_ONCE=yes \
+        FAKE_SERVICE_FAILURE_MARKER="$failure_marker" \
+        FAKE_HERDR_LOG="$herdr_log" FAKE_LEGACY_PLUGIN_INSTALLED=yes \
+        HOME="$home_dir" USER=tester HERDR_PLUGIN_ID=herdrgo \
+        HERDR_PLUGIN_ROOT="$plugin_root" HERDR_PLUGIN_STATE_DIR="$state_dir" \
+        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
+        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
+        fail "failed replacement service did not roll back migration"
+    fi
+
+    assert_not_dir "$state_dir"
+    assert_not_dir "$config_dir"
+    assert_contains "$legacy_state_dir/easytier_secret" legacy-secret
+    assert_contains "$legacy_config_dir/env" 'HERDRGO_BRIDGE_POLL_MS=750'
+    output=$("$legacy_state_dir/runtime/herdrgo-bridge" --version)
+    [ "$output" = "herdrgo-bridge legacy" ] ||
+        fail "rollback did not restore the legacy bridge"
+    assert_contains "$legacy_state_dir/runtime/plugin-config-dir" \
+        "$legacy_config_dir"
+    assert_contains "$unit" "legacy unit"
+    assert_contains "$herdr_log" "herdr plugin enable kkrainbow.herdrgo"
+    restart_count=$(grep -c 'restart herdrgo-bridge.service' "$service_log")
+    [ "$restart_count" -eq 2 ] || fail "rollback did not restart the legacy service"
 }
 
 test_signal_stops_control() {
@@ -367,31 +580,49 @@ test_linux_control() {
 test_macos_control() {
     case_root="$test_root/mac & case"
     plugin_root="$case_root/plugin"
-    state_dir="$case_root/state & dir"
-    config_dir="$case_root/config & dir"
+    state_root="$case_root/state & root/plugins"
+    state_dir="$state_root/herdrgo"
+    legacy_state_dir="$state_root/kkrainbow.herdrgo"
+    config_root="$case_root/config & root/plugins/config"
+    config_dir="$config_root/herdrgo"
+    legacy_config_dir="$config_root/kkrainbow.herdrgo"
     home_dir="$case_root/home"
     socket_path="$test_root/macos.sock"
     service_log="$case_root/service.log"
-    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$config_dir" "$home_dir"
+    herdr_log="$case_root/herdr.log"
+    legacy_plist="$home_dir/Library/LaunchAgents/kkrainbow.herdrgo.plist"
+    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" \
+        "$state_dir" "$legacy_state_dir" "$config_dir" "$legacy_config_dir" \
+        "$(dirname -- "$legacy_plist")"
     cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
     make_bridge "$plugin_root/bin/herdrgo-bridge" mac
-    printf 'HERDRGO_BRIDGE_SECRET=do-not-copy\n' > "$config_dir/env"
+    printf 'mac-secret\n' > "$legacy_state_dir/easytier_secret"
+    printf 'HERDRGO_BRIDGE_SECRET=do-not-copy\n' > "$legacy_config_dir/env"
+    printf 'legacy plist\n' > "$legacy_plist"
     start_socket "$socket_path"
 
     PATH="$fake_bin:$PATH" FAKE_OS=Darwin FAKE_SERVICE_LOG="$service_log" \
-        HOME="$home_dir" HERDR_PLUGIN_ROOT="$plugin_root" \
+        FAKE_HERDR_LOG="$herdr_log" FAKE_LEGACY_PLUGIN_INSTALLED=yes \
+        HOME="$home_dir" \
+        HERDR_PLUGIN_ID=herdrgo HERDR_PLUGIN_ROOT="$plugin_root" \
         HERDR_PLUGIN_STATE_DIR="$state_dir" HERDR_PLUGIN_CONFIG_DIR="$config_dir" \
         HERDR_SOCKET_PATH="$socket_path" \
         sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null
 
-    plist="$home_dir/Library/LaunchAgents/kkrainbow.herdrgo.plist"
+    plist="$home_dir/Library/LaunchAgents/dev.herdr.herdrgo.plist"
     assert_file "$plist"
-    assert_contains "$plist" "kkrainbow.herdrgo.bridge"
-    assert_contains "$plist" "state &amp; dir/runtime/herdrgo-bridge"
-    assert_contains "$plist" "config &amp; dir/env"
+    assert_not_file "$legacy_plist"
+    assert_contains "$plist" "dev.herdr.herdrgo.bridge"
+    assert_contains "$plist" "state &amp; root/plugins/herdrgo/runtime/herdrgo-bridge"
+    assert_contains "$plist" "config &amp; root/plugins/config/herdrgo/env"
     assert_contains "$plist" "$fake_bin/herdr"
     assert_not_contains "$plist" do-not-copy
+    assert_contains "$state_dir/easytier_secret" mac-secret
+    assert_contains "$config_dir/env" 'HERDRGO_BRIDGE_SECRET=do-not-copy'
+    assert_contains "$service_log" \
+        "launchctl bootout gui/$(id -u)/kkrainbow.herdrgo.bridge"
     assert_contains "$service_log" "launchctl bootstrap"
+    assert_contains "$herdr_log" "herdr plugin uninstall kkrainbow.herdrgo"
     if command -v plutil >/dev/null 2>&1; then
         plutil -lint "$plist" >/dev/null
     fi
@@ -419,6 +650,10 @@ test_static_systemd_unit() {
 
 test_install
 test_action
+test_legacy_id_migration
+test_legacy_id_conflict
+test_legacy_id_active_lock
+test_legacy_id_rollback
 test_signal_cleans_atomic_lock_claim
 test_signal_stops_control
 test_linux_control

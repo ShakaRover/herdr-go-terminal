@@ -75,7 +75,7 @@ REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 把本地端口转
 
 ```bash
 herdr plugin install herdr-go/herdr-go
-herdr plugin action invoke kkrainbow.herdrgo.setup
+herdr plugin action invoke herdrgo.setup
 ```
 
 setup 会在 Linux 安装 systemd user service，在 macOS 安装 LaunchAgent，随后启动
@@ -85,14 +85,14 @@ secret，已经配对的手机无需重新扫码。整个过程不需要 Rust �
 常用操作：
 
 ```bash
-herdr plugin action invoke kkrainbow.herdrgo.pair
-herdr plugin action invoke kkrainbow.herdrgo.status
-herdr plugin action invoke kkrainbow.herdrgo.restart
-herdr plugin action invoke kkrainbow.herdrgo.uninstall-service
+herdr plugin action invoke herdrgo.pair
+herdr plugin action invoke herdrgo.status
+herdr plugin action invoke herdrgo.restart
+herdr plugin action invoke herdrgo.uninstall-service
 ```
 
 删除 plugin 前先执行 `uninstall-service`，再执行
-`herdr plugin uninstall kkrainbow.herdrgo`。移除服务默认保留配对状态，之后重装
+`herdr plugin uninstall herdrgo`。移除服务默认保留配对状态，之后重装
 无需重新扫码。
 
 ## 安装 Android app

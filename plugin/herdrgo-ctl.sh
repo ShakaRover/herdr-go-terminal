@@ -2,8 +2,26 @@
 set -eu
 
 service_name=herdrgo-bridge.service
-launch_label=kkrainbow.herdrgo.bridge
-launch_plist_name=kkrainbow.herdrgo.plist
+plugin_id=herdrgo
+legacy_plugin_id=kkrainbow.herdrgo
+launch_label=dev.herdr.herdrgo.bridge
+launch_plist_name=dev.herdr.herdrgo.plist
+legacy_launch_label=kkrainbow.herdrgo.bridge
+legacy_launch_plist_name=kkrainbow.herdrgo.plist
+legacy_migration_complete=false
+legacy_migration_pending=false
+legacy_state_present=false
+legacy_config_present=false
+legacy_service_was_running=false
+legacy_service_stopped=false
+legacy_unit_existed=false
+legacy_unit_backup=
+legacy_plugin_was_enabled=false
+control_lock_acquired=false
+runtime_bridge_replaced=false
+runtime_bridge_existed=false
+runtime_ctl_replaced=false
+runtime_ctl_existed=false
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 platform_name=$(uname -s)
 case "$platform_name" in
@@ -23,6 +41,12 @@ pause_for_close() {
 
 fail() {
     printf 'HerdrGo: %s\n' "$*" >&2
+    if [ "${legacy_migration_pending:-false}" = true ]; then
+        cleanup_lock
+        if ! rollback_legacy_migration; then
+            printf 'HerdrGo: automatic migration rollback was incomplete.\n' >&2
+        fi
+    fi
     pause_for_close
     exit 1
 }
@@ -39,22 +63,28 @@ runtime_ctl="$runtime_dir/herdrgo-ctl.sh"
 metadata_config_dir="$runtime_dir/plugin-config-dir"
 metadata_socket_path="$runtime_dir/herdr-socket-path"
 metadata_herdr_bin_path="$runtime_dir/herdr-bin-path"
-lock_dir="$state_dir/control.lock"
 lock_owner_name=".control.lock.$$"
-lock_owner_dir="$state_dir/$lock_owner_name"
+lock_state_dir=
+lock_dir=
+lock_owner_dir=
+alternate_lock_dir=
+alternate_lock_owner_dir=
 
-cleanup_lock() {
+cleanup_lock_at() {
+    cleanup_lock_dir=$1
+    cleanup_owner_dir=$2
+    [ -n "$cleanup_lock_dir" ] || return 0
     current_owner=
-    if [ -L "$lock_dir" ]; then
-        current_owner=$(readlink "$lock_dir" 2>/dev/null || true)
+    if [ -L "$cleanup_lock_dir" ]; then
+        current_owner=$(readlink "$cleanup_lock_dir" 2>/dev/null || true)
     fi
     if [ "$current_owner" = "$lock_owner_name" ]; then
-        rm -f "$lock_dir" 2>/dev/null || true
+        rm -f "$cleanup_lock_dir" 2>/dev/null || true
     fi
     # POSIX ln treats an existing directory as a destination directory. If a
     # contender appeared between our checks, remove only the nested link whose
     # process-unique name and target both belong to this invocation.
-    nested_lock="$lock_dir/$lock_owner_name"
+    nested_lock="$cleanup_lock_dir/$lock_owner_name"
     nested_owner=
     if [ -L "$nested_lock" ]; then
         nested_owner=$(readlink "$nested_lock" 2>/dev/null || true)
@@ -62,10 +92,29 @@ cleanup_lock() {
     if [ "$nested_owner" = "$lock_owner_name" ]; then
         rm -f "$nested_lock" 2>/dev/null || true
     fi
-    rm -f "$lock_owner_dir/pid" 2>/dev/null || true
-    rmdir "$lock_owner_dir" 2>/dev/null || true
+    rm -f "$cleanup_owner_dir/pid" 2>/dev/null || true
+    rmdir "$cleanup_owner_dir" 2>/dev/null || true
 }
-trap cleanup_lock EXIT
+
+cleanup_lock() {
+    cleanup_lock_at "$lock_dir" "$lock_owner_dir"
+    if [ -n "$alternate_lock_dir" ] && [ "$alternate_lock_dir" != "$lock_dir" ]; then
+        cleanup_lock_at "$alternate_lock_dir" "$alternate_lock_owner_dir"
+    fi
+}
+
+finish() {
+    status=$?
+    cleanup_lock
+    if [ "$status" -ne 0 ] && [ "$legacy_migration_pending" = true ]; then
+        if ! rollback_legacy_migration; then
+            printf 'HerdrGo: automatic migration rollback was incomplete.\n' >&2
+        fi
+    fi
+    trap - EXIT
+    exit "$status"
+}
+trap finish EXIT
 # A signal trap that only returns would let the interrupted operation continue
 # after releasing its lock. Exit explicitly; the EXIT trap performs cleanup.
 trap 'exit 129' HUP
@@ -73,8 +122,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 acquire_lock() {
-    mkdir -p "$state_dir"
-    chmod 700 "$state_dir"
+    lock_state_dir=${1:-$state_dir}
+    lock_dir="$lock_state_dir/control.lock"
+    lock_owner_dir="$lock_state_dir/$lock_owner_name"
+    mkdir -p "$lock_state_dir"
+    chmod 700 "$lock_state_dir"
     # Prepare a complete, process-unique owner before atomically publishing it
     # as control.lock. cleanup_lock can identify this owner even if a signal is
     # delivered immediately after ln succeeds, so there is no lock_held window.
@@ -103,8 +155,8 @@ acquire_lock() {
             case "$old_owner_pid" in
                 '' | *[!0-9]*) ;;
                 *)
-                    [ ! -f "$state_dir/$old_owner/pid" ] ||
-                        old_pid=$(sed -n '1p' "$state_dir/$old_owner/pid")
+                    [ ! -f "$lock_state_dir/$old_owner/pid" ] ||
+                        old_pid=$(sed -n '1p' "$lock_state_dir/$old_owner/pid")
                     ;;
             esac
         elif [ -f "$lock_dir/pid" ]; then
@@ -124,6 +176,7 @@ acquire_lock() {
         # a separate read would let two contenders remove a newly acquired lock.
         fail "stale control lock: $lock_dir (confirm no operation is running, then remove the link and its target)"
     fi
+    control_lock_acquired=true
 }
 
 read_metadata() {
@@ -146,7 +199,7 @@ read_metadata() {
 
 require_runtime() {
     [ -x "$runtime_bridge" ] ||
-        fail "bridge is not installed; run: herdr plugin action invoke kkrainbow.herdrgo.setup"
+        fail "bridge is not installed; run: herdr plugin action invoke $plugin_id.setup"
     read_metadata
     [ -n "$config_dir" ] || fail "plugin config directory is unknown; run setup again"
     [ -n "$socket_path" ] || fail "Herdr socket path is unknown; run setup again"
@@ -196,6 +249,252 @@ systemd_unit_path() {
 
 launch_plist_path() {
     printf '%s/Library/LaunchAgents/%s\n' "$HOME" "$launch_plist_name"
+}
+
+legacy_launch_plist_path() {
+    printf '%s/Library/LaunchAgents/%s\n' "$HOME" "$legacy_launch_plist_name"
+}
+
+directory_is_empty() {
+    directory=$1
+    [ -d "$directory" ] || return 0
+    for entry in "$directory"/.[!.]* "$directory"/..?* "$directory"/*; do
+        if [ -e "$entry" ] || [ -L "$entry" ]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+stop_legacy_service() {
+    case "$platform_name" in
+        Linux)
+            unit=$(systemd_unit_path)
+            if [ -f "$unit" ] || systemctl --user is-active --quiet "$service_name"; then
+                systemctl --user stop "$service_name" ||
+                    fail "could not stop legacy $service_name"
+            fi
+            ;;
+        Darwin)
+            legacy_service="gui/$(id -u)/$legacy_launch_label"
+            legacy_plist=$(legacy_launch_plist_path)
+            if launchctl print "$legacy_service" >/dev/null 2>&1; then
+                launchctl bootout "$legacy_service" ||
+                    fail "could not unload legacy $legacy_launch_label"
+            fi
+            ;;
+    esac
+}
+
+prepare_legacy_service_rollback() {
+    case "$platform_name" in
+        Linux)
+            unit=$(systemd_unit_path)
+            if systemctl --user is-active --quiet "$service_name"; then
+                legacy_service_was_running=true
+            fi
+            if [ -f "$unit" ]; then
+                legacy_unit_backup="$unit.herdrgo-migration.$$"
+                cp "$unit" "$legacy_unit_backup" ||
+                    fail "could not back up legacy $service_name"
+                chmod 600 "$legacy_unit_backup" ||
+                    fail "could not protect the legacy service backup"
+                legacy_unit_existed=true
+            fi
+            ;;
+        Darwin)
+            legacy_service="gui/$(id -u)/$legacy_launch_label"
+            if launchctl print "$legacy_service" >/dev/null 2>&1; then
+                legacy_service_was_running=true
+            fi
+            ;;
+    esac
+}
+
+legacy_destination_is_available() {
+    source=$1
+    destination=$2
+    label=$3
+    [ -d "$source" ] || return 0
+    [ ! -L "$destination" ] || fail "$label directory is a symbolic link: $destination"
+    if [ -e "$destination" ] && [ ! -d "$destination" ]; then
+        fail "$label path is not a directory: $destination"
+    fi
+    if ! directory_is_empty "$destination"; then
+        printf 'HerdrGo: keeping existing %s; legacy data remains in %s\n' \
+            "$destination" "$source" >&2
+        return 1
+    fi
+}
+
+move_legacy_directory() {
+    source=$1
+    destination=$2
+    label=$3
+    [ -d "$source" ] || return 0
+    mkdir -p "$(dirname -- "$destination")"
+    [ ! -d "$destination" ] || rmdir "$destination"
+    mv "$source" "$destination" || fail "could not migrate legacy $label"
+}
+
+migrate_legacy_plugin_data() {
+    [ "${HERDR_PLUGIN_ID:-}" = "$plugin_id" ] || return 0
+    legacy_state_dir="$(dirname -- "$state_dir")/$legacy_plugin_id"
+    legacy_config_dir="$(dirname -- "$HERDR_PLUGIN_CONFIG_DIR")/$legacy_plugin_id"
+    if [ ! -d "$legacy_state_dir" ] && [ ! -d "$legacy_config_dir" ]; then
+        return 0
+    fi
+    if ! legacy_destination_is_available \
+        "$legacy_state_dir" "$state_dir" "state" || \
+        ! legacy_destination_is_available \
+        "$legacy_config_dir" "$HERDR_PLUGIN_CONFIG_DIR" "config"; then
+        fail "new plugin data already exists; legacy migration was not started"
+    fi
+
+    [ ! -d "$legacy_state_dir" ] || legacy_state_present=true
+    [ ! -d "$legacy_config_dir" ] || legacy_config_present=true
+    legacy_migration_pending=true
+
+    legacy_plugin_json=$("$herdr_bin_path" plugin list \
+        --plugin "$legacy_plugin_id" --json) ||
+        fail "could not inspect the legacy plugin registration"
+    if printf '%s\n' "$legacy_plugin_json" | grep -Eq \
+        '"plugin_id"[[:space:]]*:[[:space:]]*"kkrainbow\.herdrgo"' && \
+        printf '%s\n' "$legacy_plugin_json" | grep -Eq \
+        '"enabled"[[:space:]]*:[[:space:]]*true'; then
+        "$herdr_bin_path" plugin disable "$legacy_plugin_id" >/dev/null ||
+            fail "could not disable the legacy plugin during migration"
+        legacy_plugin_was_enabled=true
+    fi
+
+    if [ "$legacy_state_present" = true ]; then
+        acquire_lock "$legacy_state_dir"
+        alternate_lock_dir="$state_dir/control.lock"
+        alternate_lock_owner_dir="$state_dir/$lock_owner_name"
+    else
+        acquire_lock "$state_dir"
+    fi
+    prepare_legacy_service_rollback
+    stop_legacy_service
+    legacy_service_stopped=true
+    if [ "$legacy_state_present" = true ]; then
+        move_legacy_directory "$legacy_state_dir" "$state_dir" "state"
+        lock_state_dir="$state_dir"
+        lock_dir="$state_dir/control.lock"
+        lock_owner_dir="$state_dir/$lock_owner_name"
+    fi
+    if [ "$legacy_config_present" = true ]; then
+        move_legacy_directory \
+            "$legacy_config_dir" "$HERDR_PLUGIN_CONFIG_DIR" "config"
+    fi
+    if [ ! -d "$legacy_state_dir" ] && [ ! -d "$legacy_config_dir" ]; then
+        printf 'HerdrGo: migrated data from the previous plugin ID.\n'
+    fi
+}
+
+restore_runtime_file() {
+    destination=$1
+    existed=$2
+    if [ "$existed" = true ]; then
+        [ -f "$destination.previous" ] || return 1
+        mv -f "$destination.previous" "$destination"
+    else
+        rm -f "$destination"
+    fi
+}
+
+rollback_legacy_migration() {
+    rollback_failed=false
+    printf 'HerdrGo: rolling back the plugin ID migration.\n' >&2
+
+    if [ "$legacy_service_stopped" = true ]; then
+        case "$platform_name" in
+            Linux)
+                systemctl --user stop "$service_name" >/dev/null 2>&1 || true
+                ;;
+            Darwin)
+                service="gui/$(id -u)/$launch_label"
+                if launchctl print "$service" >/dev/null 2>&1; then
+                    launchctl bootout "$service" >/dev/null 2>&1 ||
+                        rollback_failed=true
+                fi
+                rm -f "$(launch_plist_path)"
+                ;;
+        esac
+    fi
+
+    if [ "$legacy_state_present" = true ] && \
+        [ ! -d "$legacy_state_dir" ] && [ -d "$state_dir" ]; then
+        if [ "$runtime_bridge_replaced" = true ]; then
+            restore_runtime_file "$runtime_bridge" "$runtime_bridge_existed" ||
+                rollback_failed=true
+        fi
+        if [ "$runtime_ctl_replaced" = true ]; then
+            restore_runtime_file "$runtime_ctl" "$runtime_ctl_existed" ||
+                rollback_failed=true
+        fi
+        if [ "$legacy_config_present" = true ] && [ -d "$runtime_dir" ]; then
+            printf '%s\n' "$legacy_config_dir" > "$metadata_config_dir" ||
+                rollback_failed=true
+        fi
+        mv "$state_dir" "$legacy_state_dir" || rollback_failed=true
+    fi
+    if [ "$legacy_config_present" = true ] && \
+        [ ! -d "$legacy_config_dir" ] && [ -d "$HERDR_PLUGIN_CONFIG_DIR" ]; then
+        mv "$HERDR_PLUGIN_CONFIG_DIR" "$legacy_config_dir" || rollback_failed=true
+    fi
+
+    if [ "$legacy_service_stopped" = true ]; then
+        case "$platform_name" in
+            Linux)
+                unit=$(systemd_unit_path)
+                if [ "$legacy_unit_existed" = true ] && \
+                    [ -f "$legacy_unit_backup" ]; then
+                    mv -f "$legacy_unit_backup" "$unit" || rollback_failed=true
+                else
+                    rm -f "$unit"
+                fi
+                systemctl --user daemon-reload >/dev/null 2>&1 ||
+                    rollback_failed=true
+                if [ "$legacy_service_was_running" = true ]; then
+                    systemctl --user restart "$service_name" >/dev/null 2>&1 ||
+                        rollback_failed=true
+                fi
+                ;;
+            Darwin)
+                legacy_plist=$(legacy_launch_plist_path)
+                if [ "$legacy_service_was_running" = true ] && \
+                    [ -f "$legacy_plist" ]; then
+                    launchctl bootstrap "gui/$(id -u)" "$legacy_plist" \
+                        >/dev/null 2>&1 || rollback_failed=true
+                fi
+                ;;
+        esac
+    fi
+    if [ "$legacy_plugin_was_enabled" = true ]; then
+        "$herdr_bin_path" plugin enable "$legacy_plugin_id" >/dev/null 2>&1 ||
+            rollback_failed=true
+    fi
+    [ -z "$legacy_unit_backup" ] || rm -f "$legacy_unit_backup"
+    legacy_migration_pending=false
+    [ "$rollback_failed" = false ]
+}
+
+commit_legacy_migration() {
+    [ "$legacy_migration_pending" = true ] || return 0
+    [ -z "$legacy_unit_backup" ] || rm -f "$legacy_unit_backup"
+    if [ "$platform_name" = Darwin ]; then
+        rm -f "$(legacy_launch_plist_path)"
+    fi
+    legacy_migration_pending=false
+    legacy_migration_complete=true
+}
+
+unregister_legacy_plugin() {
+    [ "$legacy_migration_complete" = true ] || return 0
+    if ! "$herdr_bin_path" plugin uninstall "$legacy_plugin_id" >/dev/null 2>&1; then
+        printf 'HerdrGo: legacy data is migrated, but its old plugin registration remains.\n' >&2
+    fi
 }
 
 write_systemd_unit() {
@@ -388,7 +687,8 @@ setup_service() {
     read_metadata
     [ -x "$herdr_bin_path" ] || fail "Herdr executable is unavailable"
 
-    acquire_lock
+    migrate_legacy_plugin_data
+    [ "$control_lock_acquired" = true ] || acquire_lock "$state_dir"
     umask 077
     mkdir -p "$runtime_dir" "$HERDR_PLUGIN_CONFIG_DIR" "$state_dir/logs"
     chmod 700 "$runtime_dir" "$HERDR_PLUGIN_CONFIG_DIR" "$state_dir/logs"
@@ -397,8 +697,12 @@ setup_service() {
     fi
     chmod 600 "$HERDR_PLUGIN_CONFIG_DIR/env"
 
+    [ ! -f "$runtime_bridge" ] || runtime_bridge_existed=true
     install_runtime_file "$candidate" "$runtime_bridge" 755
+    runtime_bridge_replaced=true
+    [ ! -f "$runtime_ctl" ] || runtime_ctl_existed=true
     install_runtime_file "$control_script" "$runtime_ctl" 755
+    runtime_ctl_replaced=true
     printf '%s\n' "$HERDR_PLUGIN_CONFIG_DIR" > "$metadata_config_dir"
     printf '%s\n' "$HERDR_SOCKET_PATH" > "$metadata_socket_path"
     printf '%s\n' "$herdr_bin_path" > "$metadata_herdr_bin_path"
@@ -408,6 +712,8 @@ setup_service() {
     "$runtime_bridge" --version
     service_install_and_restart
     wait_for_service
+    commit_legacy_migration
+    unregister_legacy_plugin
 
     if [ "$platform_name" = Linux ] && command -v loginctl >/dev/null 2>&1; then
         if ! loginctl show-user "${USER:-$(id -un)}" -p Linger 2>/dev/null |

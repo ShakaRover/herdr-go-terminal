@@ -86,7 +86,7 @@ On the computer running Herdr (Herdr 0.8.2+):
 
 ```bash
 herdr plugin install herdr-go/herdr-go
-herdr plugin action invoke kkrainbow.herdrgo.setup
+herdr plugin action invoke herdrgo.setup
 ```
 
 The setup action installs a systemd user service on Linux or a LaunchAgent on
@@ -97,13 +97,13 @@ working. No Rust toolchain or root access is required.
 Useful actions:
 
 ```bash
-herdr plugin action invoke kkrainbow.herdrgo.pair
-herdr plugin action invoke kkrainbow.herdrgo.status
-herdr plugin action invoke kkrainbow.herdrgo.restart
-herdr plugin action invoke kkrainbow.herdrgo.uninstall-service
+herdr plugin action invoke herdrgo.pair
+herdr plugin action invoke herdrgo.status
+herdr plugin action invoke herdrgo.restart
+herdr plugin action invoke herdrgo.uninstall-service
 ```
 
-Run `uninstall-service` before `herdr plugin uninstall kkrainbow.herdrgo`.
+Run `uninstall-service` before `herdr plugin uninstall herdrgo`.
 Service removal keeps the pairing state so a later reinstall can reconnect
 without scanning again.
 

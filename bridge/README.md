@@ -54,7 +54,7 @@ cargo build --release
 
 ```bash
 herdr plugin install herdr-go/herdr-go
-herdr plugin action invoke kkrainbow.herdrgo.setup
+herdr plugin action invoke herdrgo.setup
 ```
 
 setup 会安装 systemd user service（Linux）或 LaunchAgent（macOS），启动后在

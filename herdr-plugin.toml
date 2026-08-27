@@ -1,6 +1,6 @@
-id = "kkrainbow.herdrgo"
+id = "herdrgo"
 name = "HerdrGo"
-version = "0.2.0"
+version = "0.2.1"
 min_herdr_version = "0.8.2"
 description = "Native mobile remote control bridge for Herdr"
 platforms = ["linux", "macos"]

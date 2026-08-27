@@ -67,7 +67,7 @@ plugin 是安装和操作入口，bridge 仍是独立进程。这样既沿用 He
 
 ```bash
 herdr plugin install herdr-go/herdr-go
-herdr plugin action invoke kkrainbow.herdrgo.setup
+herdr plugin action invoke herdrgo.setup
 ```
 
 已经安装插件时只需执行第二条命令。`setup` action 是稳定的用户入口，它在插件内部
@@ -90,8 +90,8 @@ plugin log 中。内部 pane 是实现细节，不作为面向用户的命令接
 | `restart` | action | 重启服务 |
 | `uninstall-service` | action → pane | 停止并移除服务，默认保留配对状态 |
 
-`herdr plugin uninstall kkrainbow.herdrgo` 只删除插件本身。用户应先运行
-`herdr plugin action invoke kkrainbow.herdrgo.uninstall-service`；文档和卸载界面必须
+`herdr plugin uninstall herdrgo` 只删除插件本身。用户应先运行
+`herdr plugin action invoke herdrgo.uninstall-service`；文档和卸载界面必须
 明确这个顺序。
 
 ## 6. Plugin manifest
@@ -99,7 +99,7 @@ plugin log 中。内部 pane 是实现细节，不作为面向用户的命令接
 仓库根目录新增 `herdr-plugin.toml`，核心结构如下：
 
 ```toml
-id = "kkrainbow.herdrgo"
+id = "herdrgo"
 name = "HerdrGo"
 version = "<与 release tag 一致>"
 min_herdr_version = "0.8.2"
@@ -259,7 +259,7 @@ Linux 使用 systemd user unit：
 macOS 使用用户域 LaunchAgent：
 
 ```text
-~/Library/LaunchAgents/kkrainbow.herdrgo.plist
+~/Library/LaunchAgents/dev.herdr.herdrgo.plist
 ```
 
 关键约束：
@@ -320,17 +320,22 @@ release 构建依赖 CI 机器恰好存在 `../../EasyTier`。
 
 ```bash
 herdr plugin install herdr-go/herdr-go --yes
-herdr plugin action invoke kkrainbow.herdrgo.setup
+herdr plugin action invoke herdrgo.setup
 ```
 
 第二次 setup 将新候选版本复制到稳定 runtime 路径并重启服务。state/config 目录位于
 插件 checkout 之外，因此升级不改变配对关系。
 
+从旧插件 ID 首次升级时，setup 先停止旧服务；仅当新 ID 的 state/config 目录为空时，
+才把旧目录原子移动到新位置。迁移期间先禁用旧插件并持有其控制锁；服务恢复并验证
+成功后注销旧插件注册。若新目录已有数据，setup 不覆盖或混合两套配对状态，也不会
+停止旧服务。新服务启动失败时自动恢复旧目录、runtime 和服务定义。
+
 更新失败时：
 
 - 候选二进制下载或校验失败：不触碰当前运行副本。
 - runtime 原子替换失败：当前副本保持可执行，服务不重启。
-- 新服务启动失败：保留错误日志和上一版本备份路径，setup 给出恢复命令。
+- 新服务启动失败：自动恢复上一版 runtime、旧 ID 目录和服务定义，并重新启动旧服务。
 - 第一版不做静默自动更新，避免在无人值守时改变远程控制边界。
 
 ## 14. 卸载
@@ -364,10 +369,13 @@ herdr plugin action invoke kkrainbow.herdrgo.setup
 - 使用 fake `systemctl` 验证 Linux setup/start/stop/restart/uninstall 调用。
 - 使用 fake `launchctl` 验证 macOS 对应调用和 plist 内容。
 - setup 连续运行两次不改变 secret/network id。
+- 旧插件 ID 的 state/config、Linux unit 和 macOS LaunchAgent 能一次迁移；新目录非空时
+  不覆盖现有状态。
+- 旧控制操作持锁时迁移在停服务前失败；候选服务启动失败时旧服务自动恢复。
 - 升级 runtime 二进制后服务定义仍引用稳定路径。
 - 服务启动日志不包含 secret 或完整配对 JSON。
 - `pair` 生成的载荷与 app 当前扫码协议兼容。
-- `herdr plugin action invoke kkrainbow.herdrgo.setup` 能打开 setup pane，且用户无需传入
+- `herdr plugin action invoke herdrgo.setup` 能打开 setup pane，且用户无需传入
   pane 布局参数。
 
 人工验收：
