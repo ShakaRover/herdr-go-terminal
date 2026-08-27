@@ -4,13 +4,44 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseSigningValues =
+    mapOf(
+        "ANDROID_KEYSTORE_FILE" to System.getenv("ANDROID_KEYSTORE_FILE"),
+        "ANDROID_KEYSTORE_PASSWORD" to System.getenv("ANDROID_KEYSTORE_PASSWORD"),
+        "ANDROID_KEY_ALIAS" to System.getenv("ANDROID_KEY_ALIAS"),
+        "ANDROID_KEY_PASSWORD" to System.getenv("ANDROID_KEY_PASSWORD"),
+    )
+val missingReleaseSigningValues =
+    releaseSigningValues.filterValues { it.isNullOrBlank() }.keys
+val releaseBuildRequested =
+    gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+
+if (releaseBuildRequested) {
+    require(missingReleaseSigningValues.isEmpty()) {
+        "Release signing is not configured; missing: ${missingReleaseSigningValues.joinToString()}"
+    }
+    require(file(releaseSigningValues.getValue("ANDROID_KEYSTORE_FILE")!!).isFile) {
+        "ANDROID_KEYSTORE_FILE does not point to a file"
+    }
+}
+
 android {
     namespace = "dev.herdr.herdrgo"
     compileSdk = flutter.compileSdkVersion
-    // 不用 flutter.ndkVersion（28.x）：磁盘紧张，复用 /opt/android-sdk 里的
-    // NDK 26（通过 .toolchain/android-sdk/ndk/ 下的符号链接）。纯 Dart 应用
-    // 没有原生代码，NDK 版本不影响产物。
-    ndkVersion = "26.0.10792818"
+    // EasyTier JNI is built with this NDK locally and in release CI.
+    ndkVersion = "28.2.13676358"
+
+    val releaseSigningConfig =
+        if (missingReleaseSigningValues.isEmpty()) {
+            signingConfigs.create("release") {
+                storeFile = file(releaseSigningValues.getValue("ANDROID_KEYSTORE_FILE")!!)
+                storePassword = releaseSigningValues.getValue("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningValues.getValue("ANDROID_KEY_ALIAS")
+                keyPassword = releaseSigningValues.getValue("ANDROID_KEY_PASSWORD")
+            }
+        } else {
+            null
+        }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -36,9 +67,7 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = releaseSigningConfig
         }
     }
 }

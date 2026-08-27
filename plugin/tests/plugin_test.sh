@@ -2,6 +2,8 @@
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+release_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' \
+    "$repo_root/herdr-plugin.toml" | sed -n '1p')
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/herdrgo-plugin-test.XXXXXX")
 socket_pids=
 
@@ -173,8 +175,8 @@ test_install() {
     mkdir -p "$install_root/plugin" "$release_dir"
     cp "$repo_root/herdr-plugin.toml" "$install_root/herdr-plugin.toml"
     cp "$repo_root/plugin/install.sh" "$install_root/plugin/install.sh"
-    make_bridge "$release_dir/herdrgo-bridge" 0.1.0
-    archive=herdrgo-bridge-0.1.0-x86_64-unknown-linux-musl.tar.gz
+    make_bridge "$release_dir/herdrgo-bridge" "$release_version"
+    archive="herdrgo-bridge-$release_version-x86_64-unknown-linux-musl.tar.gz"
     tar -czf "$release_dir/$archive" -C "$release_dir" herdrgo-bridge
     if command -v sha256sum >/dev/null 2>&1; then
         (cd "$release_dir" && sha256sum "$archive" > "$archive.sha256")
@@ -188,7 +190,8 @@ test_install() {
         sh "$install_root/plugin/install.sh" >/dev/null
     assert_file "$install_root/bin/herdrgo-bridge"
     output=$($install_root/bin/herdrgo-bridge --version)
-    [ "$output" = "herdrgo-bridge 0.1.0" ] || fail "wrong installed bridge version"
+    [ "$output" = "herdrgo-bridge $release_version" ] || \
+        fail "wrong installed bridge version"
 
     printf 'bad checksum\n' > "$release_dir/$archive.sha256"
     if PATH="$fake_bin:$PATH" FIXTURE_RELEASE_DIR="$release_dir" \
@@ -198,7 +201,8 @@ test_install() {
         fail "checksum mismatch unexpectedly succeeded"
     fi
     output=$($install_root/bin/herdrgo-bridge --version)
-    [ "$output" = "herdrgo-bridge 0.1.0" ] || fail "failed install replaced candidate"
+    [ "$output" = "herdrgo-bridge $release_version" ] || \
+        fail "failed install replaced candidate"
 
     if PATH="$fake_bin:$PATH" FIXTURE_RELEASE_DIR="$release_dir" \
         HERDRGO_RELEASE_BASE_URL=https://invalid.example/releases \

@@ -107,20 +107,29 @@ Run `uninstall-service` before `herdr plugin uninstall kkrainbow.herdrgo`.
 Service removal keeps the pairing state so a later reinstall can reconnect
 without scanning again.
 
+## Install the Android app
+
+Download the universal APK from the
+[latest GitHub release](https://github.com/KKRainbow/herdr-go/releases/latest).
+The APK contains both arm64-v8a and x86_64 native libraries.
+
 ## Build
 
-The toolchain is pinned in `.toolchain/` (Flutter 3.47.0 + Android SDK 36;
-NDK 26 is symlinked from `/opt/android-sdk`):
+The toolchain is pinned in `.toolchain/` (Flutter 3.47.0 + Android SDK 36 +
+NDK 28.2.13676358):
 
 ```bash
 source .toolchain/env.sh
+app/tool/sync_easytier.sh
 cd app
 flutter pub get
 flutter test                 # unit tests (incl. pane-fixture golden tests)
-flutter build apk --release  # output: app/build/app/outputs/flutter-apk/app-release.apk
+flutter build apk --debug
 ```
 
-For a debug build, `adb install` the `app-debug.apk` onto an emulator/phone.
+Release builds deliberately fail unless `ANDROID_KEYSTORE_FILE`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`
+are set. GitHub Actions supplies them from encrypted repository secrets.
 
 ### EasyTier JNI sync
 

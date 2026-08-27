@@ -13,21 +13,27 @@
 # 可用 EASYTIER_REPO 环境变量覆盖 EasyTier 仓库位置（默认 /data/project/EasyTier）。
 set -euo pipefail
 
-source "$(git rev-parse --show-toplevel)/.toolchain/env.sh"
-
 EASYTIER_REPO="${EASYTIER_REPO:-/data/project/EasyTier}"
 JNI_DIR="$EASYTIER_REPO/easytier-contrib/easytier-android-jni"
 APP_ROOT="$(git rev-parse --show-toplevel)/app"
+ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-28.2.13676358}"
 
-# cargo-ndk 需要 NDK 路径；复用 .toolchain/android-sdk/ndk/ 下的符号链接。
-if [ -z "${ANDROID_NDK_HOME:-}" ] && [ -z "${ANDROID_NDK_ROOT:-}" ]; then
-    ndk_dir="$(find "$ANDROID_SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 | head -n 1)"
-    if [ -z "$ndk_dir" ]; then
-        echo "错误：$ANDROID_SDK_ROOT/ndk 下没有 NDK" >&2
-        exit 1
-    fi
-    export ANDROID_NDK_HOME="$ndk_dir"
+if [ -z "$ANDROID_SDK_ROOT" ]; then
+    echo "错误：请先设置 ANDROID_SDK_ROOT 或 ANDROID_HOME" >&2
+    exit 1
 fi
+export ANDROID_SDK_ROOT
+
+# cargo-ndk and Gradle must use the same pinned NDK.
+ndk_dir="$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
+if [ ! -d "$ndk_dir" ]; then
+    echo "错误：缺少 Android NDK $ANDROID_NDK_VERSION：$ndk_dir" >&2
+    exit 1
+fi
+export ANDROID_NDK_HOME="$ndk_dir"
+export ANDROID_NDK_ROOT="$ndk_dir"
+export NDK_HOME="$ndk_dir"
 
 echo "== 构建 easytier-android-jni (arm64-v8a + x86_64, release)"
 # EasyTier 是 Cargo workspace；若不显式指定 -o，cargo-ndk 的链接产物会
@@ -36,7 +42,7 @@ echo "== 构建 easytier-android-jni (arm64-v8a + x86_64, release)"
     -t arm64-v8a \
     -t x86_64 \
     -o "$JNI_DIR/target/jniLibs" \
-    build --release)
+    build --locked --release)
 
 for abi in arm64-v8a x86_64; do
     so_src="$JNI_DIR/target/jniLibs/$abi/libeasytier_android_jni.so"

@@ -110,9 +110,175 @@ jobs:
             dist/*.provenance.txt
           if-no-files-found: error
 
+  android:
+    name: Build Android APK
+    needs: verify
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          grep -Fqx "version = \"${version}\"" herdr-plugin.toml
+          grep -Fqx "version = \"${version}\"" bridge/Cargo.toml
+          grep -Eq "^version: ${version}\+[1-9][0-9]*$" app/pubspec.yaml
+
+      - name: Verify Android signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variable in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD
+          do
+            if [ -z "${!variable:-}" ]; then
+              echo "Missing required Actions secret: ${variable}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Check out EasyTier source
+        uses: actions/checkout@v4
+        with:
+          repository: KKRainbow/EasyTier-1
+          ref: ae8f4398240e103e0bde89e38497612a18a65c85
+          path: easytier
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.0
+          cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.95
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: easytier
+          cache-on-failure: true
+
+      - name: Install Android native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes protobuf-compiler
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;28.2.13676358"
+          cargo install cargo-ndk --version 4.1.2 --locked
+
+      - name: Build EasyTier JNI libraries
+        env:
+          EASYTIER_REPO: ${{ github.workspace }}/easytier
+        run: |
+          app/tool/sync_easytier.sh
+          git diff --exit-code -- \
+            app/android/app/src/main/kotlin/com/easytier/jni/EasyTierJNI.kt
+
+      - name: Test Flutter app
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter test
+
+      - name: Materialize Android signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          keystore_file="${RUNNER_TEMP}/herdrgo-release.jks"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | \
+            base64 --decode > "${keystore_file}"
+          chmod 600 "${keystore_file}"
+          echo "ANDROID_KEYSTORE_FILE=${keystore_file}" >> "${GITHUB_ENV}"
+
+      - name: Build signed universal APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: Package Android artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          source_apk="app/build/app/outputs/flutter-apk/app-release.apk"
+          asset="HerdrGo-${version}-android.apk"
+          apksigner="${ANDROID_SDK_ROOT}/build-tools/36.0.0/apksigner"
+          zipalign="${ANDROID_SDK_ROOT}/build-tools/36.0.0/zipalign"
+
+          unzip -Z1 "${source_apk}" | \
+            grep -Fqx 'lib/arm64-v8a/libeasytier_android_jni.so'
+          unzip -Z1 "${source_apk}" | \
+            grep -Fqx 'lib/x86_64/libeasytier_android_jni.so'
+          "${zipalign}" -c -P 16 4 "${source_apk}"
+          "${apksigner}" verify --verbose --print-certs "${source_apk}"
+
+          mkdir -p dist
+          cp "${source_apk}" "dist/${asset}"
+          (cd dist && sha256sum "${asset}" > "${asset}.sha256")
+          signer_digest=$("${apksigner}" verify --print-certs "${source_apk}" | \
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "${signer_digest}"
+          {
+            printf 'herdrgo_version=%s\n' "${version}"
+            printf 'herdrgo_commit=%s\n' "${GITHUB_SHA}"
+            printf 'easytier_commit=%s\n' \
+              'ae8f4398240e103e0bde89e38497612a18a65c85'
+            printf 'target=android-universal\n'
+            printf 'signer_cert_sha256=%s\n' "${signer_digest}"
+          } > "dist/${asset}.provenance.txt"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            dist/*.apk
+            dist/*.sha256
+            dist/*.provenance.txt
+          if-no-files-found: error
+
+      - name: Remove signing key
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${ANDROID_KEYSTORE_FILE:-}" ]; then
+            rm -f -- "${ANDROID_KEYSTORE_FILE}"
+          fi
+
   publish:
     name: Publish GitHub release
-    needs: build
+    needs:
+      - build
+      - android
     runs-on: ubuntu-24.04
     steps:
       - name: Download target artifacts

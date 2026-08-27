@@ -95,20 +95,29 @@ herdr plugin action invoke kkrainbow.herdrgo.uninstall-service
 `herdr plugin uninstall kkrainbow.herdrgo`。移除服务默认保留配对状态，之后重装
 无需重新扫码。
 
+## 安装 Android app
+
+从 [GitHub 最新 Release](https://github.com/KKRainbow/herdr-go/releases/latest)
+下载通用 APK。APK 同时包含 arm64-v8a 和 x86_64 原生库。
+
 ## 构建
 
-工具链固定在仓库的 `.toolchain/`（Flutter 3.47.0 + Android SDK 36，
-NDK 26 通过符号链接复用 `/opt/android-sdk`）：
+工具链固定在仓库的 `.toolchain/`（Flutter 3.47.0 + Android SDK 36 +
+NDK 28.2.13676358）：
 
 ```bash
 source .toolchain/env.sh
+app/tool/sync_easytier.sh
 cd app
 flutter pub get
 flutter test                 # 单测（含 pane 夹具黄金测试）
-flutter build apk --release  # 产物：app/build/app/outputs/flutter-apk/app-release.apk
+flutter build apk --debug
 ```
 
-debug 构建把 `app-debug.apk` 直接 `adb install` 到模拟器/手机即可。
+release 构建要求设置 `ANDROID_KEYSTORE_FILE`、
+`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和
+`ANDROID_KEY_PASSWORD`，缺少任一值都会直接失败。GitHub Actions
+从加密的仓库 secrets 注入这些值。
 
 ### EasyTier JNI 同步
 
