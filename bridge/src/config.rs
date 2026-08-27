@@ -555,11 +555,14 @@ pub(crate) mod tests {
 
     #[test]
     fn pair_subcommand_is_parsed() {
+        let _g = tests_lock();
+        clear();
         let cli = Cli::parse_from(["herdrgo-bridge", "pair"]);
         assert_eq!(cli.command, Some(BridgeCommand::Pair { json: false }));
 
         let cli = Cli::parse_from(["herdrgo-bridge", "pair", "--json"]);
         assert_eq!(cli.command, Some(BridgeCommand::Pair { json: true }));
+        clear();
     }
 
     #[test]
