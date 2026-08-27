@@ -28,15 +28,15 @@ network secret is generated and persisted automatically.
 ## Screenshots
 
 <p>
-  <img src="assets/readme/dashboard.png" width="260" alt="Dashboard: blocked agents pinned to the top">
+  <img src="assets/readme/en/dashboard.png" width="260" alt="Dashboard: blocked agents pinned to the top">
   &nbsp;
-  <img src="assets/readme/agent-detail.png" width="260" alt="Agent conversation: ANSI mirror + key bar">
+  <img src="assets/readme/en/agent-detail.png" width="260" alt="Agent conversation: ANSI mirror + key bar">
   &nbsp;
-  <img src="assets/readme/approval.png" width="260" alt="Approval menu rendered as native buttons">
+  <img src="assets/readme/en/approval.png" width="260" alt="Approval menu rendered as native buttons">
 </p>
 
-*Left: the dashboard pins agents that need you ("需要你处理" = needs your input)
-above the working ones. Middle: the agent conversation is a terminal mirror with
+*Left: the dashboard pins agents that need you above the working ones. Middle:
+the agent conversation is a terminal mirror with
 ANSI colors, plus a key bar for Esc / Ctrl+C / arrows / send. Right: a
 Claude-style approval menu recognized as native buttons — one tap to approve.*
 

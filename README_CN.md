@@ -26,11 +26,11 @@ TUN、不用 root、不用申请 VPN 权限，secret 自动生成并持久化。
 ## 截图
 
 <p>
-  <img src="assets/readme/dashboard.png" width="260" alt="Dashboard：待处理置顶">
+  <img src="assets/readme/zh/dashboard.png" width="260" alt="Dashboard：待处理置顶">
   &nbsp;
-  <img src="assets/readme/agent-detail.png" width="260" alt="agent 对话：ANSI 镜像 + 按键条">
+  <img src="assets/readme/zh/agent-detail.png" width="260" alt="agent 对话：ANSI 镜像 + 按键条">
   &nbsp;
-  <img src="assets/readme/approval.png" width="260" alt="审批菜单：原生按钮">
+  <img src="assets/readme/zh/approval.png" width="260" alt="审批菜单：原生按钮">
 </p>
 
 *左：Dashboard 把卡住等你处理的 agent 置顶（「需要你处理」），其余按状态分组。
