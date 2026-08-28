@@ -1,11 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:herdrgo/api/bridge_api.dart';
 import 'package:herdrgo/l10n/generated/app_localizations.dart';
 import 'package:herdrgo/model/models.dart';
 import 'package:herdrgo/state/bridges.dart';
 import 'package:herdrgo/state/settings.dart';
+import 'package:herdrgo/ui/agent/agent_screen.dart';
 import 'package:herdrgo/ui/dashboard/dashboard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +18,10 @@ const _localeCode = String.fromEnvironment(
   'MARKETING_LOCALE',
   defaultValue: 'en',
 );
+const _screen = String.fromEnvironment(
+  'MARKETING_SCREEN',
+  defaultValue: 'dashboard',
+);
 
 const _workingOutput = '''
 \x1b[38;2;128;217;205m›\x1b[0m Improve the mobile terminal layout
@@ -25,7 +31,7 @@ const _workingOutput = '''
 \x1b[2m•\x1b[0m Added pinch zoom coverage
 
 \x1b[38;2;80;200;140m✓\x1b[0m flutter test
-  \x1b[2m234 tests passed\x1b[0m
+  \x1b[2m240 tests passed\x1b[0m
 
 \x1b[38;2;80;200;140m✓\x1b[0m flutter analyze
   \x1b[2mNo issues found\x1b[0m
@@ -136,6 +142,22 @@ class _MarketingBridgeApi extends BridgeApi {
     truncated: false,
     revision: 1,
   );
+
+  @override
+  Future<String> holdPaneSize(
+    String paneId, {
+    required int cols,
+    required int rows,
+    String? session,
+    String? leaseId,
+  }) async => 'marketing-lease';
+
+  @override
+  Future<void> releasePaneSize(
+    String paneId,
+    String leaseId, {
+    String? session,
+  }) async {}
 }
 
 /// Screenshot-only entrypoint with deterministic synthetic data.
@@ -170,6 +192,18 @@ Future<void> main() async {
 class _MarketingApp extends StatelessWidget {
   const _MarketingApp();
 
+  Widget get _home => switch (_screen) {
+    'working' => const AgentScreen(
+      bridgeId: _bridgeId,
+      paneId: _workingPaneId,
+    ),
+    'approval' => const AgentScreen(
+      bridgeId: _bridgeId,
+      paneId: _approvalPaneId,
+    ),
+    _ => const DashboardScreen(),
+  };
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -179,12 +213,15 @@ class _MarketingApp extends StatelessWidget {
       supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          systemOverlayStyle: SystemUiOverlayStyle.light,
+        ),
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.teal,
           brightness: Brightness.dark,
         ),
       ),
-      home: const DashboardScreen(),
+      home: _home,
     );
   }
 }

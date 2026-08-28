@@ -788,6 +788,24 @@ abstract class AppLocalizations {
   /// **'Other settings'**
   String get otherSettings;
 
+  /// No description provided for @about.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get about;
+
+  /// No description provided for @privacyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy'**
+  String get privacyPolicy;
+
+  /// No description provided for @technicalSupport.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get technicalSupport;
+
   /// No description provided for @language.
   ///
   /// In en, this message translates to:

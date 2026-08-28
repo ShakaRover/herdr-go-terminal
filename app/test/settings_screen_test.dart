@@ -81,6 +81,17 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Other settings')).dy),
     );
 
+    await tester.scrollUntilVisible(
+      find.text('Privacy policy'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('About'), findsOneWidget);
+    expect(find.text('Support'), findsOneWidget);
+    await tester.tap(find.text('Privacy policy'));
+    await tester.pump();
+    expect(launcher.launchedUrl, 'https://herdr-go.github.io/privacy/');
+
     await tester.tap(find.text('Setup help'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -121,5 +132,15 @@ void main() {
     await tester.pump();
 
     expect(launcher.launchedUrl, 'https://herdr-go.github.io/zh/#install');
+
+    await tester.scrollUntilVisible(
+      find.text('技术支持'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('技术支持'));
+    await tester.pump();
+
+    expect(launcher.launchedUrl, 'https://herdr-go.github.io/zh/support/');
   });
 }

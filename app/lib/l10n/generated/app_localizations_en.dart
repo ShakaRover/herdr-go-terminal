@@ -433,6 +433,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get otherSettings => 'Other settings';
 
   @override
+  String get about => 'About';
+
+  @override
+  String get privacyPolicy => 'Privacy policy';
+
+  @override
+  String get technicalSupport => 'Support';
+
+  @override
   String get language => 'Language';
 
   @override

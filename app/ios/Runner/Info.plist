@@ -33,6 +33,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Used to scan a bridge pairing QR code.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Used to connect directly to your paired computer when available.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used to select an image to send to your paired computer.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

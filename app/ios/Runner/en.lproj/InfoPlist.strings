@@ -1,1 +1,3 @@
 "NSCameraUsageDescription" = "Used to scan a bridge pairing QR code.";
+"NSLocalNetworkUsageDescription" = "Used to connect directly to your paired computer when available.";
+"NSPhotoLibraryUsageDescription" = "Used to select an image to send to your paired computer.";

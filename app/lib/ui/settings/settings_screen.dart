@@ -56,12 +56,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
   }
 
-  Future<void> _openPluginGuide() async {
+  Future<void> _openWebsitePage({
+    required String englishPath,
+    required String chinesePath,
+  }) async {
     final languageCode = Localizations.localeOf(context).languageCode;
     final pluginGuideUrl = Uri.parse(
-      languageCode == 'zh'
-          ? 'https://herdr-go.github.io/zh/#install'
-          : 'https://herdr-go.github.io/#install',
+      'https://herdr-go.github.io${languageCode == 'zh' ? chinesePath : englishPath}',
     );
     final opened = await launchUrl(
       pluginGuideUrl,
@@ -72,6 +73,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           .showSnackBar(SnackBar(content: Text(context.l10n.openLinkFailed)));
     }
   }
+
+  Future<void> _openPluginGuide() => _openWebsitePage(
+    englishPath: '/#install',
+    chinesePath: '/zh/#install',
+  );
 
   Future<void> _showPluginSetup() {
     return showDialog<void>(
@@ -348,6 +354,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ref.read(terminalFontSizeProvider.notifier).preview(value),
             onChangeEnd: (value) =>
                 ref.read(terminalFontSizeProvider.notifier).setFontSize(value),
+          ),
+          const Divider(height: 40),
+          Text(l10n.about, style: theme.textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: Text(l10n.privacyPolicy),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => _openWebsitePage(
+              englishPath: '/privacy/',
+              chinesePath: '/zh/privacy/',
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.support_agent_outlined),
+            title: Text(l10n.technicalSupport),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => _openWebsitePage(
+              englishPath: '/support/',
+              chinesePath: '/zh/support/',
+            ),
           ),
           if (_message != null) ...[
             const SizedBox(height: 16),
