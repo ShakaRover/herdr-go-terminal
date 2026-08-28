@@ -248,6 +248,24 @@ abstract class AppLocalizations {
   /// **'No agents detected\nStart one in Herdr on your computer and it will appear here.'**
   String get noAgents;
 
+  /// No description provided for @noDevicesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No computers connected'**
+  String get noDevicesTitle;
+
+  /// No description provided for @noDevicesHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a computer to see and control its Herdr agents.'**
+  String get noDevicesHelp;
+
+  /// No description provided for @addDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Add computer'**
+  String get addDevice;
+
   /// No description provided for @sectionPinned.
   ///
   /// In en, this message translates to:
@@ -644,6 +662,12 @@ abstract class AppLocalizations {
   /// **'Connection settings'**
   String get connectionSettings;
 
+  /// No description provided for @devices.
+  ///
+  /// In en, this message translates to:
+  /// **'Computers'**
+  String get devices;
+
   /// No description provided for @remoteBridge.
   ///
   /// In en, this message translates to:
@@ -715,6 +739,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use each switch to control whether that bridge connects. Enable multiple bridges for multi-host mode.'**
   String get bridgeEnableHelp;
+
+  /// No description provided for @computerSetup.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up your computer'**
+  String get computerSetup;
+
+  /// No description provided for @pluginSetupHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the HerdrGo Plugin on the computer running Herdr, start its bridge service, then display the pairing QR code.'**
+  String get pluginSetupHelp;
+
+  /// No description provided for @pluginInstallGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the official Plugin installation guide'**
+  String get pluginInstallGuide;
+
+  /// No description provided for @openLinkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the website'**
+  String get openLinkFailed;
+
+  /// No description provided for @otherSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Other settings'**
+  String get otherSettings;
 
   /// No description provided for @language.
   ///

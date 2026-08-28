@@ -148,16 +148,12 @@ void main() {
   });
 
   group('enabledProfilesProvider', () {
-    test('空列表 → 空、isConfigured false', () async {
+    test('空列表 → 空', () async {
       final container = await buildContainer({});
       expect(container.read(enabledProfilesProvider), isEmpty);
-      expect(
-        container.read(enabledProfilesProvider.notifier).isConfigured,
-        isFalse,
-      );
     });
 
-    test('只含 enabled profile；setEnabled 后列表与 isConfigured 联动', () async {
+    test('只含 enabled profile；setEnabled 后列表联动', () async {
       final container = await buildContainer({});
       final notifier = container.read(enabledProfilesProvider.notifier);
       final store = container.read(profileStoreProvider);
@@ -169,19 +165,16 @@ void main() {
         'p1',
         'p2',
       ]);
-      expect(notifier.isConfigured, isTrue);
 
       // disable 一条 → 列表只剩另一条。
       await store.setEnabled('p1', false);
       await notifier.reload();
       expect(container.read(enabledProfilesProvider).map((p) => p.id), ['p2']);
-      expect(notifier.isConfigured, isTrue);
 
-      // 全部 disable → isConfigured false。
+      // 全部 disable → enabled 列表为空。
       await store.setEnabled('p2', false);
       await notifier.reload();
       expect(container.read(enabledProfilesProvider), isEmpty);
-      expect(notifier.isConfigured, isFalse);
 
       // 持久化层的 enabled 确实被翻转（profile 本体字段不变）。
       final all = await store.list();

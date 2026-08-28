@@ -22,6 +22,11 @@ import 'create_agent_sheet.dart';
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
+  void _openSettings(BuildContext context) {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
@@ -93,21 +98,64 @@ class DashboardScreen extends ConsumerWidget {
                 IconButton(
                   tooltip: l10n.settingsTooltip,
                   icon: const Icon(Icons.settings_outlined),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                  ),
+                  onPressed: () => _openSettings(context),
                 ),
               ],
             ),
             body: TabBarView(
               children: [
-                _AllBridgeTab(conns: conns),
+                if (conns.isEmpty)
+                  _NoDevices(onAdd: () => _openSettings(context))
+                else
+                  _AllBridgeTab(conns: conns),
                 for (final c in conns) _SingleBridgeTab(conn: c),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _NoDevices extends StatelessWidget {
+  const _NoDevices({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = context.l10n;
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: contentPanePadding(context, const EdgeInsets.all(32)),
+      children: [
+        const SizedBox(height: 80),
+        Icon(
+          Icons.devices_other_outlined,
+          size: 48,
+          color: theme.colorScheme.outline,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          l10n.noDevicesTitle,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          l10n.noDevicesHelp,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add),
+          label: Text(l10n.addDevice),
+        ),
+      ],
     );
   }
 }

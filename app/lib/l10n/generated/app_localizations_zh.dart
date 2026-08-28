@@ -95,6 +95,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noAgents => '没有检测到 agent\n在电脑上的 herdr 里启动一个，这里就会出现';
 
   @override
+  String get noDevicesTitle => '还没有连接电脑';
+
+  @override
+  String get noDevicesHelp => '添加电脑后，即可在这里查看和控制其中的 Herdr agent。';
+
+  @override
+  String get addDevice => '添加设备';
+
+  @override
   String get sectionPinned => '已置顶';
 
   @override
@@ -317,6 +326,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectionSettings => '连接设置';
 
   @override
+  String get devices => '设备';
+
+  @override
   String get remoteBridge => '远端 bridge（扫码配对）';
 
   @override
@@ -356,6 +368,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bridgeEnableHelp => '开关控制是否连接该 bridge；多条同时开启即为多宿主机模式。';
+
+  @override
+  String get computerSetup => '在电脑端部署';
+
+  @override
+  String get pluginSetupHelp =>
+      '在运行 Herdr 的电脑上安装 HerdrGo Plugin，启动 bridge 服务，然后显示配对二维码。';
+
+  @override
+  String get pluginInstallGuide => '查看官网 Plugin 安装说明';
+
+  @override
+  String get openLinkFailed => '无法打开官网';
+
+  @override
+  String get otherSettings => '其他设置';
 
   @override
   String get language => '语言';

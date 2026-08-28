@@ -5,6 +5,11 @@ import 'package:herdrgo/main.dart';
 import 'package:herdrgo/state/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+Future<void> _openSettings(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Settings'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('terminal auto-resize option reflects and persists its switch', (
     tester,
@@ -23,6 +28,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _openSettings(tester);
+    await tester.scrollUntilVisible(
+      find.text('Fit terminal output to phone'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
 
     final tileFinder = find.widgetWithText(
       SwitchListTile,
@@ -56,10 +67,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _openSettings(tester);
 
     expect(find.text('Connection settings'), findsOneWidget);
     expect(find.text('No bridge is paired yet.'), findsNothing);
     expect(find.textContaining('No bridge is paired yet.'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('English'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
 
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();

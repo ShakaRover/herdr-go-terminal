@@ -14,7 +14,6 @@ import 'state/settings.dart';
 import 'state/snapshot.dart';
 import 'ui/agent/agent_screen.dart';
 import 'ui/dashboard/dashboard_screen.dart';
-import 'ui/settings/settings_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -80,13 +79,12 @@ class HerdrApp extends ConsumerWidget {
   }
 }
 
-/// 任一 enabled bridge 连接存在即视为已配置（RootGate 据此进 dashboard）。
-/// bridgesProvider 只含 enabled 项。
-bool hasAnyConnection(WidgetRef ref) => ref.watch(bridgesProvider).isNotEmpty;
-
-/// 任一 enabled bridge 连接存在 → dashboard；空配置 → 设置页。
-/// 同时负责 app 前后台切换时暂停/恢复各 bridge 的 snapshot 轮询；iOS 还
-/// 会撤销/重建回环端口转发，EasyTier 实例本身始终保持运行。
+/// App 首页以及前后台生命周期入口。
+///
+/// 首页始终保留 dashboard；空配置时由 dashboard 提供添加设备入口，避免把
+/// 设置页当成无法返回的根路由。同时负责 app 前后台切换时暂停/恢复各 bridge
+/// 的 snapshot 轮询；iOS 还会撤销/重建回环端口转发，EasyTier 实例本身始终
+/// 保持运行。
 class RootGate extends ConsumerStatefulWidget {
   const RootGate({super.key, this.launchTarget});
 
@@ -179,8 +177,6 @@ class _RootGateState extends ConsumerState<RootGate> {
 
   @override
   Widget build(BuildContext context) {
-    return hasAnyConnection(ref)
-        ? const DashboardScreen()
-        : const SettingsScreen();
+    return const DashboardScreen();
   }
 }

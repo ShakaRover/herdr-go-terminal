@@ -143,8 +143,6 @@ class EnabledProfilesNotifier extends Notifier<List<RemoteProfile>> {
     state = all.where((p) => p.enabled).toList();
   }
 
-  /// 有 enabled profile 即视为已配置（RootGate 据此跳 dashboard/设置页）。
-  bool get isConfigured => state.isNotEmpty;
 }
 
 final enabledProfilesProvider =

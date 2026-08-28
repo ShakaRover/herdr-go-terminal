@@ -104,6 +104,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'No agents detected\nStart one in Herdr on your computer and it will appear here.';
 
   @override
+  String get noDevicesTitle => 'No computers connected';
+
+  @override
+  String get noDevicesHelp =>
+      'Add a computer to see and control its Herdr agents.';
+
+  @override
+  String get addDevice => 'Add computer';
+
+  @override
   String get sectionPinned => 'Pinned';
 
   @override
@@ -352,6 +362,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectionSettings => 'Connection settings';
 
   @override
+  String get devices => 'Computers';
+
+  @override
   String get remoteBridge => 'Remote bridges (scan to pair)';
 
   @override
@@ -392,6 +405,23 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get bridgeEnableHelp =>
       'Use each switch to control whether that bridge connects. Enable multiple bridges for multi-host mode.';
+
+  @override
+  String get computerSetup => 'Set up your computer';
+
+  @override
+  String get pluginSetupHelp =>
+      'Install the HerdrGo Plugin on the computer running Herdr, start its bridge service, then display the pairing QR code.';
+
+  @override
+  String get pluginInstallGuide =>
+      'Open the official Plugin installation guide';
+
+  @override
+  String get openLinkFailed => 'Could not open the website';
+
+  @override
+  String get otherSettings => 'Other settings';
 
   @override
   String get language => 'Language';

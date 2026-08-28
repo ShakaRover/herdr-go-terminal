@@ -26,7 +26,6 @@ import 'package:herdrgo/state/easytier_runtime.dart';
 import 'package:herdrgo/state/settings.dart';
 import 'package:herdrgo/ui/agent/agent_screen.dart';
 import 'package:herdrgo/ui/dashboard/dashboard_screen.dart';
-import 'package:herdrgo/ui/settings/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'bridges_test.dart' show profileA, profileB, RecordingBlockedNotifier;
@@ -120,8 +119,8 @@ void main() {
     final container = ProviderScope.containerOf(
         tester.element(find.byType(RootGate, skipOffstage: false)),
         listen: false);
-    // 空配置 → 设置页；post-frame 完成首次 push（含路由动画）。
-    expect(find.byType(SettingsScreen, skipOffstage: false), findsOneWidget);
+    // Dashboard 始终是根页面；post-frame 完成首次 push（含路由动画）。
+    expect(find.byType(DashboardScreen, skipOffstage: false), findsOneWidget);
     expect(find.byType(AgentScreen, skipOffstage: false), findsOneWidget);
 
     // 弹掉详情页露出 home（见文件头：被盖住的后页不会重建）。

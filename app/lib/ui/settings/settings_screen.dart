@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/l10n.dart';
 import '../../model/remote_profile.dart';
@@ -20,6 +21,10 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  static final _pluginGuideUrl = Uri.parse(
+    'https://herdr.dev/docs/marketplace/',
+  );
+
   String? _message;
   bool _messageIsError = false;
 
@@ -53,6 +58,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _message = l10n.profileAdded(profile.label);
       _messageIsError = false;
     });
+  }
+
+  Future<void> _openPluginGuide() async {
+    final opened = await launchUrl(
+      _pluginGuideUrl,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(context.l10n.openLinkFailed)));
+    }
   }
 
   Future<void> _setEnabled(RemoteProfile profile, bool enabled) async {
@@ -131,6 +147,104 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: contentPanePadding(context, const EdgeInsets.all(16)),
         children: [
+          Text(l10n.devices, style: theme.textTheme.titleMedium),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _scanAndAdd,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: Text(l10n.addDevice),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.remoteBridge,
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_profiles.isEmpty)
+            Text(l10n.notPaired, style: theme.textTheme.bodySmall)
+          else
+            ..._profiles.map(
+              (p) => Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  title: Text(p.label),
+                  subtitle: Text(
+                    '${p.virtualIp}:${p.port} · ${p.server.join(', ')}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: l10n.editAliasTooltip,
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: () => _editLabel(p),
+                      ),
+                      Switch(
+                        value: p.enabled,
+                        onChanged: (v) => _setEnabled(p, v),
+                      ),
+                      IconButton(
+                        tooltip: l10n.deleteTooltip,
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: theme.colorScheme.error,
+                        ),
+                        onPressed: () => _confirmDelete(p),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (_profiles.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                l10n.bridgeEnableHelp,
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          const SizedBox(height: 20),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.computerSetup, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Text(l10n.pluginSetupHelp),
+                  const SizedBox(height: 12),
+                  const SelectionArea(
+                    child: Text(
+                      'herdr plugin install herdr-go/herdr-go\n'
+                      'herdr plugin action invoke herdrgo.setup\n'
+                      'herdr plugin action invoke herdrgo.pair',
+                      style: TextStyle(fontFamily: 'monospace'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _openPluginGuide,
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(l10n.pluginInstallGuide),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 40),
+          Text(l10n.otherSettings, style: theme.textTheme.titleMedium),
+          const SizedBox(height: 4),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(l10n.language),
@@ -196,68 +310,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChangeEnd: (value) =>
                 ref.read(terminalFontSizeProvider.notifier).setFontSize(value),
           ),
-          const Divider(),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.remoteBridge,
-                  style: theme.textTheme.titleSmall,
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _scanAndAdd,
-                icon: const Icon(Icons.qr_code_scanner),
-                label: Text(l10n.scanToAdd),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (_profiles.isEmpty)
-            Text(l10n.notPaired, style: theme.textTheme.bodySmall)
-          else
-            ..._profiles.map(
-              (p) => Card(
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                child: ListTile(
-                  title: Text(p.label),
-                  subtitle: Text(
-                    '${p.virtualIp}:${p.port} · ${p.server.join(', ')}',
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: l10n.editAliasTooltip,
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => _editLabel(p),
-                      ),
-                      Switch(
-                        value: p.enabled,
-                        onChanged: (v) => _setEnabled(p, v),
-                      ),
-                      IconButton(
-                        tooltip: l10n.deleteTooltip,
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: theme.colorScheme.error,
-                        ),
-                        onPressed: () => _confirmDelete(p),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          if (_profiles.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                l10n.bridgeEnableHelp,
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
           if (_message != null) ...[
             const SizedBox(height: 16),
             Text(

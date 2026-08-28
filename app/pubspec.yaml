@@ -44,11 +44,13 @@ dependencies:
   workmanager: ^0.10.7
   flutter_local_notifications: ^22.3.0
   mobile_scanner: ^7.0.0
+  url_launcher: ^6.3.2
   uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  url_launcher_platform_interface: ^2.3.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
