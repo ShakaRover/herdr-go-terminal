@@ -462,6 +462,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get terminalFontSizeReset => 'Reset terminal text size';
 
   @override
+  String get diagnostics => 'Diagnostics';
+
+  @override
+  String get diagnosticLogging => 'EasyTier diagnostic logs';
+
+  @override
+  String get diagnosticLoggingHelp =>
+      'Keep detailed connection logs for troubleshooting background and network reconnection issues.';
+
+  @override
+  String get diagnosticLoggingDetailsTitle => 'About diagnostic logs';
+
+  @override
+  String get diagnosticLoggingDetails =>
+      'Logging is off by default. When enabled, HerdrGo keeps up to four 5 MB files in Documents/Diagnostics and excludes them from iCloud Backup. The logs may contain IP addresses and peer IDs, but HerdrGo does not add pairing secrets or terminal content.\n\nConnect and trust this iPhone or iPad to download the app container with Xcode on your Mac, or use Share logs below. iOS suspends ordinary apps in the background, so no new events can be recorded while the process is suspended.';
+
+  @override
+  String get shareDiagnosticLogs => 'Share logs';
+
+  @override
+  String get clearDiagnosticLogs => 'Clear logs';
+
+  @override
+  String get clearDiagnosticLogsTitle => 'Clear diagnostic logs?';
+
+  @override
+  String get clearDiagnosticLogsBody =>
+      'This permanently deletes all current and rotated EasyTier diagnostic logs.';
+
+  @override
+  String get diagnosticLogsCleared => 'Diagnostic logs cleared';
+
+  @override
+  String diagnosticLogsError(String error) {
+    return 'Diagnostic logs failed: $error';
+  }
+
+  @override
   String get systemLanguage => 'System default';
 
   @override

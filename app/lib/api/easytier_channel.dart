@@ -30,10 +30,36 @@ class EasyTierChannel {
 
   final MethodChannel _channel;
 
+  static bool _diagnosticLoggingEnabled = false;
+
   /// 管理 RPC 的服务/方法名（lib.rs 的 dispatch 键；rust 侧 snake_case
   /// 同名方法亦兼容，见 easytier-android-jni 的 callJsonRpc 注释）。
   static const _configRpcService = 'api.config.ConfigRpcService';
   static const _patchConfigMethod = 'PatchConfig';
+
+  /// 开关 iOS EasyTier 持久诊断日志。其他平台原生侧可不实现此方法。
+  Future<void> configureDiagnosticLogging(bool enabled) async {
+    await _channel.invokeMethod<void>('configureDiagnosticLogging', {
+      'enabled': enabled,
+    });
+    _diagnosticLoggingEnabled = enabled;
+  }
+
+  /// 写入不含配置密钥的宿主生命周期/状态机标记。
+  Future<void> appendDiagnosticEvent(String message) {
+    if (!_diagnosticLoggingEnabled) return Future<void>.value();
+    return _channel.invokeMethod<void>('appendDiagnosticEvent', {
+      'message': message,
+    });
+  }
+
+  /// 调起 iOS 系统分享面板，分享日志文件的稳定快照。
+  Future<void> shareDiagnosticLogs() =>
+      _channel.invokeMethod<void>('shareDiagnosticLogs');
+
+  /// 清空当前及轮转日志，保留已启用的日志写入状态。
+  Future<void> clearDiagnosticLogs() =>
+      _channel.invokeMethod<void>('clearDiagnosticLogs');
 
   /// 以 TOML 配置启动 EasyTier 实例。失败抛 [PlatformException]。
   Future<void> startInstance(String tomlConfig) =>
@@ -41,30 +67,34 @@ class EasyTierChannel {
 
   /// 停止名为 [instanceName] 的 EasyTier 实例（原生侧按名 retain，
   /// 不存在时为 no-op）。
-  Future<void> stopInstance(String instanceName) => _channel
-      .invokeMethod<void>('stopInstance', {'instanceName': instanceName});
+  Future<void> stopInstance(String instanceName) => _channel.invokeMethod<void>(
+    'stopInstance',
+    {'instanceName': instanceName},
+  );
 
   /// [instanceName] 实例的当前虚拟 IPv4（点分十进制）；
   /// 实例未运行或未分配时返回 null。
   Future<String?> currentVirtualIp(String instanceName) async {
-    final json = await _channel.invokeMethod<String>(
-        'currentVirtualIp', {'instanceName': instanceName});
+    final json = await _channel.invokeMethod<String>('currentVirtualIp', {
+      'instanceName': instanceName,
+    });
     if (json == null || json.isEmpty) return null;
     return _parseVirtualIp(json);
   }
 
   /// 调试用：返回 [instanceName] 实例的原始 collectNetworkInfos JSON。
-  Future<String?> currentVirtualIpRaw(String instanceName) =>
-      _channel.invokeMethod<String>(
-          'currentVirtualIp', {'instanceName': instanceName});
+  Future<String?> currentVirtualIpRaw(String instanceName) => _channel
+      .invokeMethod<String>('currentVirtualIp', {'instanceName': instanceName});
 
   /// 在 [instanceName] 实例上打 ADD patch：`127.0.0.1:bindPort` 转发到
   /// 虚拟网络内的 `dstIp:dstPort`（TCP）。失败抛 [PlatformException]。
-  Future<void> addPortForward(String instanceName,
-      {required String bindIp,
-      required int bindPort,
-      required String dstIp,
-      required int dstPort}) async {
+  Future<void> addPortForward(
+    String instanceName, {
+    required String bindIp,
+    required int bindPort,
+    required String dstIp,
+    required int dstPort,
+  }) async {
     _checkIPv4(bindIp, 'bindIp');
     _checkIPv4(dstIp, 'dstIp');
     _checkPort(bindPort, 'bindPort');
@@ -81,11 +111,13 @@ class EasyTierChannel {
 
   /// 撤销 [addPortForward] 加的转发。REMOVE 按整条 PortForwardConfig 相等
   /// 匹配（core `patch_vec` 的语义），因此必须带上与 ADD 相同的 dst。
-  Future<void> removePortForward(String instanceName,
-      {required String bindIp,
-      required int bindPort,
-      required String dstIp,
-      required int dstPort}) async {
+  Future<void> removePortForward(
+    String instanceName, {
+    required String bindIp,
+    required int bindPort,
+    required String dstIp,
+    required int dstPort,
+  }) async {
     _checkIPv4(bindIp, 'bindIp');
     _checkIPv4(dstIp, 'dstIp');
     _checkPort(bindPort, 'bindPort');
@@ -101,7 +133,9 @@ class EasyTierChannel {
   }
 
   Future<void> _patchConfig(
-      String instanceName, Map<String, Object?> portForwardPatch) async {
+    String instanceName,
+    Map<String, Object?> portForwardPatch,
+  ) async {
     final response = await _channel.invokeMethod<String>('callJsonRpc', {
       'service': _configRpcService,
       'method': _patchConfigMethod,
@@ -115,16 +149,15 @@ class EasyTierChannel {
       }),
     });
     if (response == null) {
-      throw PlatformException(
-          code: 'easytier', message: 'callJsonRpc 返回空响应');
+      throw PlatformException(code: 'easytier', message: 'callJsonRpc 返回空响应');
     }
   }
 
   /// `{"ipv4": {"addr": <网络序 u32>}, "port": port}` 的 SocketAddr pbjson。
   static Map<String, Object?> _socketAddr(String ip, int port) => {
-        'ipv4': {'addr': _ipv4ToU32(ip)},
-        'port': port,
-      };
+    'ipv4': {'addr': _ipv4ToU32(ip)},
+    'port': port,
+  };
 
   /// 点分十进制 → 网络序 u32（`_u32ToIPv4` 的逆运算）。
   static int _ipv4ToU32(String ip) {

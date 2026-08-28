@@ -18,14 +18,14 @@ class _Harness {
   _Harness() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_channel, (call) async {
-      calls.add(call);
-      final error = nextError;
-      if (error != null) {
-        nextError = null;
-        throw error;
-      }
-      return nextResult;
-    });
+          calls.add(call);
+          final error = nextError;
+          if (error != null) {
+            nextError = null;
+            throw error;
+          }
+          return nextResult;
+        });
   }
 
   static const _channel = MethodChannel('dev.herdr/easytier');
@@ -45,7 +45,8 @@ class _Harness {
 
 /// collectNetworkInfos 过滤后的真实 JSON 形状（pbjson，snake_case），
 /// addr = 0x0A0A403E = 10.10.64.62。以真机 JSON 为准。
-const _infosJson = '{"map":{"inst1":{"running":true,"my_node_info":{'
+const _infosJson =
+    '{"map":{"inst1":{"running":true,"my_node_info":{'
     '"virtual_ipv4":{"address":{"addr":168443966},"network_length":24}}}}}';
 
 void main() {
@@ -55,12 +56,35 @@ void main() {
   setUp(() => h = _Harness());
   tearDown(() => h.dispose());
 
+  test('诊断日志方法使用独立的 MethodChannel 契约', () async {
+    final api = h.create();
+
+    await api.configureDiagnosticLogging(true);
+    await api.appendDiagnosticEvent('application resumed');
+    await api.shareDiagnosticLogs();
+    await api.clearDiagnosticLogs();
+    await api.configureDiagnosticLogging(false);
+    await api.appendDiagnosticEvent('must be filtered in Dart');
+
+    expect(h.calls.map((call) => call.method), [
+      'configureDiagnosticLogging',
+      'appendDiagnosticEvent',
+      'shareDiagnosticLogs',
+      'clearDiagnosticLogs',
+      'configureDiagnosticLogging',
+    ]);
+    expect(h.calls[0].arguments, {'enabled': true});
+    expect(h.calls[1].arguments, {'message': 'application resumed'});
+    expect(h.calls[2].arguments, isNull);
+    expect(h.calls[3].arguments, isNull);
+    expect(h.calls[4].arguments, {'enabled': false});
+  });
+
   test('startInstance 发 startInstance 与 config 参数', () async {
     await h.create().startInstance('instance_name = "inst1"');
     expect(h.calls, hasLength(1));
     expect(h.calls.single.method, 'startInstance');
-    expect(h.calls.single.arguments,
-        {'config': 'instance_name = "inst1"'});
+    expect(h.calls.single.arguments, {'config': 'instance_name = "inst1"'});
   });
 
   test('stopInstance 发 stopInstance 与 instanceName 参数', () async {
@@ -83,18 +107,21 @@ void main() {
     h.nextResult = '{"map":{}}';
     expect(await h.create().currentVirtualIp('inst1'), isNull);
 
-    h.nextResult = '{"map":{"inst1":{"running":false,"my_node_info":{'
+    h.nextResult =
+        '{"map":{"inst1":{"running":false,"my_node_info":{'
         '"virtual_ipv4":{"address":{"addr":168443966}}}}}}';
     expect(await h.create().currentVirtualIp('inst1'), isNull);
   });
 
   test('addPortForward 发 PatchConfig ADD，IPv4 编码为网络序 u32', () async {
     h.nextResult = '{}'; // callJsonRpc 的空 JSON 响应
-    await h.create().addPortForward('inst1',
-        bindIp: '127.0.0.1',
-        bindPort: 45678,
-        dstIp: '10.10.64.62',
-        dstPort: 8787);
+    await h.create().addPortForward(
+      'inst1',
+      bindIp: '127.0.0.1',
+      bindPort: 45678,
+      dstIp: '10.10.64.62',
+      dstPort: 8787,
+    );
     expect(h.calls.single.method, 'callJsonRpc');
     expect(h.calls.single.arguments['service'], 'api.config.ConfigRpcService');
     expect(h.calls.single.arguments['method'], 'PatchConfig');
@@ -115,7 +142,7 @@ void main() {
               },
               'socket_type': 'TCP',
             },
-          }
+          },
         ],
       },
       'instance': {
@@ -126,45 +153,57 @@ void main() {
 
   test('removePortForward 发 REMOVE，cfg 必须复现 ADD 的 bind+dst', () async {
     h.nextResult = '{}';
-    await h.create().removePortForward('inst1',
-        bindIp: '127.0.0.1',
-        bindPort: 45678,
-        dstIp: '10.10.64.62',
-        dstPort: 8787);
-    final payload =
-        jsonDecode(h.calls.single.arguments['payload'] as String) as Map<String, Object?>;
+    await h.create().removePortForward(
+      'inst1',
+      bindIp: '127.0.0.1',
+      bindPort: 45678,
+      dstIp: '10.10.64.62',
+      dstPort: 8787,
+    );
+    final payload = jsonDecode(
+      h.calls.single.arguments['payload'] as String,
+    ) as Map<String, Object?>;
     expect(
-        ((payload['patch'] as Map)['port_forwards'] as List)
-            .single['action'],
-        'REMOVE');
+      ((payload['patch'] as Map)['port_forwards'] as List).single['action'],
+      'REMOVE',
+    );
   });
 
   test('端口转发：非法 IP/端口抛 ArgumentError 且不触达通道', () async {
     final api = h.create();
     for (final badIp in ['', 'abc', '999.1.2.3', '::1', '10.0.0.256']) {
       expect(
-          () => api.addPortForward('inst1',
-              bindIp: badIp,
-              bindPort: 80,
-              dstIp: '10.0.0.1',
-              dstPort: 80),
-          throwsArgumentError);
+        () => api.addPortForward(
+          'inst1',
+          bindIp: badIp,
+          bindPort: 80,
+          dstIp: '10.0.0.1',
+          dstPort: 80,
+        ),
+        throwsArgumentError,
+      );
       expect(
-          () => api.removePortForward('inst1',
-              bindIp: '10.0.0.1',
-              bindPort: 80,
-              dstIp: badIp,
-              dstPort: 80),
-          throwsArgumentError);
+        () => api.removePortForward(
+          'inst1',
+          bindIp: '10.0.0.1',
+          bindPort: 80,
+          dstIp: badIp,
+          dstPort: 80,
+        ),
+        throwsArgumentError,
+      );
     }
     for (final badPort in [0, -1, 65536]) {
       expect(
-          () => api.addPortForward('inst1',
-              bindIp: '127.0.0.1',
-              bindPort: badPort,
-              dstIp: '10.0.0.1',
-              dstPort: 80),
-          throwsArgumentError);
+        () => api.addPortForward(
+          'inst1',
+          bindIp: '127.0.0.1',
+          bindPort: badPort,
+          dstIp: '10.0.0.1',
+          dstPort: 80,
+        ),
+        throwsArgumentError,
+      );
     }
     expect(h.calls, isEmpty);
   });
@@ -172,18 +211,24 @@ void main() {
   test('callJsonRpc：原生返回空响应抛 PlatformException', () async {
     h.nextResult = null;
     expect(
-        () => h.create().addPortForward('inst1',
-            bindIp: '127.0.0.1',
-            bindPort: 80,
-            dstIp: '10.0.0.1',
-            dstPort: 80),
-        throwsA(isA<PlatformException>()));
+      () => h.create().addPortForward(
+        'inst1',
+        bindIp: '127.0.0.1',
+        bindPort: 80,
+        dstIp: '10.0.0.1',
+        dstPort: 80,
+      ),
+      throwsA(isA<PlatformException>()),
+    );
   });
 
   test('原生 PlatformException 原样传播', () async {
     h.nextError = PlatformException(code: 'easytier', message: 'boom');
-    expect(() => h.create().startInstance(''),
-        throwsA(isA<PlatformException>()
-            .having((e) => e.message, 'message', 'boom')));
+    expect(
+      () => h.create().startInstance(''),
+      throwsA(
+        isA<PlatformException>().having((e) => e.message, 'message', 'boom'),
+      ),
+    );
   });
 }

@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:herdrgo/main.dart';
@@ -44,6 +46,8 @@ Future<_RecordingUrlLauncher> _pumpApp(
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('empty dashboard opens a poppable device-first settings page', (
     tester,
   ) async {
@@ -142,5 +146,61 @@ void main() {
     await tester.pump();
 
     expect(launcher.launchedUrl, 'https://herdr-go.github.io/zh/support/');
+  });
+
+  testWidgets('iOS settings exposes opt-in diagnostic logging and details', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    tester.view.physicalSize = const Size(1194, 834);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final calls = <MethodCall>[];
+    const channel = MethodChannel('dev.herdr/easytier');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+
+    await _pumpApp(tester, AppLocalePreference.english);
+    await tester.tap(find.text('Add computer'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Diagnostics'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+
+    expect(find.text('EasyTier diagnostic logs'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Share logs'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Share logs'), findsOneWidget);
+    expect(find.text('Clear logs'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('About diagnostic logs'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Documents/Diagnostics'), findsOneWidget);
+    expect(
+      find.textContaining('download the app container with Xcode'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(Switch).last);
+    await tester.pumpAndSettle();
+    expect(calls.last.method, 'configureDiagnosticLogging');
+    expect(calls.last.arguments, {'enabled': true});
+    debugDefaultTargetPlatformOverride = null;
   });
 }

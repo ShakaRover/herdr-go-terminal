@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/easytier_channel.dart';
 import '../model/remote_profile.dart';
 
 /// 在 main 里用已初始化的实例 override。
@@ -20,6 +21,7 @@ final sharedPrefsProvider = Provider<SharedPreferences>(
 const appLocalePreferenceKey = 'app_locale_v1';
 const terminalAutoResizePreferenceKey = 'terminal_auto_resize_v1';
 const terminalFontSizePreferenceKey = 'terminal_font_size_v1';
+const diagnosticLoggingPreferenceKey = 'easytier_diagnostic_logging_v1';
 const terminalDefaultFontSize = 12.5;
 const terminalMinFontSize = 9.5;
 const terminalMaxFontSize = 16.0;
@@ -112,6 +114,32 @@ final terminalFontSizeProvider =
       TerminalFontSizeNotifier.new,
     );
 
+final diagnosticLogChannelProvider = Provider<EasyTierChannel>(
+  (_) => const EasyTierChannel(),
+);
+
+class DiagnosticLoggingNotifier extends Notifier<bool> {
+  @override
+  bool build() =>
+      ref.watch(sharedPrefsProvider).getBool(diagnosticLoggingPreferenceKey) ??
+      false;
+
+  Future<void> setEnabled(bool enabled) async {
+    await ref
+        .read(diagnosticLogChannelProvider)
+        .configureDiagnosticLogging(enabled);
+    state = enabled;
+    await ref
+        .read(sharedPrefsProvider)
+        .setBool(diagnosticLoggingPreferenceKey, enabled);
+  }
+}
+
+final diagnosticLoggingProvider =
+    NotifierProvider<DiagnosticLoggingNotifier, bool>(
+      DiagnosticLoggingNotifier.new,
+    );
+
 /// profile 列表的本地持久化仓库。
 final profileStoreProvider = Provider<ProfileStore>((ref) {
   final prefs = ref.watch(sharedPrefsProvider);
@@ -142,7 +170,6 @@ class EnabledProfilesNotifier extends Notifier<List<RemoteProfile>> {
     if (!ref.mounted) return;
     state = all.where((p) => p.enabled).toList();
   }
-
 }
 
 final enabledProfilesProvider =

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -23,6 +24,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _message;
   bool _messageIsError = false;
+  bool _diagnosticBusy = false;
 
   /// 已保存的配对 profile 列表（本地状态，增删后刷新）。
   List<RemoteProfile> _profiles = const [];
@@ -74,10 +76,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _openPluginGuide() => _openWebsitePage(
-    englishPath: '/#install',
-    chinesePath: '/zh/#install',
-  );
+  Future<void> _openPluginGuide() =>
+      _openWebsitePage(englishPath: '/#install', chinesePath: '/zh/#install');
 
   Future<void> _showPluginSetup() {
     return showDialog<void>(
@@ -195,6 +195,91 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _reloadProfiles();
   }
 
+  Future<void> _setDiagnosticLogging(bool enabled) async {
+    setState(() => _diagnosticBusy = true);
+    try {
+      await ref.read(diagnosticLoggingProvider.notifier).setEnabled(enabled);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.diagnosticLogsError('$error'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _diagnosticBusy = false);
+    }
+  }
+
+  Future<void> _shareDiagnosticLogs() async {
+    setState(() => _diagnosticBusy = true);
+    try {
+      await ref.read(diagnosticLogChannelProvider).shareDiagnosticLogs();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.diagnosticLogsError('$error'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _diagnosticBusy = false);
+    }
+  }
+
+  Future<void> _confirmClearDiagnosticLogs() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.l10n.clearDiagnosticLogsTitle),
+        content: Text(dialogContext.l10n.clearDiagnosticLogsBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(dialogContext.l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(dialogContext.l10n.clearDiagnosticLogs),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _diagnosticBusy = true);
+    try {
+      await ref.read(diagnosticLogChannelProvider).clearDiagnosticLogs();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.diagnosticLogsCleared)),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.diagnosticLogsError('$error'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _diagnosticBusy = false);
+    }
+  }
+
+  Future<void> _showDiagnosticDetails() => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(dialogContext.l10n.diagnosticLoggingDetailsTitle),
+      content: SingleChildScrollView(
+        child: Text(dialogContext.l10n.diagnosticLoggingDetails),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(dialogContext.l10n.commonClose),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -202,6 +287,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final localePreference = ref.watch(appLocaleProvider);
     final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
     final terminalFontSize = ref.watch(terminalFontSizeProvider);
+    final diagnosticLogging = ref.watch(diagnosticLoggingProvider);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.connectionSettings)),
       body: ListView(
@@ -355,6 +441,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChangeEnd: (value) =>
                 ref.read(terminalFontSizeProvider.notifier).setFontSize(value),
           ),
+          if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+            const Divider(height: 40),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.diagnostics,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  tooltip: l10n.diagnosticLoggingDetailsTitle,
+                  onPressed: _showDiagnosticDetails,
+                  icon: const Icon(Icons.info_outline),
+                ),
+              ],
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.diagnosticLogging),
+              subtitle: Text(l10n.diagnosticLoggingHelp),
+              value: diagnosticLogging,
+              onChanged: _diagnosticBusy ? null : _setDiagnosticLogging,
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _diagnosticBusy ? null : _shareDiagnosticLogs,
+                  icon: const Icon(Icons.ios_share),
+                  label: Text(l10n.shareDiagnosticLogs),
+                ),
+                TextButton.icon(
+                  onPressed: _diagnosticBusy
+                      ? null
+                      : _confirmClearDiagnosticLogs,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: Text(l10n.clearDiagnosticLogs),
+                ),
+              ],
+            ),
+          ],
           const Divider(height: 40),
           Text(l10n.about, style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),

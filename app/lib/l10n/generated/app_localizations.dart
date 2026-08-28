@@ -842,6 +842,72 @@ abstract class AppLocalizations {
   /// **'Reset terminal text size'**
   String get terminalFontSizeReset;
 
+  /// No description provided for @diagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get diagnostics;
+
+  /// No description provided for @diagnosticLogging.
+  ///
+  /// In en, this message translates to:
+  /// **'EasyTier diagnostic logs'**
+  String get diagnosticLogging;
+
+  /// No description provided for @diagnosticLoggingHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep detailed connection logs for troubleshooting background and network reconnection issues.'**
+  String get diagnosticLoggingHelp;
+
+  /// No description provided for @diagnosticLoggingDetailsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About diagnostic logs'**
+  String get diagnosticLoggingDetailsTitle;
+
+  /// No description provided for @diagnosticLoggingDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Logging is off by default. When enabled, HerdrGo keeps up to four 5 MB files in Documents/Diagnostics and excludes them from iCloud Backup. The logs may contain IP addresses and peer IDs, but HerdrGo does not add pairing secrets or terminal content.\n\nConnect and trust this iPhone or iPad to download the app container with Xcode on your Mac, or use Share logs below. iOS suspends ordinary apps in the background, so no new events can be recorded while the process is suspended.'**
+  String get diagnosticLoggingDetails;
+
+  /// No description provided for @shareDiagnosticLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Share logs'**
+  String get shareDiagnosticLogs;
+
+  /// No description provided for @clearDiagnosticLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear logs'**
+  String get clearDiagnosticLogs;
+
+  /// No description provided for @clearDiagnosticLogsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear diagnostic logs?'**
+  String get clearDiagnosticLogsTitle;
+
+  /// No description provided for @clearDiagnosticLogsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This permanently deletes all current and rotated EasyTier diagnostic logs.'**
+  String get clearDiagnosticLogsBody;
+
+  /// No description provided for @diagnosticLogsCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostic logs cleared'**
+  String get diagnosticLogsCleared;
+
+  /// No description provided for @diagnosticLogsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostic logs failed: {error}'**
+  String diagnosticLogsError(String error);
+
   /// No description provided for @systemLanguage.
   ///
   /// In en, this message translates to:

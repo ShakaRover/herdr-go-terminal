@@ -9,21 +9,38 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:herdrgo/api/easytier_channel.dart';
 import 'package:herdrgo/model/remote_profile.dart';
 import 'package:herdrgo/state/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 用给定的 prefs 初始值建 container。
 Future<ProviderContainer> buildContainer(
-  Map<String, Object> initialValues,
-) async {
+  Map<String, Object> initialValues, {
+  EasyTierChannel? diagnosticChannel,
+}) async {
   SharedPreferences.setMockInitialValues(initialValues);
   final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
-    overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+      if (diagnosticChannel != null)
+        diagnosticLogChannelProvider.overrideWithValue(diagnosticChannel),
+    ],
   );
   addTearDown(container.dispose);
   return container;
+}
+
+class _RecordingDiagnosticChannel extends EasyTierChannel {
+  bool? configuredValue;
+  Object? error;
+
+  @override
+  Future<void> configureDiagnosticLogging(bool enabled) async {
+    if (error case final error?) throw error;
+    configuredValue = enabled;
+  }
 }
 
 const _profile = RemoteProfile(
@@ -47,6 +64,43 @@ const _profile2 = RemoteProfile(
 );
 
 void main() {
+  group('diagnosticLoggingProvider', () {
+    test('默认关闭，原生配置成功后才持久化', () async {
+      final channel = _RecordingDiagnosticChannel();
+      final container = await buildContainer({}, diagnosticChannel: channel);
+
+      expect(container.read(diagnosticLoggingProvider), isFalse);
+      await container.read(diagnosticLoggingProvider.notifier).setEnabled(true);
+
+      expect(channel.configuredValue, isTrue);
+      expect(container.read(diagnosticLoggingProvider), isTrue);
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getBool(diagnosticLoggingPreferenceKey),
+        isTrue,
+      );
+    });
+
+    test('原生配置失败时不改变状态和持久化值', () async {
+      final channel = _RecordingDiagnosticChannel()..error = StateError('no');
+      final container = await buildContainer({}, diagnosticChannel: channel);
+
+      await expectLater(
+        container.read(diagnosticLoggingProvider.notifier).setEnabled(true),
+        throwsStateError,
+      );
+
+      expect(container.read(diagnosticLoggingProvider), isFalse);
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getBool(diagnosticLoggingPreferenceKey),
+        isNull,
+      );
+    });
+  });
+
   group('terminalAutoResizeProvider', () {
     test('默认开启并持久化用户选择', () async {
       final container = await buildContainer({});

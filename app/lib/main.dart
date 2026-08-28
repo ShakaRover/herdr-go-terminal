@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'api/easytier_channel.dart';
 import 'notify/notify_service.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'state/bridges.dart';
@@ -31,6 +32,15 @@ void _openPane(String bridgeId, String paneId) {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    try {
+      await const EasyTierChannel().configureDiagnosticLogging(
+        prefs.getBool(diagnosticLoggingPreferenceKey) ?? false,
+      );
+    } catch (error) {
+      debugPrint('Failed to restore EasyTier diagnostic logging: $error');
+    }
+  }
   // 后台 blocked 通知是 Android-only（WorkManager）；iOS v1 不做后台轮询。
   (String, String)? launchTarget;
   if (defaultTargetPlatform == TargetPlatform.android) {

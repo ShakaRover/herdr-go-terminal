@@ -211,6 +211,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     final gen = ++_generation;
     state = const EasyTierConnecting();
     final channel = ref.read(easytierChannelProvider);
+    _recordDiagnostic(channel, 'runtime connect requested profile=$profileId');
     try {
       final start = channel.startInstance(
         buildInstanceToml(profile, instanceName: _instanceName),
@@ -221,6 +222,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       } finally {
         _instanceStarts.remove(start);
       }
+      _recordDiagnostic(channel, 'runtime instance started profile=$profileId');
       if (gen != _generation) return;
       // 等本实例拿到虚拟 IP（证明 EasyTier 已连上网络），然后向
       // bridge 的虚拟 IP（pairing 里的 virtualIp）打端口转发 patch。
@@ -230,6 +232,10 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
         throw _VirtualIpTimeout(virtualIpTimeout.inSeconds);
       }
       _instanceHasVirtualIp = true;
+      _recordDiagnostic(
+        channel,
+        'runtime virtual IP acquired profile=$profileId',
+      );
       final port = await _installForward(channel, profile, gen);
       if (gen != _generation) return;
       if (port == null) {
@@ -240,10 +246,18 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       if (gen != _generation) return;
       // ignore: avoid_print
       print('[easytier] instance $profileId forward on :$_localPort');
+      _recordDiagnostic(
+        channel,
+        'runtime ready profile=$profileId localPort=$_localPort',
+      );
       state = EasyTierReady(_localPort);
     } catch (e) {
       // ignore: avoid_print
       print('[easytier] instance $profileId connect failed: $e');
+      _recordDiagnostic(
+        channel,
+        'runtime connect failed profile=$profileId errorType=${e.runtimeType}',
+      );
       if (gen != _generation) return;
       await _removeForward(channel);
       try {
@@ -274,6 +288,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     ++_generation;
     state = const EasyTierForwardSuspended();
     final channel = ref.read(easytierChannelProvider);
+    _recordDiagnostic(channel, 'runtime forward suspend profile=$profileId');
     await _removeForward(channel);
   }
 
@@ -291,6 +306,7 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
     final gen = ++_generation;
     state = const EasyTierConnecting();
     final channel = ref.read(easytierChannelProvider);
+    _recordDiagnostic(channel, 'runtime forward resume profile=$profileId');
     try {
       if (!_instanceHasVirtualIp) {
         final ip = await _waitVirtualIp(channel, gen);
@@ -310,10 +326,19 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       if (gen != _generation) return;
       // ignore: avoid_print
       print('[easytier] instance $profileId forward resumed on :$port');
+      _recordDiagnostic(
+        channel,
+        'runtime forward resumed profile=$profileId localPort=$port',
+      );
       state = EasyTierReady(port);
     } catch (e) {
       // ignore: avoid_print
       print('[easytier] instance $profileId forward resume failed: $e');
+      _recordDiagnostic(
+        channel,
+        'runtime forward resume failed profile=$profileId '
+        'errorType=${e.runtimeType}',
+      );
       if (gen != _generation) return;
       await _removeForward(channel);
       if (gen != _generation) return;
@@ -408,6 +433,11 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
         '[easytier] instance $profileId forwarding '
         '127.0.0.1:$port to ${profile.virtualIp}:${profile.port}',
       );
+      _recordDiagnostic(
+        channel,
+        'runtime installing forward profile=$profileId localPort=$port '
+        'destination=${profile.virtualIp}:${profile.port}',
+      );
       try {
         await channel.addPortForward(
           _instanceName,
@@ -469,6 +499,11 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       } catch (e) {
         // ignore: avoid_print
         print('[easytier] instance $profileId forward install failed: $e');
+        _recordDiagnostic(
+          channel,
+          'runtime forward install failed profile=$profileId '
+          'errorType=${e.runtimeType}',
+        );
       }
       if (gen != _generation || _forwardSuspended) return null;
       await Future<void>.delayed(bridgeProbeInterval);
@@ -507,6 +542,15 @@ class EasyTierRuntimeNotifier extends Notifier<EasyTierRuntimeState> {
       await Future<void>.delayed(bridgeProbeInterval);
     }
   }
+}
+
+void _recordDiagnostic(EasyTierChannel channel, String message) {
+  if (defaultTargetPlatform != TargetPlatform.iOS) return;
+  unawaited(
+    channel.appendDiagnosticEvent(message).catchError((Object _) {
+      // 诊断日志不能影响连接状态机；原生层会在关闭日志时直接丢弃事件。
+    }),
+  );
 }
 
 /// 占一个临时回环 TCP 端口后立即释放；返回的端口交给 PatchConfig bind。

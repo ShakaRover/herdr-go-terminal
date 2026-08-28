@@ -423,6 +423,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get terminalFontSizeReset => '恢复默认终端字号';
 
   @override
+  String get diagnostics => '诊断';
+
+  @override
+  String get diagnosticLogging => 'EasyTier 诊断日志';
+
+  @override
+  String get diagnosticLoggingHelp => '保留详细连接日志，用于排查切后台、断网后无法重连等问题。';
+
+  @override
+  String get diagnosticLoggingDetailsTitle => '关于诊断日志';
+
+  @override
+  String get diagnosticLoggingDetails =>
+      '日志默认关闭。开启后，HerdrGo 会在 Documents/Diagnostics 中最多保留 4 个 5 MB 文件，并排除 iCloud 备份。日志可能包含 IP 地址和 peer ID，但 HerdrGo 不会主动写入配对密钥或终端内容。\n\n将 iPhone 或 iPad 连接并信任 Mac 后，可通过 Xcode 下载 App Container；也可使用下方的“分享日志”。普通 iOS App 在后台会被系统挂起，挂起期间无法继续记录新事件。';
+
+  @override
+  String get shareDiagnosticLogs => '分享日志';
+
+  @override
+  String get clearDiagnosticLogs => '清空日志';
+
+  @override
+  String get clearDiagnosticLogsTitle => '清空诊断日志？';
+
+  @override
+  String get clearDiagnosticLogsBody => '这会永久删除当前及全部轮转的 EasyTier 诊断日志。';
+
+  @override
+  String get diagnosticLogsCleared => '诊断日志已清空';
+
+  @override
+  String diagnosticLogsError(String error) {
+    return '诊断日志操作失败：$error';
+  }
+
+  @override
   String get systemLanguage => '跟随系统';
 
   @override
