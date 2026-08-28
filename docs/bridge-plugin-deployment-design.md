@@ -259,8 +259,10 @@ Linux 使用 systemd user unit：
 macOS 使用用户域 LaunchAgent：
 
 ```text
-~/Library/LaunchAgents/dev.herdr.herdrgo.plist
+~/Library/LaunchAgents/kkrainbow.herdrgo.plist
 ```
+
+该 label/plist 已随旧版本部署，作为内部服务兼容标识保留；它不再出现在用户命令中。
 
 关键约束：
 
@@ -326,16 +328,16 @@ herdr plugin action invoke herdrgo.setup
 第二次 setup 将新候选版本复制到稳定 runtime 路径并重启服务。state/config 目录位于
 插件 checkout 之外，因此升级不改变配对关系。
 
-从旧插件 ID 首次升级时，setup 先停止旧服务；仅当新 ID 的 state/config 目录为空时，
-才把旧目录原子移动到新位置。迁移期间先禁用旧插件并持有其控制锁；服务恢复并验证
-成功后注销旧插件注册。若新目录已有数据，setup 不覆盖或混合两套配对状态，也不会
-停止旧服务。新服务启动失败时自动恢复旧目录、runtime 和服务定义。
+从旧插件 ID 首次升级时，setup 不移动正在使用的 state/config。若新 ID 的对应目录
+为空，则将它们替换为指向旧目录的兼容 symlink；新旧操作因此共享同一份配对状态和
+控制锁。服务恢复并验证成功后再注销旧插件注册。若新目录已有数据，setup 在接触服务
+前失败，不覆盖或混合两套配对状态。
 
 更新失败时：
 
 - 候选二进制下载或校验失败：不触碰当前运行副本。
 - runtime 原子替换失败：当前副本保持可执行，服务不重启。
-- 新服务启动失败：自动恢复上一版 runtime、旧 ID 目录和服务定义，并重新启动旧服务。
+- 新服务启动失败：保留错误日志和上一版本备份路径，setup 给出恢复命令。
 - 第一版不做静默自动更新，避免在无人值守时改变远程控制边界。
 
 ## 14. 卸载
@@ -369,9 +371,9 @@ herdr plugin action invoke herdrgo.setup
 - 使用 fake `systemctl` 验证 Linux setup/start/stop/restart/uninstall 调用。
 - 使用 fake `launchctl` 验证 macOS 对应调用和 plist 内容。
 - setup 连续运行两次不改变 secret/network id。
-- 旧插件 ID 的 state/config、Linux unit 和 macOS LaunchAgent 能一次迁移；新目录非空时
-  不覆盖现有状态。
-- 旧控制操作持锁时迁移在停服务前失败；候选服务启动失败时旧服务自动恢复。
+- 旧插件 ID 的 state/config 可通过新 ID 的 symlink 继续使用；新目录非空时不覆盖
+  现有状态。
+- 新旧 ID 通过 symlink 共享 control lock，旧控制操作持锁时新 setup 会被拒绝。
 - 升级 runtime 二进制后服务定义仍引用稳定路径。
 - 服务启动日志不包含 secret 或完整配对 JSON。
 - `pair` 生成的载荷与 app 当前扫码协议兼容。
