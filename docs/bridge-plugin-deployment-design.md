@@ -333,6 +333,9 @@ herdr plugin action invoke herdrgo.setup
 控制锁。服务恢复并验证成功后再注销旧插件注册。若新目录已有数据，setup 在接触服务
 前失败，不覆盖或混合两套配对状态。
 
+兼容 symlink 仅在首次旧 ID 升级时创建；该次 setup 必须串行执行，不支持从两个 pane
+同时触发。常规升级在 symlink 已存在后仍由共享 control lock 串行化。
+
 更新失败时：
 
 - 候选二进制下载或校验失败：不触碰当前运行副本。
