@@ -21,10 +21,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  static final _pluginGuideUrl = Uri.parse(
-    'https://herdr.dev/docs/marketplace/',
-  );
-
   String? _message;
   bool _messageIsError = false;
 
@@ -61,14 +57,72 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _openPluginGuide() async {
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final pluginGuideUrl = Uri.parse(
+      languageCode == 'zh'
+          ? 'https://herdr-go.github.io/zh/#install'
+          : 'https://herdr-go.github.io/#install',
+    );
     final opened = await launchUrl(
-      _pluginGuideUrl,
+      pluginGuideUrl,
       mode: LaunchMode.externalApplication,
     );
     if (!opened && mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(context.l10n.openLinkFailed)));
     }
+  }
+
+  Future<void> _showPluginSetup() {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = dialogContext.l10n;
+        return AlertDialog(
+          title: Text(l10n.computerSetup),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.pluginSetupHelp),
+                const SizedBox(height: 12),
+                const SelectionArea(
+                  child: Text(
+                    'herdr plugin install herdr-go/herdr-go\n'
+                    'herdr plugin action invoke herdrgo.setup',
+                    style: TextStyle(fontFamily: 'monospace'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(l10n.pluginPairAgainHelp),
+                const SizedBox(height: 8),
+                const SelectionArea(
+                  child: Text(
+                    'herdr plugin action invoke herdrgo.pair',
+                    style: TextStyle(fontFamily: 'monospace'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _openPluginGuide();
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: Text(l10n.pluginInstallGuide),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.commonClose),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _setEnabled(RemoteProfile profile, bool enabled) async {
@@ -147,7 +201,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: contentPanePadding(context, const EdgeInsets.all(16)),
         children: [
-          Text(l10n.devices, style: theme.textTheme.titleMedium),
+          Row(
+            children: [
+              Expanded(
+                child: Text(l10n.devices, style: theme.textTheme.titleMedium),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: _showPluginSetup,
+                icon: const Icon(Icons.help_outline, size: 18),
+                label: Text(l10n.deploymentHelp),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -213,35 +281,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: theme.textTheme.bodySmall,
               ),
             ),
-          const SizedBox(height: 20),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l10n.computerSetup, style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Text(l10n.pluginSetupHelp),
-                  const SizedBox(height: 12),
-                  const SelectionArea(
-                    child: Text(
-                      'herdr plugin install herdr-go/herdr-go\n'
-                      'herdr plugin action invoke herdrgo.setup\n'
-                      'herdr plugin action invoke herdrgo.pair',
-                      style: TextStyle(fontFamily: 'monospace'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _openPluginGuide,
-                    icon: const Icon(Icons.open_in_new),
-                    label: Text(l10n.pluginInstallGuide),
-                  ),
-                ],
-              ),
-            ),
-          ),
           const Divider(height: 40),
           Text(l10n.otherSettings, style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),

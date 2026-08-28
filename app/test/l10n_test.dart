@@ -41,15 +41,21 @@ void main() {
     );
     expect(tileFinder, findsOneWidget);
     expect(tester.widget<SwitchListTile>(tileFinder).value, isFalse);
-    expect(find.text('Terminal text size'), findsOneWidget);
-    expect(find.text('11.0 pt'), findsOneWidget);
-    expect(tester.widget<Slider>(find.byType(Slider)).value, 11.0);
 
     await tester.tap(tileFinder);
     await tester.pump();
 
     expect(tester.widget<SwitchListTile>(tileFinder).value, isTrue);
     expect(prefs.getBool(terminalAutoResizePreferenceKey), isTrue);
+
+    await tester.scrollUntilVisible(
+      find.byType(Slider),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Terminal text size'), findsOneWidget);
+    expect(find.text('11.0 pt'), findsOneWidget);
+    expect(tester.widget<Slider>(find.byType(Slider)).value, 11.0);
   });
 
   testWidgets('language selection updates the app and persists', (

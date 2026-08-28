@@ -161,6 +161,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sendAnyway => '仍发送';
 
   @override
+  String get commonClose => '关闭';
+
+  @override
   String get unknownError => '未知错误';
 
   @override
@@ -377,7 +380,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '在运行 Herdr 的电脑上安装 HerdrGo Plugin，启动 bridge 服务，然后显示配对二维码。';
 
   @override
-  String get pluginInstallGuide => '查看官网 Plugin 安装说明';
+  String get pluginPairAgainHelp => '之后需要重新显示配对二维码时：';
+
+  @override
+  String get pluginInstallGuide => '查看完整官网说明';
+
+  @override
+  String get deploymentHelp => '部署帮助';
 
   @override
   String get openLinkFailed => '无法打开官网';

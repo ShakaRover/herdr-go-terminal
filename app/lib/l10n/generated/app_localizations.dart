@@ -368,6 +368,12 @@ abstract class AppLocalizations {
   /// **'Send anyway'**
   String get sendAnyway;
 
+  /// No description provided for @commonClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get commonClose;
+
   /// No description provided for @unknownError.
   ///
   /// In en, this message translates to:
@@ -752,11 +758,23 @@ abstract class AppLocalizations {
   /// **'Install the HerdrGo Plugin on the computer running Herdr, start its bridge service, then display the pairing QR code.'**
   String get pluginSetupHelp;
 
+  /// No description provided for @pluginPairAgainHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'To display the pairing QR code again later:'**
+  String get pluginPairAgainHelp;
+
   /// No description provided for @pluginInstallGuide.
   ///
   /// In en, this message translates to:
-  /// **'Open the official Plugin installation guide'**
+  /// **'View the full website guide'**
   String get pluginInstallGuide;
+
+  /// No description provided for @deploymentHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup help'**
+  String get deploymentHelp;
 
   /// No description provided for @openLinkFailed.
   ///

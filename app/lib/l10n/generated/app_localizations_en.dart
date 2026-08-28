@@ -190,6 +190,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sendAnyway => 'Send anyway';
 
   @override
+  String get commonClose => 'Close';
+
+  @override
   String get unknownError => 'Unknown error';
 
   @override
@@ -414,8 +417,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Install the HerdrGo Plugin on the computer running Herdr, start its bridge service, then display the pairing QR code.';
 
   @override
-  String get pluginInstallGuide =>
-      'Open the official Plugin installation guide';
+  String get pluginPairAgainHelp =>
+      'To display the pairing QR code again later:';
+
+  @override
+  String get pluginInstallGuide => 'View the full website guide';
+
+  @override
+  String get deploymentHelp => 'Setup help';
 
   @override
   String get openLinkFailed => 'Could not open the website';
