@@ -71,6 +71,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   bool _leaseRequestInFlight = false;
   bool _leaseSyncQueued = false;
   bool _leaseSyncAgain = false;
+  bool _scrollToBottomQueued = false;
   bool _renewLease = false;
   int _leaseEpoch = 0;
   String? _terminalLeaseId;
@@ -137,7 +138,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   }
 
   void _scrollToBottom() {
+    if (_scrollToBottomQueued) return;
+    _scrollToBottomQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottomQueued = false;
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }

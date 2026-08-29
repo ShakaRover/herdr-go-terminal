@@ -414,6 +414,24 @@ class AppLocalizationsZh extends AppLocalizations {
       '打开 agent 期间临时控制共享 Herdr 终端，离开后归还控制权；关闭此选项可始终保持电脑端的终端宽度。';
 
   @override
+  String get terminalRefreshRate => '终端刷新速度';
+
+  @override
+  String get terminalRefreshRateHelp => '控制连续输出时的最高刷新率；没有新输出时不会刷新手机画面。';
+
+  @override
+  String get terminalRefreshAutomatic => '自动';
+
+  @override
+  String get terminalRefreshSmooth => '流畅 · 最高 20 FPS';
+
+  @override
+  String get terminalRefreshBalanced => '均衡 · 最高 10 FPS';
+
+  @override
+  String get terminalRefreshBatterySaver => '省电 · 最高 4 FPS';
+
+  @override
   String get terminalFontSize => '终端文字大小';
 
   @override

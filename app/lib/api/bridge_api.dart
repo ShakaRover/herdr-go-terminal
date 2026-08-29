@@ -12,6 +12,7 @@
 /// - 超时：GET 10s，修改类 20s，上传 60s。
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
@@ -74,7 +75,8 @@ class BridgeApi {
     required String baseUrl,
     Map<String, String> headers = const {},
     AppLocalizations? localizations,
-  }) : _localizations =
+  }) : _extraHeaders = Map.unmodifiable(headers),
+       _localizations =
            localizations ?? lookupAppLocalizations(const Locale('en')),
        _dio = Dio(
          BaseOptions(
@@ -90,6 +92,7 @@ class BridgeApi {
        );
 
   final Dio _dio;
+  final Map<String, String> _extraHeaders;
   final AppLocalizations _localizations;
 
   /// 归一化后的 baseUrl（诊断与测试用）。
@@ -262,6 +265,125 @@ class BridgeApi {
       return read;
     } on DioException catch (e) {
       throw _wrap(e);
+    }
+  }
+
+  /// Stream the selected pane. Each connection starts with a complete frame;
+  /// later messages may be line deltas based on the last acknowledged frame.
+  /// A base mismatch asks the bridge for a complete frame before yielding more
+  /// data, so callers only ever receive reconstructed authoritative snapshots.
+  Stream<PaneRead> watchPane(
+    String paneId, {
+    int lines = 200,
+    int intervalMs = 0,
+    String? session,
+  }) async* {
+    final httpUri = Uri.parse(baseUrl);
+    final uri = httpUri.replace(
+      scheme: httpUri.scheme == 'https' ? 'wss' : 'ws',
+      pathSegments: [
+        ...httpUri.pathSegments.where((segment) => segment.isNotEmpty),
+        'api',
+        'v1',
+        'pane',
+        paneId,
+        'stream',
+      ],
+      queryParameters: {
+        'lines': '$lines',
+        'intervalMs': '$intervalMs',
+        if (session != null && session.trim().isNotEmpty)
+          'session': session.trim(),
+      },
+    );
+    WebSocket? socket;
+    String? text;
+    String? fingerprint;
+    try {
+      socket = await WebSocket.connect(
+        uri.toString(),
+        headers: {
+          'x-requested-with': 'XMLHttpRequest',
+          'Origin': _originOf(baseUrl),
+          'x-bridge-seen': '1',
+          ..._extraHeaders,
+        },
+      );
+      await for (final event in socket) {
+        if (event is! String) continue;
+        final decoded = jsonDecode(event);
+        if (decoded is! Map<String, dynamic>) continue;
+        final type = decoded['type'];
+        if (type == 'pane_error') {
+          throw ApiException(
+            decoded['error']?.toString() ?? 'pane stream failed',
+          );
+        }
+
+        if (type == 'pane_full') {
+          text = decoded['text'] is String ? decoded['text'] as String : '';
+          fingerprint = decoded['fingerprint'] as String?;
+        } else if (type == 'pane_delta') {
+          if (text == null ||
+              fingerprint == null ||
+              decoded['baseFingerprint'] != fingerprint) {
+            socket.add(jsonEncode({'type': 'pane_resync'}));
+            continue;
+          }
+          final start = decoded['startLine'];
+          final delete = decoded['deleteLines'];
+          final inserted = decoded['insertLines'];
+          final currentLines = text.split('\n');
+          if (start is! int ||
+              delete is! int ||
+              inserted is! List ||
+              start < 0 ||
+              delete < 0 ||
+              start > currentLines.length ||
+              start + delete > currentLines.length ||
+              inserted.any((line) => line is! String)) {
+            socket.add(jsonEncode({'type': 'pane_resync'}));
+            continue;
+          }
+          currentLines.replaceRange(
+            start,
+            start + delete,
+            inserted.cast<String>(),
+          );
+          text = currentLines.join('\n');
+          fingerprint = decoded['fingerprint'] as String?;
+        } else {
+          continue;
+        }
+
+        final appliedFingerprint = fingerprint;
+        if (appliedFingerprint == null || appliedFingerprint.isEmpty) {
+          socket.add(jsonEncode({'type': 'pane_resync'}));
+          continue;
+        }
+        final read = PaneRead(
+          paneId: decoded['paneId'] is String
+              ? decoded['paneId'] as String
+              : paneId,
+          text: text,
+          truncated: decoded['truncated'] == true,
+          revision: decoded['revision'] is int ? decoded['revision'] as int : 0,
+        );
+        socket.add(
+          jsonEncode({
+            'type': 'pane_applied',
+            'fingerprint': appliedFingerprint,
+          }),
+        );
+        yield read;
+      }
+      throw const ApiException('pane stream closed');
+    } on ApiException {
+      rethrow;
+    } catch (error) {
+      throw ApiException('pane stream failed: $error');
+    } finally {
+      await socket?.close();
     }
   }
 

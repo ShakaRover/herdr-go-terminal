@@ -24,43 +24,83 @@ import 'package:shared_preferences/shared_preferences.dart';
 class FakeBridgeApi extends BridgeApi {
   FakeBridgeApi(this.text) : super(baseUrl: 'http://127.0.0.1:1');
 
-  final String text;
+  String text;
   final seenSessions = <String?>[];
+  final watchCalls =
+      <({String paneId, int lines, int intervalMs, String? session})>[];
+  final stream = StreamController<PaneRead>.broadcast();
+  var revision = 1;
 
   @override
-  Future<PaneRead> readPane(String paneId,
-      {int? lines, String? session}) async {
+  Future<PaneRead> readPane(
+    String paneId, {
+    int? lines,
+    String? session,
+  }) async {
     seenSessions.add(session);
-    return PaneRead(paneId: paneId, text: text, truncated: false, revision: 1);
+    return PaneRead(
+      paneId: paneId,
+      text: text,
+      truncated: false,
+      revision: revision,
+    );
+  }
+
+  @override
+  Stream<PaneRead> watchPane(
+    String paneId, {
+    int lines = 200,
+    int intervalMs = 0,
+    String? session,
+  }) {
+    watchCalls.add((
+      paneId: paneId,
+      lines: lines,
+      intervalMs: intervalMs,
+      session: session,
+    ));
+    return stream.stream;
   }
 }
 
-Future<ProviderContainer> buildContainer(FakeBridgeApi b1, FakeBridgeApi b2) async {
+Future<ProviderContainer> buildContainer(
+  FakeBridgeApi b1,
+  FakeBridgeApi b2,
+) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
-  final container = ProviderContainer(overrides: [
-    sharedPrefsProvider.overrideWithValue(prefs),
-    apiProvider.overrideWith((ref, bridgeId) => switch (bridgeId) {
+  final container = ProviderContainer(
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+      apiProvider.overrideWith(
+        (ref, bridgeId) => switch (bridgeId) {
           'b1' => b1,
           'b2' => b2,
           _ => null,
-        }),
-  ]);
+        },
+      ),
+    ],
+  );
   addTearDown(container.dispose);
   return container;
 }
 
 /// 等指定 key 的 pane read 拉取成功（state.data 非空）。
-Future<PaneReadState> waitRead(
-  ProviderContainer container,
-  PaneReadKey key,
-) {
+Future<PaneReadState> waitRead(ProviderContainer container, PaneReadKey key) {
   final c = Completer<PaneReadState>();
   final sub = container.listen(paneReadProvider(key), (_, next) {
     if (next.data != null && !c.isCompleted) c.complete(next);
   });
   addTearDown(sub.close);
   return c.future.timeout(const Duration(seconds: 5));
+}
+
+Future<void> waitUntil(bool Function() condition) async {
+  for (var i = 0; i < 100; i++) {
+    if (condition()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw StateError('condition was not reached');
 }
 
 void main() {
@@ -103,5 +143,101 @@ void main() {
 
     expect(b1.seenSessions, everyElement('work'));
     expect(b2.seenSessions, everyElement('ops'));
+  });
+
+  test('REST 首帧后接收流帧，刷新档位变化会保留画面并重订阅', () async {
+    final b1 = FakeBridgeApi('rest frame');
+    final b2 = FakeBridgeApi('unused');
+    final container = await buildContainer(b1, b2);
+    const key = (bridgeId: 'b1', paneId: 'w0');
+    final subscription = container.listen(paneReadProvider(key), (_, _) {});
+    addTearDown(subscription.close);
+
+    await waitRead(container, key);
+    await waitUntil(() => b1.watchCalls.isNotEmpty);
+    expect(b1.watchCalls.single.intervalMs, 0);
+
+    b1.stream.add(
+      const PaneRead(
+        paneId: 'w0',
+        text: 'stream frame',
+        truncated: false,
+        revision: 2,
+      ),
+    );
+    await waitUntil(
+      () => container.read(paneReadProvider(key)).data?.text == 'stream frame',
+    );
+    expect(container.read(paneReadProvider(key)).streaming, isTrue);
+
+    await container
+        .read(terminalRefreshRateProvider.notifier)
+        .select(TerminalRefreshRate.smooth);
+    await waitUntil(() => b1.watchCalls.length == 2);
+    expect(b1.watchCalls.last.intervalMs, 50);
+    expect(container.read(paneReadProvider(key)).data?.text, 'stream frame');
+  });
+
+  test('后台取消流，恢复前台后重新完整读取并订阅', () async {
+    final b1 = FakeBridgeApi('frame');
+    final b2 = FakeBridgeApi('unused');
+    final container = await buildContainer(b1, b2);
+    const key = (bridgeId: 'b1', paneId: 'w0');
+    final subscription = container.listen(paneReadProvider(key), (_, _) {});
+    addTearDown(subscription.close);
+
+    await waitRead(container, key);
+    await waitUntil(() => b1.stream.hasListener);
+    final readsBeforePause = b1.seenSessions.length;
+    container.read(appForegroundProvider.notifier).setForeground(false);
+    await waitUntil(() => !b1.stream.hasListener);
+
+    container.read(appForegroundProvider.notifier).setForeground(true);
+    await waitUntil(
+      () => b1.stream.hasListener && b1.seenSessions.length > readsBeforePause,
+    );
+  });
+
+  test('忽略乱序流帧，断流后立即用 REST 恢复并保留当前画面', () async {
+    final b1 = FakeBridgeApi('rest frame');
+    final b2 = FakeBridgeApi('unused');
+    final container = await buildContainer(b1, b2);
+    const key = (bridgeId: 'b1', paneId: 'w0');
+    final subscription = container.listen(paneReadProvider(key), (_, _) {});
+    addTearDown(subscription.close);
+
+    await waitRead(container, key);
+    await waitUntil(() => b1.stream.hasListener);
+    b1.stream.add(
+      const PaneRead(
+        paneId: 'w0',
+        text: 'new frame',
+        truncated: false,
+        revision: 3,
+      ),
+    );
+    await waitUntil(
+      () => container.read(paneReadProvider(key)).data?.revision == 3,
+    );
+    b1.stream.add(
+      const PaneRead(
+        paneId: 'w0',
+        text: 'stale frame',
+        truncated: false,
+        revision: 2,
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(container.read(paneReadProvider(key)).data?.text, 'new frame');
+
+    b1
+      ..text = 'fallback frame'
+      ..revision = 4;
+    b1.stream.addError(StateError('stream down'));
+    await waitUntil(
+      () =>
+          container.read(paneReadProvider(key)).data?.text == 'fallback frame',
+    );
+    expect(container.read(paneReadProvider(key)).error, isNull);
   });
 }

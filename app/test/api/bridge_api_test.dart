@@ -139,6 +139,80 @@ void main() {
     expect(snap.readOnly, isTrue);
   });
 
+  test('watchPane 发送握手头、确认全帧并重建行增量', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    final requests = <HttpRequest>[];
+    final clientMessages = <Map<String, dynamic>>[];
+    server.listen((request) async {
+      requests.add(request);
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.add(
+        jsonEncode({
+          'type': 'pane_full',
+          'paneId': 'w1:p1',
+          'text': 'one\ntwo\nthree',
+          'truncated': false,
+          'revision': 1,
+          'fingerprint': 'f1',
+        }),
+      );
+      await for (final event in socket) {
+        if (event is! String) continue;
+        final message = jsonDecode(event) as Map<String, dynamic>;
+        clientMessages.add(message);
+        if (message['type'] == 'pane_applied' &&
+            message['fingerprint'] == 'f1') {
+          socket.add(
+            jsonEncode({
+              'type': 'pane_delta',
+              'paneId': 'w1:p1',
+              'baseFingerprint': 'f1',
+              'fingerprint': 'f2',
+              'startLine': 1,
+              'deleteLines': 1,
+              'insertLines': ['TWO', 'extra'],
+              'truncated': true,
+              'revision': 2,
+            }),
+          );
+        } else if (message['fingerprint'] == 'f2') {
+          await socket.close();
+        }
+      }
+    });
+    final api = BridgeApi(baseUrl: 'http://127.0.0.1:${server.port}');
+
+    final frames = await api
+        .watchPane('w1:p1', lines: 200, intervalMs: 50, session: 'work')
+        .take(2)
+        .toList();
+
+    expect(requests.single.uri.path, '/api/v1/pane/w1:p1/stream');
+    expect(requests.single.uri.queryParameters, {
+      'lines': '200',
+      'intervalMs': '50',
+      'session': 'work',
+    });
+    expect(
+      requests.single.headers.value('origin'),
+      'http://127.0.0.1:${server.port}',
+    );
+    expect(requests.single.headers.value('x-requested-with'), 'XMLHttpRequest');
+    expect(requests.single.headers.value('x-bridge-seen'), '1');
+    expect(frames.first.text, 'one\ntwo\nthree');
+    expect(frames.last.text, 'one\nTWO\nextra\nthree');
+    expect(frames.last.truncated, isTrue);
+    expect(frames.last.revision, 2);
+    for (var i = 0; i < 100 && clientMessages.length < 2; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(
+      clientMessages.where((message) => message['type'] == 'pane_applied'),
+      hasLength(2),
+    );
+  });
+
   test('getAgentKinds 带 session 并解析动态 agent 列表', () async {
     final (h, api) = await _start(
       (req) => _json(req, 200, {

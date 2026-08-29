@@ -824,6 +824,42 @@ abstract class AppLocalizations {
   /// **'Temporarily control the shared Herdr terminal while an agent is open, then return control when you leave. Turn this off to always keep the computer\'s terminal width.'**
   String get terminalAutoResizeHelp;
 
+  /// No description provided for @terminalRefreshRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal refresh speed'**
+  String get terminalRefreshRate;
+
+  /// No description provided for @terminalRefreshRateHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls the maximum refresh rate during active output. No output means no phone updates.'**
+  String get terminalRefreshRateHelp;
+
+  /// No description provided for @terminalRefreshAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get terminalRefreshAutomatic;
+
+  /// No description provided for @terminalRefreshSmooth.
+  ///
+  /// In en, this message translates to:
+  /// **'Smooth · up to 20 FPS'**
+  String get terminalRefreshSmooth;
+
+  /// No description provided for @terminalRefreshBalanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced · up to 10 FPS'**
+  String get terminalRefreshBalanced;
+
+  /// No description provided for @terminalRefreshBatterySaver.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery saver · up to 4 FPS'**
+  String get terminalRefreshBatterySaver;
+
   /// No description provided for @terminalFontSize.
   ///
   /// In en, this message translates to:

@@ -78,6 +78,8 @@ void main() {
       ),
     );
     expect(find.text('Setup help'), findsOneWidget);
+    expect(find.text('Terminal refresh speed'), findsOneWidget);
+    expect(find.text('Automatic'), findsOneWidget);
     expect(find.text('Set up your computer'), findsNothing);
     expect(find.textContaining('herdr plugin install'), findsNothing);
     expect(
@@ -96,6 +98,11 @@ void main() {
     await tester.pump();
     expect(launcher.launchedUrl, 'https://herdr-go.github.io/privacy/');
 
+    await tester.scrollUntilVisible(
+      find.text('Setup help'),
+      -300,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.tap(find.text('Setup help'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -137,11 +144,8 @@ void main() {
 
     expect(launcher.launchedUrl, 'https://herdr-go.github.io/zh/#install');
 
-    await tester.scrollUntilVisible(
-      find.text('技术支持'),
-      300,
-      scrollable: find.byType(Scrollable).last,
-    );
+    await tester.ensureVisible(find.text('技术支持'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('技术支持'));
     await tester.pump();
 
@@ -173,7 +177,7 @@ void main() {
     await tester.tap(find.text('Add computer'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Diagnostics'),
+      find.text('EasyTier diagnostic logs'),
       300,
       scrollable: find.byType(Scrollable).last,
     );

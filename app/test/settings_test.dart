@@ -128,6 +128,49 @@ void main() {
     });
   });
 
+  group('terminalRefreshRateProvider', () {
+    test('默认自动并持久化用户选择', () async {
+      final container = await buildContainer({});
+
+      expect(
+        container.read(terminalRefreshRateProvider),
+        TerminalRefreshRate.automatic,
+      );
+      await container
+          .read(terminalRefreshRateProvider.notifier)
+          .select(TerminalRefreshRate.smooth);
+
+      expect(
+        container.read(terminalRefreshRateProvider),
+        TerminalRefreshRate.smooth,
+      );
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getString(terminalRefreshRatePreferenceKey),
+        TerminalRefreshRate.smooth.name,
+      );
+    });
+
+    test('恢复合法档位，非法值回退自动', () async {
+      final saved = await buildContainer({
+        terminalRefreshRatePreferenceKey: TerminalRefreshRate.batterySaver.name,
+      });
+      expect(
+        saved.read(terminalRefreshRateProvider),
+        TerminalRefreshRate.batterySaver,
+      );
+
+      final invalid = await buildContainer({
+        terminalRefreshRatePreferenceKey: 'turbo',
+      });
+      expect(
+        invalid.read(terminalRefreshRateProvider),
+        TerminalRefreshRate.automatic,
+      );
+    });
+  });
+
   group('terminalFontSizeProvider', () {
     test('默认字号可持久化并恢复', () async {
       final container = await buildContainer({});

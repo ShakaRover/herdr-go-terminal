@@ -286,6 +286,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final l10n = context.l10n;
     final localePreference = ref.watch(appLocaleProvider);
     final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
+    final terminalRefreshRate = ref.watch(terminalRefreshRateProvider);
     final terminalFontSize = ref.watch(terminalFontSizeProvider);
     final diagnosticLogging = ref.watch(diagnosticLoggingProvider);
     return Scaffold(
@@ -411,6 +412,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (enabled) => ref
                 .read(terminalAutoResizeProvider.notifier)
                 .setEnabled(enabled),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.terminalRefreshRate),
+            subtitle: Text(l10n.terminalRefreshRateHelp),
+            trailing: DropdownButton<TerminalRefreshRate>(
+              value: terminalRefreshRate,
+              selectedItemBuilder: (_) => [
+                Text(l10n.terminalRefreshAutomatic),
+                const Text('20 FPS'),
+                const Text('10 FPS'),
+                const Text('4 FPS'),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  ref.read(terminalRefreshRateProvider.notifier).select(value);
+                }
+              },
+              items: [
+                DropdownMenuItem(
+                  value: TerminalRefreshRate.automatic,
+                  child: Text(l10n.terminalRefreshAutomatic),
+                ),
+                DropdownMenuItem(
+                  value: TerminalRefreshRate.smooth,
+                  child: Text(l10n.terminalRefreshSmooth),
+                ),
+                DropdownMenuItem(
+                  value: TerminalRefreshRate.balanced,
+                  child: Text(l10n.terminalRefreshBalanced),
+                ),
+                DropdownMenuItem(
+                  value: TerminalRefreshRate.batterySaver,
+                  child: Text(l10n.terminalRefreshBatterySaver),
+                ),
+              ],
+            ),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,

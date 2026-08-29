@@ -21,6 +21,7 @@ final sharedPrefsProvider = Provider<SharedPreferences>(
 const appLocalePreferenceKey = 'app_locale_v1';
 const terminalAutoResizePreferenceKey = 'terminal_auto_resize_v1';
 const terminalFontSizePreferenceKey = 'terminal_font_size_v1';
+const terminalRefreshRatePreferenceKey = 'terminal_refresh_rate_v1';
 const diagnosticLoggingPreferenceKey = 'easytier_diagnostic_logging_v1';
 const terminalDefaultFontSize = 12.5;
 const terminalMinFontSize = 9.5;
@@ -42,6 +43,18 @@ enum AppLocalePreference {
     AppLocalePreference.simplifiedChinese => const Locale('zh'),
     AppLocalePreference.english => const Locale('en'),
   };
+}
+
+enum TerminalRefreshRate {
+  automatic(0),
+  smooth(50),
+  balanced(100),
+  batterySaver(250);
+
+  const TerminalRefreshRate(this.intervalMs);
+
+  /// 0 asks the bridge to use its active/idle adaptive interval.
+  final int intervalMs;
 }
 
 class AppLocaleNotifier extends Notifier<AppLocalePreference> {
@@ -86,6 +99,31 @@ class TerminalAutoResizeNotifier extends Notifier<bool> {
 final terminalAutoResizeProvider =
     NotifierProvider<TerminalAutoResizeNotifier, bool>(
       TerminalAutoResizeNotifier.new,
+    );
+
+class TerminalRefreshRateNotifier extends Notifier<TerminalRefreshRate> {
+  @override
+  TerminalRefreshRate build() {
+    final stored = ref
+        .watch(sharedPrefsProvider)
+        .getString(terminalRefreshRatePreferenceKey);
+    return TerminalRefreshRate.values
+            .where((value) => value.name == stored)
+            .firstOrNull ??
+        TerminalRefreshRate.automatic;
+  }
+
+  Future<void> select(TerminalRefreshRate rate) async {
+    state = rate;
+    await ref
+        .read(sharedPrefsProvider)
+        .setString(terminalRefreshRatePreferenceKey, rate.name);
+  }
+}
+
+final terminalRefreshRateProvider =
+    NotifierProvider<TerminalRefreshRateNotifier, TerminalRefreshRate>(
+      TerminalRefreshRateNotifier.new,
     );
 
 class TerminalFontSizeNotifier extends Notifier<double> {

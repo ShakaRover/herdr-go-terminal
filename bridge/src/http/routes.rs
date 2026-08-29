@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use axum::body::Body;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
@@ -260,6 +260,32 @@ pub async fn create_agent(
 pub struct PaneReadQuery {
     session: Option<String>,
     lines: Option<u32>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaneStreamQuery {
+    session: Option<String>,
+    lines: Option<u32>,
+    interval_ms: Option<u64>,
+}
+
+pub async fn stream_pane(
+    State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>,
+    Query(q): Query<PaneStreamQuery>, ws: WebSocketUpgrade,
+) -> Result<Response, ApiError> {
+    check_access(&state.cfg, &headers, AccessLevel::Read)?;
+    let runtime = state.runtime(q.session.as_deref())?;
+    let lines = q
+        .lines
+        .filter(|lines| *lines > 0)
+        .map(|lines| lines.min(10_000))
+        .unwrap_or(state.cfg.read_lines);
+    maybe_mark_seen(&runtime, &headers, &id, false);
+    let rate = crate::pane_stream::PaneStreamRate::from_interval_ms(q.interval_ms);
+    Ok(ws.on_upgrade(move |socket| {
+        crate::pane_stream::serve(socket, runtime, id, lines, rate)
+    }))
 }
 
 pub async fn read_pane(

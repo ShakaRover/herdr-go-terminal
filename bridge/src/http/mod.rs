@@ -49,6 +49,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/agents/kinds", axum::routing::get(routes::get_agent_kinds))
         .route("/api/v1/agents", axum::routing::post(routes::create_agent))
         .route("/api/v1/pane/{id}", axum::routing::get(routes::read_pane))
+        .route("/api/v1/pane/{id}/stream", axum::routing::get(routes::stream_pane))
         .route("/api/v1/pane/{id}/history", axum::routing::get(routes::pane_history))
         .route("/api/v1/pane/{id}/reply", axum::routing::post(routes::reply_pane))
         .route("/api/v1/pane/{id}/keys", axum::routing::post(routes::keys_pane))

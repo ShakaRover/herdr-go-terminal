@@ -452,6 +452,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Temporarily control the shared Herdr terminal while an agent is open, then return control when you leave. Turn this off to always keep the computer\'s terminal width.';
 
   @override
+  String get terminalRefreshRate => 'Terminal refresh speed';
+
+  @override
+  String get terminalRefreshRateHelp =>
+      'Controls the maximum refresh rate during active output. No output means no phone updates.';
+
+  @override
+  String get terminalRefreshAutomatic => 'Automatic';
+
+  @override
+  String get terminalRefreshSmooth => 'Smooth · up to 20 FPS';
+
+  @override
+  String get terminalRefreshBalanced => 'Balanced · up to 10 FPS';
+
+  @override
+  String get terminalRefreshBatterySaver => 'Battery saver · up to 4 FPS';
+
+  @override
   String get terminalFontSize => 'Terminal text size';
 
   @override
