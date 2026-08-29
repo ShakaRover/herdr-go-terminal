@@ -22,6 +22,8 @@ import '../l10n/generated/app_localizations.dart';
 import '../model/history.dart';
 import '../model/models.dart';
 
+const _paneStreamPingInterval = Duration(seconds: 5);
+
 class ApiException implements Exception {
   const ApiException(this.message, {this.statusCode});
 
@@ -309,6 +311,10 @@ class BridgeApi {
           ..._extraHeaders,
         },
       );
+      // A black-holed mobile connection may not emit an error for minutes.
+      // Dart closes the socket when a ping remains unanswered for one interval,
+      // which feeds the existing REST fallback and reconnect path.
+      socket.pingInterval = _paneStreamPingInterval;
       await for (final event in socket) {
         if (event is! String) continue;
         final decoded = jsonDecode(event);
