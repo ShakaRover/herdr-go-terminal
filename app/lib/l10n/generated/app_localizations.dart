@@ -500,6 +500,24 @@ abstract class AppLocalizations {
   /// **'Reading output…'**
   String get readingOutput;
 
+  /// No description provided for @terminalLoadEarlier.
+  ///
+  /// In en, this message translates to:
+  /// **'Load earlier output'**
+  String get terminalLoadEarlier;
+
+  /// No description provided for @terminalHistoryLines.
+  ///
+  /// In en, this message translates to:
+  /// **'Viewing the latest {count} lines'**
+  String terminalHistoryLines(int count);
+
+  /// No description provided for @backToLive.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to live'**
+  String get backToLive;
+
   /// No description provided for @sendImageTooltip.
   ///
   /// In en, this message translates to:

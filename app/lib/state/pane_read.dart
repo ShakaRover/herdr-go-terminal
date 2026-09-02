@@ -18,11 +18,17 @@ import 'snapshot.dart';
 typedef PaneReadKey = ({String bridgeId, String paneId});
 
 class PaneReadState {
-  const PaneReadState({this.data, this.error, this.streaming = false});
+  const PaneReadState({
+    this.data,
+    this.error,
+    this.streaming = false,
+    this.historyLines,
+  });
 
   final PaneRead? data;
   final Object? error;
   final bool streaming;
+  final int? historyLines;
 }
 
 class PaneReadNotifier extends Notifier<PaneReadState> {
@@ -35,6 +41,7 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
     Duration(seconds: 5),
     Duration(seconds: 10),
   ];
+  static const historyLineSteps = [1000, 3000, 10000];
 
   final PaneReadKey paneKey;
   StreamSubscription<PaneRead>? _streamSubscription;
@@ -46,6 +53,7 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
   String? _session;
   TerminalRefreshRate? _rate;
   bool? _foreground;
+  int? _historyLines;
   int? _refreshGeneration;
   bool _disposed = false;
   bool _configured = false;
@@ -67,7 +75,11 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
     ref.listen(appForegroundProvider, (_, _) => _queueConfigure());
     ref.onDispose(_dispose);
     Future.microtask(() => _configure(api, session, rate, foreground));
-    return PaneReadState(data: _data, error: _error);
+    return PaneReadState(
+      data: _data,
+      error: _error,
+      historyLines: _historyLines,
+    );
   }
 
   void _queueConfigure() {
@@ -114,10 +126,14 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
     if (sessionChanged) {
       _data = null;
       _error = null;
-      state = const PaneReadState();
+      state = PaneReadState(historyLines: _historyLines);
     }
-    await _cancelTransport();
+    _cancelTransport();
     if (_disposed || generation != _generation || !foreground || api == null) {
+      return;
+    }
+    if (_historyLines != null) {
+      if (needsRestSync) await refresh();
       return;
     }
     if (needsRestSync) {
@@ -175,7 +191,7 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
     _streamSubscription = null;
     if (_data == null) {
       _error = error;
-      state = PaneReadState(error: error);
+      state = PaneReadState(error: error, historyLines: _historyLines);
     }
     _startFallback(generation);
     final delay = retryDelays[_retryAttempt.clamp(0, retryDelays.length - 1)];
@@ -209,7 +225,7 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
     try {
       final read = await api.readPane(
         paneKey.paneId,
-        lines: 200,
+        lines: _historyLines ?? 200,
         session: session,
       );
       if (!_disposed &&
@@ -228,13 +244,50 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
           api == _api &&
           session == _session) {
         _error = error;
-        state = PaneReadState(data: _data, error: error);
+        state = PaneReadState(
+          data: _data,
+          error: error,
+          historyLines: _historyLines,
+        );
       }
     } finally {
       if (_refreshGeneration == generation) {
         _refreshGeneration = null;
       }
     }
+  }
+
+  Future<void> loadEarlierOutput() async {
+    final current = _historyLines ?? 0;
+    final next = historyLineSteps.where((lines) => lines > current).firstOrNull;
+    if (_disposed || next == null) return;
+
+    final generation = ++_generation;
+    _historyLines = next;
+    _retryAttempt = 0;
+    _cancelTransport();
+    if (_disposed || generation != _generation) return;
+    state = PaneReadState(
+      data: _data,
+      error: _error,
+      historyLines: _historyLines,
+    );
+    if (_foreground == true && _api != null) await refresh();
+  }
+
+  Future<void> resumeLiveOutput() async {
+    if (_disposed || _historyLines == null) return;
+
+    final generation = ++_generation;
+    _historyLines = null;
+    _retryAttempt = 0;
+    _cancelTransport();
+    if (_disposed || generation != _generation) return;
+    state = PaneReadState(data: _data, error: _error);
+    if (_foreground != true || _api == null) return;
+    await refresh();
+    if (_disposed || generation != _generation) return;
+    _startStream(generation);
   }
 
   void _accept(
@@ -254,24 +307,30 @@ class PaneReadNotifier extends Notifier<PaneReadState> {
     }
     _data = read;
     _error = null;
-    state = PaneReadState(data: read, streaming: streaming);
+    state = PaneReadState(
+      data: read,
+      streaming: streaming,
+      historyLines: _historyLines,
+    );
   }
 
-  Future<void> _cancelTransport() async {
+  void _cancelTransport() {
     _fallbackTimer?.cancel();
     _fallbackTimer = null;
     _retryTimer?.cancel();
     _retryTimer = null;
     final subscription = _streamSubscription;
     _streamSubscription = null;
-    await subscription?.cancel();
+    // A stalled socket may delay cancellation; generation checks already make
+    // its remaining callbacks inert, so transport cleanup must not block UI.
+    if (subscription != null) unawaited(subscription.cancel());
   }
 
   void _dispose() {
     if (_disposed) return;
     _disposed = true;
     _generation += 1;
-    unawaited(_cancelTransport());
+    _cancelTransport();
   }
 }
 

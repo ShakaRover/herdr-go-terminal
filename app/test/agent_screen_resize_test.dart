@@ -28,7 +28,10 @@ class _FakeBridgeApi extends BridgeApi {
 
   final holdCalls = <_HoldCall>[];
   final releaseCalls = <_ReleaseCall>[];
+  final readLines = <int?>[];
+  final paneStream = StreamController<PaneRead>.broadcast(sync: true);
   var _nextLease = 1;
+  var outputTruncated = false;
   Completer<void>? holdGate;
 
   @override
@@ -62,12 +65,23 @@ class _FakeBridgeApi extends BridgeApi {
     String paneId, {
     int? lines,
     String? session,
-  }) async => PaneRead(
-    paneId: paneId,
-    text: 'phone output',
-    truncated: false,
-    revision: 1,
-  );
+  }) async {
+    readLines.add(lines);
+    return PaneRead(
+      paneId: paneId,
+      text: 'phone output',
+      truncated: outputTruncated,
+      revision: 1,
+    );
+  }
+
+  @override
+  Stream<PaneRead> watchPane(
+    String paneId, {
+    int lines = 200,
+    int intervalMs = 0,
+    String? session,
+  }) => paneStream.stream;
 
   @override
   Future<String> holdPaneSize(
@@ -96,6 +110,8 @@ class _FakeBridgeApi extends BridgeApi {
   }) async {
     releaseCalls.add((paneId: paneId, leaseId: leaseId, session: session));
   }
+
+  Future<void> close() => paneStream.close();
 }
 
 Future<void> _pumpAgent(
@@ -104,6 +120,10 @@ Future<void> _pumpAgent(
   required bool? autoResize,
   double? fontSize,
 }) async {
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await api.close();
+  });
   SharedPreferences.setMockInitialValues({
     terminalAutoResizePreferenceKey: ?autoResize,
     terminalFontSizePreferenceKey: ?fontSize,
@@ -134,6 +154,30 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
 }
 
 void main() {
+  testWidgets('loads larger static output windows and returns to live mode', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final api = _FakeBridgeApi()..outputTruncated = true;
+    await _pumpAgent(tester, api, autoResize: false);
+    await _pumpUntil(
+      tester,
+      () => find.text('Load earlier output').evaluate().isNotEmpty,
+    );
+
+    await tester.tap(find.text('Load earlier output'));
+    await _pumpUntil(tester, () => api.readLines.contains(1000));
+    expect(find.text('Viewing the latest 1000 lines'), findsOneWidget);
+    expect(find.text('Back to live'), findsOneWidget);
+
+    await tester.tap(find.text('Back to live'));
+    await _pumpUntil(tester, () => api.readLines.last == 200);
+    expect(find.text('Viewing the latest 1000 lines'), findsNothing);
+  });
+
   testWidgets('holds lease on entry and resizes it only when width changes', (
     tester,
   ) async {

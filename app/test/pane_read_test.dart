@@ -26,10 +26,12 @@ class FakeBridgeApi extends BridgeApi {
 
   String text;
   final seenSessions = <String?>[];
+  final readLines = <int?>[];
   final watchCalls =
       <({String paneId, int lines, int intervalMs, String? session})>[];
   final stream = StreamController<PaneRead>.broadcast();
   var revision = 1;
+  var truncated = false;
 
   @override
   Future<PaneRead> readPane(
@@ -38,10 +40,11 @@ class FakeBridgeApi extends BridgeApi {
     String? session,
   }) async {
     seenSessions.add(session);
+    readLines.add(lines);
     return PaneRead(
       paneId: paneId,
       text: text,
-      truncated: false,
+      truncated: truncated,
       revision: revision,
     );
   }
@@ -196,6 +199,60 @@ void main() {
     await waitUntil(
       () => b1.stream.hasListener && b1.seenSessions.length > readsBeforePause,
     );
+  });
+
+  test('终端历史按 1000/3000/10000 行扩展，浏览期间停流并可恢复实时', () async {
+    final b1 = FakeBridgeApi('live frame')..truncated = true;
+    final b2 = FakeBridgeApi('unused');
+    final container = await buildContainer(b1, b2);
+    const key = (bridgeId: 'b1', paneId: 'w0');
+    final subscription = container.listen(paneReadProvider(key), (_, _) {});
+    addTearDown(subscription.close);
+
+    await waitRead(container, key);
+    await waitUntil(() => b1.stream.hasListener);
+    expect(b1.readLines.last, 200);
+
+    b1
+      ..text = '1000 lines'
+      ..revision = 2;
+    await container.read(paneReadProvider(key).notifier).loadEarlierOutput();
+    expect(container.read(paneReadProvider(key)).historyLines, 1000);
+    expect(container.read(paneReadProvider(key)).data?.text, '1000 lines');
+    expect(b1.readLines.last, 1000);
+    expect(b1.stream.hasListener, isFalse);
+
+    final watchCount = b1.watchCalls.length;
+    await container
+        .read(terminalRefreshRateProvider.notifier)
+        .select(TerminalRefreshRate.smooth);
+    await waitUntil(() => b1.readLines.last == 1000);
+    expect(b1.watchCalls.length, watchCount);
+    expect(b1.stream.hasListener, isFalse);
+
+    b1
+      ..text = '3000 lines'
+      ..revision = 3;
+    await container.read(paneReadProvider(key).notifier).loadEarlierOutput();
+    expect(container.read(paneReadProvider(key)).historyLines, 3000);
+    expect(b1.readLines.last, 3000);
+
+    b1
+      ..text = '10000 lines'
+      ..revision = 4
+      ..truncated = false;
+    await container.read(paneReadProvider(key).notifier).loadEarlierOutput();
+    expect(container.read(paneReadProvider(key)).historyLines, 10000);
+    expect(b1.readLines.last, 10000);
+
+    b1
+      ..text = 'live again'
+      ..revision = 5;
+    await container.read(paneReadProvider(key).notifier).resumeLiveOutput();
+    expect(container.read(paneReadProvider(key)).historyLines, isNull);
+    expect(container.read(paneReadProvider(key)).data?.text, 'live again');
+    expect(b1.readLines.last, 200);
+    await waitUntil(() => b1.stream.hasListener);
   });
 
   test('忽略乱序流帧，断流后立即用 REST 恢复并保留当前画面', () async {

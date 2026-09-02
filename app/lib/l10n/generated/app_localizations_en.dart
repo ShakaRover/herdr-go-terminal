@@ -270,6 +270,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get readingOutput => 'Reading output…';
 
   @override
+  String get terminalLoadEarlier => 'Load earlier output';
+
+  @override
+  String terminalHistoryLines(int count) {
+    return 'Viewing the latest $count lines';
+  }
+
+  @override
+  String get backToLive => 'Back to live';
+
+  @override
   String get sendImageTooltip => 'Send image';
 
   @override

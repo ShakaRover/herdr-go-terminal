@@ -66,6 +66,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   /// 用户停留在底部时，新内容到达自动跟随；上翻后不再抢滚动条。
   bool _stickToBottom = true;
   bool _sending = false;
+  bool _historyLoading = false;
   bool _foreground = true;
   bool _resizeEligible = false;
   bool _leaseRequestInFlight = false;
@@ -146,6 +147,43 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
+  }
+
+  Future<void> _loadEarlierOutput(PaneReadKey paneKey) async {
+    if (_historyLoading) return;
+    final position = _scrollController.hasClients
+        ? (
+            pixels: _scrollController.position.pixels,
+            maxExtent: _scrollController.position.maxScrollExtent,
+          )
+        : null;
+    setState(() => _historyLoading = true);
+    try {
+      await ref.read(paneReadProvider(paneKey).notifier).loadEarlierOutput();
+      if (!mounted || position == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients) return;
+        final newMax = _scrollController.position.maxScrollExtent;
+        final addedExtent = (newMax - position.maxExtent).clamp(0.0, newMax);
+        final target = (position.pixels + addedExtent).clamp(0.0, newMax);
+        _scrollController.jumpTo(target);
+      });
+    } finally {
+      if (mounted) setState(() => _historyLoading = false);
+    }
+  }
+
+  Future<void> _resumeLiveOutput(PaneReadKey paneKey) async {
+    if (_historyLoading) return;
+    setState(() => _historyLoading = true);
+    try {
+      await ref.read(paneReadProvider(paneKey).notifier).resumeLiveOutput();
+      if (!mounted) return;
+      _stickToBottom = true;
+      _scrollToBottom();
+    } finally {
+      if (mounted) setState(() => _historyLoading = false);
+    }
   }
 
   void _updateTerminalViewport(
@@ -577,7 +615,11 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
     // 新内容到达且用户在底部 → 跟随。
     ref.listen(paneReadProvider(paneKey), (prev, next) {
-      if (_stickToBottom && next.data != prev?.data) _scrollToBottom();
+      if (_stickToBottom &&
+          next.historyLines == null &&
+          next.data != prev?.data) {
+        _scrollToBottom();
+      }
     });
 
     final text = readState.data?.text ?? '';
@@ -659,6 +701,60 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               child: Text(
                 l10n.outputRefreshFailed('${readState.error}'),
                 style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          if (readState.historyLines != null ||
+              readState.data?.truncated == true)
+            Container(
+              width: double.infinity,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (readState.historyLines case final lines?)
+                    Text(
+                      l10n.terminalHistoryLines(lines),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        if (readState.data?.truncated == true &&
+                            (readState.historyLines ?? 0) <
+                                PaneReadNotifier.historyLineSteps.last)
+                          TextButton.icon(
+                            onPressed: _historyLoading
+                                ? null
+                                : () => _loadEarlierOutput(paneKey),
+                            icon: _historyLoading
+                                ? const SizedBox.square(
+                                    dimension: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.expand_less, size: 18),
+                            label: Text(
+                              _historyLoading
+                                  ? l10n.loading
+                                  : l10n.terminalLoadEarlier,
+                            ),
+                          ),
+                        if (readState.historyLines != null)
+                          FilledButton.tonal(
+                            onPressed: _historyLoading
+                                ? null
+                                : () => _resumeLiveOutput(paneKey),
+                            child: Text(l10n.backToLive),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           Expanded(
