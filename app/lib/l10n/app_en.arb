@@ -87,8 +87,6 @@
   "@outputRefreshFailed": {"placeholders": {"error": {"type": "String"}}},
   "readingOutput": "Reading output…",
   "terminalLoadEarlier": "Load earlier output",
-  "terminalHistoryLines": "Viewing the latest {count} lines",
-  "@terminalHistoryLines": {"placeholders": {"count": {"type": "int"}}},
   "backToLive": "Back to live",
   "sendImageTooltip": "Send image",
   "replyHint": "Reply to agent…",

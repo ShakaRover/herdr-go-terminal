@@ -32,6 +32,7 @@ class _FakeBridgeApi extends BridgeApi {
   final paneStream = StreamController<PaneRead>.broadcast(sync: true);
   var _nextLease = 1;
   var outputTruncated = false;
+  var outputText = 'phone output';
   Completer<void>? holdGate;
 
   @override
@@ -69,7 +70,7 @@ class _FakeBridgeApi extends BridgeApi {
     readLines.add(lines);
     return PaneRead(
       paneId: paneId,
-      text: 'phone output',
+      text: outputText,
       truncated: outputTruncated,
       revision: 1,
     );
@@ -161,21 +162,31 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    final api = _FakeBridgeApi()..outputTruncated = true;
+    final api = _FakeBridgeApi()
+      ..outputTruncated = true
+      ..outputText = List.generate(120, (index) => 'line $index').join('\n');
     await _pumpAgent(tester, api, autoResize: false);
-    await _pumpUntil(
-      tester,
-      () => find.text('Load earlier output').evaluate().isNotEmpty,
+    await _pumpUntil(tester, () => api.readLines.contains(200));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('load-earlier-output-button')), findsNothing);
+
+    await tester.drag(
+      find.byKey(const Key('terminal-output-gesture-area')),
+      const Offset(0, 4000),
     );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('load-earlier-output-button')), findsOneWidget);
 
-    await tester.tap(find.text('Load earlier output'));
+    api.outputText = List.generate(240, (index) => 'line $index').join('\n');
+    await tester.tap(find.byKey(const Key('load-earlier-output-button')));
     await _pumpUntil(tester, () => api.readLines.contains(1000));
-    expect(find.text('Viewing the latest 1000 lines'), findsOneWidget);
-    expect(find.text('Back to live'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('back-to-live-button')), findsOneWidget);
+    expect(find.byKey(const Key('load-earlier-output-button')), findsNothing);
 
-    await tester.tap(find.text('Back to live'));
+    await tester.tap(find.byKey(const Key('back-to-live-button')));
     await _pumpUntil(tester, () => api.readLines.last == 200);
-    expect(find.text('Viewing the latest 1000 lines'), findsNothing);
+    expect(find.byKey(const Key('back-to-live-button')), findsNothing);
   });
 
   testWidgets('holds lease on entry and resizes it only when width changes', (

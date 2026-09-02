@@ -273,11 +273,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get terminalLoadEarlier => 'Load earlier output';
 
   @override
-  String terminalHistoryLines(int count) {
-    return 'Viewing the latest $count lines';
-  }
-
-  @override
   String get backToLive => 'Back to live';
 
   @override

@@ -65,6 +65,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   /// 用户停留在底部时，新内容到达自动跟随；上翻后不再抢滚动条。
   bool _stickToBottom = true;
+  bool _atTop = false;
   bool _sending = false;
   bool _historyLoading = false;
   bool _foreground = true;
@@ -123,8 +124,12 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       if (!_scrollController.hasClients) return;
       final pos = _scrollController.position;
       final atBottom = pos.maxScrollExtent - pos.pixels < 48;
+      final atTop = pos.pixels < 24;
       if (atBottom != _stickToBottom) {
         _stickToBottom = atBottom;
+      }
+      if (atTop != _atTop) {
+        setState(() => _atTop = atTop);
       }
     });
   }
@@ -612,6 +617,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
     final storedTerminalFontSize = ref.watch(terminalFontSizeProvider);
     final terminalFontSize = _pinchFontSize ?? storedTerminalFontSize;
+    final canLoadEarlier =
+        _atTop &&
+        readState.data?.truncated == true &&
+        (readState.historyLines ?? 0) < PaneReadNotifier.historyLineSteps.last;
 
     // 新内容到达且用户在底部 → 跟随。
     ref.listen(paneReadProvider(paneKey), (prev, next) {
@@ -703,60 +712,6 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-          if (readState.historyLines != null ||
-              readState.data?.truncated == true)
-            Container(
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (readState.historyLines case final lines?)
-                    Text(
-                      l10n.terminalHistoryLines(lines),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        if (readState.data?.truncated == true &&
-                            (readState.historyLines ?? 0) <
-                                PaneReadNotifier.historyLineSteps.last)
-                          TextButton.icon(
-                            onPressed: _historyLoading
-                                ? null
-                                : () => _loadEarlierOutput(paneKey),
-                            icon: _historyLoading
-                                ? const SizedBox.square(
-                                    dimension: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.expand_less, size: 18),
-                            label: Text(
-                              _historyLoading
-                                  ? l10n.loading
-                                  : l10n.terminalLoadEarlier,
-                            ),
-                          ),
-                        if (readState.historyLines != null)
-                          FilledButton.tonal(
-                            onPressed: _historyLoading
-                                ? null
-                                : () => _resumeLiveOutput(paneKey),
-                            child: Text(l10n.backToLive),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -819,6 +774,48 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                                 ),
                               ),
                             ),
+                            if (canLoadEarlier)
+                              Positioned(
+                                top: 8,
+                                left: 0,
+                                right: 0,
+                                child: Center(
+                                  child: IconButton.filledTonal(
+                                    key: const Key(
+                                      'load-earlier-output-button',
+                                    ),
+                                    tooltip: l10n.terminalLoadEarlier,
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: _historyLoading
+                                        ? null
+                                        : () => _loadEarlierOutput(paneKey),
+                                    icon: _historyLoading
+                                        ? const SizedBox.square(
+                                            dimension: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.keyboard_arrow_up_rounded,
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            if (readState.historyLines != null)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: IconButton.filledTonal(
+                                  key: const Key('back-to-live-button'),
+                                  tooltip: l10n.backToLive,
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: _historyLoading
+                                      ? null
+                                      : () => _resumeLiveOutput(paneKey),
+                                  icon: const Icon(Icons.play_arrow_rounded),
+                                ),
+                              ),
                             if (_isPinching)
                               Positioned(
                                 top: 12,

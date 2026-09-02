@@ -240,11 +240,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get terminalLoadEarlier => '加载更早输出';
 
   @override
-  String terminalHistoryLines(int count) {
-    return '正在浏览最近 $count 行';
-  }
-
-  @override
   String get backToLive => '回到实时';
 
   @override
