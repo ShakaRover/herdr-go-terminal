@@ -155,6 +155,65 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
 }
 
 void main() {
+  testWidgets('live output does not interrupt an active upward scroll', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final firstFrame = List.generate(
+      120,
+      (index) => index == 119 ? 'working ⠋' : 'line $index',
+    ).join('\n');
+    final api = _FakeBridgeApi()..outputText = firstFrame;
+    await _pumpAgent(tester, api, autoResize: false);
+    await _pumpUntil(tester, () => api.readLines.contains(200));
+    await tester.pumpAndSettle();
+
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find.byType(SingleChildScrollView),
+    );
+    final controller = scrollView.controller!;
+    expect(controller.offset, controller.position.maxScrollExtent);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('terminal-output-gesture-area'))),
+    );
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 30));
+    await tester.pump();
+    final userOffset = controller.offset;
+    expect(userOffset, lessThan(controller.position.maxScrollExtent));
+
+    api.paneStream.add(
+      PaneRead(
+        paneId: 'w1:p1',
+        text: firstFrame.replaceFirst('working ⠋', 'working ⠙'),
+        truncated: false,
+        revision: 2,
+      ),
+    );
+    await tester.pump();
+
+    expect(controller.offset, userOffset);
+    await gesture.up();
+    await tester.pump();
+
+    api.paneStream.add(
+      PaneRead(
+        paneId: 'w1:p1',
+        text: firstFrame.replaceFirst('working ⠋', 'working ⠹'),
+        truncated: false,
+        revision: 3,
+      ),
+    );
+    await tester.pump();
+
+    expect(controller.offset, userOffset);
+  });
+
   testWidgets('loads larger static output windows and returns to live mode', (
     tester,
   ) async {

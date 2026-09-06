@@ -65,6 +65,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   /// 用户停留在底部时，新内容到达自动跟随；上翻后不再抢滚动条。
   bool _stickToBottom = true;
+  bool _userScrolling = false;
   bool _atTop = false;
   bool _sending = false;
   bool _historyLoading = false;
@@ -125,7 +126,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       final pos = _scrollController.position;
       final atBottom = pos.maxScrollExtent - pos.pixels < 48;
       final atTop = pos.pixels < 24;
-      if (atBottom != _stickToBottom) {
+      if (!_userScrolling && atBottom != _stickToBottom) {
         _stickToBottom = atBottom;
       }
       if (atTop != _atTop) {
@@ -148,10 +149,25 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     _scrollToBottomQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottomQueued = false;
-      if (_scrollController.hasClients) {
+      if (_stickToBottom && _scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
+  }
+
+  bool _handleTerminalScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _userScrolling = true;
+      _stickToBottom = false;
+    } else if (notification is ScrollEndNotification && _userScrolling) {
+      _userScrolling = false;
+      if (_scrollController.hasClients) {
+        final pos = _scrollController.position;
+        _stickToBottom = pos.maxScrollExtent - pos.pixels < 1;
+      }
+    }
+    return false;
   }
 
   Future<void> _loadEarlierOutput(PaneReadKey paneKey) async {
@@ -754,22 +770,25 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            SingleChildScrollView(
-                              controller: _scrollController,
-                              physics: _isPinching
-                                  ? const NeverScrollableScrollPhysics()
-                                  : null,
-                              padding: _mirrorPadding,
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: SelectableText.rich(
-                                  TextSpan(
-                                    children: [
-                                      linesToSpan(
-                                        mirrorLines,
-                                        fontSize: terminalFontSize,
-                                      ),
-                                    ],
+                            NotificationListener<ScrollNotification>(
+                              onNotification: _handleTerminalScrollNotification,
+                              child: SingleChildScrollView(
+                                controller: _scrollController,
+                                physics: _isPinching
+                                    ? const NeverScrollableScrollPhysics()
+                                    : null,
+                                padding: _mirrorPadding,
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: SelectableText.rich(
+                                    TextSpan(
+                                      children: [
+                                        linesToSpan(
+                                          mirrorLines,
+                                          fontSize: terminalFontSize,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
