@@ -66,7 +66,6 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   /// 用户停留在底部时，新内容到达自动跟随；上翻后不再抢滚动条。
   bool _stickToBottom = true;
   bool _userScrolling = false;
-  bool _scrollingTowardBottom = false;
   bool _atTop = false;
   bool _sending = false;
   bool _historyLoading = false;
@@ -160,24 +159,13 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     if (notification is ScrollStartNotification &&
         notification.dragDetails != null) {
       _userScrolling = true;
-      _scrollingTowardBottom = false;
       _stickToBottom = false;
-    } else if (notification is ScrollUpdateNotification && _userScrolling) {
-      final delta = notification.scrollDelta;
-      if (delta != null && delta != 0) {
-        _scrollingTowardBottom = delta > 0;
-      }
     } else if (notification is ScrollEndNotification && _userScrolling) {
       _userScrolling = false;
       if (_scrollController.hasClients) {
         final pos = _scrollController.position;
-        final distanceFromBottom = pos.maxScrollExtent - pos.pixels;
-        _stickToBottom =
-            distanceFromBottom < 1 ||
-            (_scrollingTowardBottom && distanceFromBottom < 48);
-        if (_stickToBottom) _scrollToBottom();
+        _stickToBottom = pos.maxScrollExtent - pos.pixels < 1;
       }
-      _scrollingTowardBottom = false;
     }
     return false;
   }
@@ -788,7 +776,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                                 controller: _scrollController,
                                 physics: _isPinching
                                     ? const NeverScrollableScrollPhysics()
-                                    : null,
+                                    : const ClampingScrollPhysics(),
                                 padding: _mirrorPadding,
                                 child: SizedBox(
                                   width: double.infinity,
