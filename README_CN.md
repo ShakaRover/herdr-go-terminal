@@ -82,13 +82,14 @@ herdr plugin action invoke herdrgo.setup
 ```
 
 setup 会在 Linux 安装 systemd user service，在 macOS 安装 LaunchAgent，随后启动
-服务并显示配对二维码。重复执行 setup 会升级 bridge，但不会改变现有 EasyTier
+服务并显示配对二维码和可粘贴的配对字符串。重复执行 setup 会升级 bridge，但不会改变现有 EasyTier
 secret，已经配对的手机无需重新扫码。整个过程不需要 Rust 工具链或 root 权限。
 
 常用操作：
 
 ```bash
 herdr plugin action invoke herdrgo.pair
+herdr plugin action invoke herdrgo.pair-string
 herdr plugin action invoke herdrgo.status
 herdr plugin action invoke herdrgo.restart
 herdr plugin action invoke herdrgo.uninstall-service
@@ -120,7 +121,8 @@ flutter build apk --debug
 release 构建要求设置 `ANDROID_KEYSTORE_FILE`、
 `ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和
 `ANDROID_KEY_PASSWORD`，缺少任一值都会直接失败。GitHub Actions
-从加密的仓库 secrets 注入这些值。
+从加密的仓库 secrets 注入这些值。发布工作流按 ABI 拆分，产出
+`HerdrGoT-<version>-arm64-v8a.apk` 与 `HerdrGoT-<version>-x86_64.apk`。
 
 ### EasyTier JNI 同步
 
@@ -153,7 +155,7 @@ cargo build --release
 常驻运行可用 `bridge/systemd/` 下的 systemd 单元。bridge **默认零配置即进入
 EasyTier 模式**：自动生成并持久化网络 secret，经默认中继
 `txt://herdrgo.et-link.cc` 组网，REST API 走 data plane 虚拟 TCP，不监听 OS
-端口、不需要 TUN/root。需要配对时在私有终端执行 `herdrgo-bridge pair` 显示
+端口、不需要 TUN/root。需要配对时在私有终端执行 `herdrgo-bridge pair` 显示二维码和配对字符串
 二维码；普通服务启动不会把 secret 写入服务日志。app 侧同样经内嵌 EasyTier +
 本地端口转发，不申请 VpnService。常用选项只有
 `--secret` / `--server` / `--port`（`--help`），高级选项见 `--help-advance`。

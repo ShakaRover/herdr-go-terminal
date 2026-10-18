@@ -147,8 +147,11 @@ pub fn pairing_payload(cfg: &Config) -> anyhow::Result<serde_json::Value> {
     }))
 }
 
-/// 生成人工展示用的二维码与可读摘要。明文 secret 只嵌入二维码，
-/// 不在终端重复打印。服务启动路径不调用本函数。
+/// 生成人工展示用的二维码与可读摘要。
+///
+/// 用户明确要求终端同时显示可直接粘贴到 app 的配对字符串，因此这里会
+/// 打印含 secret 的 compact JSON；二维码与字符串都等同凭据，只在宿主机
+/// 私有终端展示。
 pub fn pairing_output(cfg: &Config) -> anyhow::Result<String> {
     let payload = pairing_payload(cfg)?;
     let code = qrcode::QrCode::new(payload.to_string()).context("encode pairing qr")?;
@@ -166,8 +169,16 @@ pub fn pairing_output(cfg: &Config) -> anyhow::Result<String> {
         let server = server.as_str().context("pairing server")?;
         details.push_str(&format!("    - {server}\n"));
     }
-    details.push_str("\nCredentials are embedded in the QR code and are not printed.\n");
+    details.push_str("\nPairing string (paste into HerdrGoT):\n");
+    details.push_str(&payload.to_string());
+    details.push_str("\n\nThis string contains the network secret. Treat it like a password.\n");
     Ok(details)
+}
+
+/// 输出可直接粘贴到 app 的单行配对字符串（compact JSON）。
+pub fn pairing_string_output(cfg: &Config) -> anyhow::Result<String> {
+    let payload = pairing_payload(cfg)?;
+    Ok(format!("{}\n", payload))
 }
 
 /// 输出机器可读的完整配对载荷。包含 secret，只供显式
@@ -296,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn pairing_output_is_human_readable_and_hides_secret() {
+    fn pairing_output_is_human_readable_and_includes_string() {
         let _g = crate::config::tests_lock();
         let cfg = fresh_cfg("tcp://et.example.com:11010");
         let output = super::pairing_output(&cfg).unwrap();
@@ -305,9 +316,23 @@ mod tests {
         assert!(output.contains("Bridge:  10.126.0.1:8787"));
         assert!(output.contains("Network:"));
         assert!(output.contains("- tcp://et.example.com:11010"));
-        assert!(output.contains("Credentials are embedded in the QR code"));
-        assert!(!output.contains("s3cret"));
-        assert!(!output.contains("\"secret\""));
+        assert!(output.contains("Pairing string (paste into HerdrGoT)"));
+        assert!(output.contains("\"secret\":\"s3cret\""));
+        assert!(output.contains("Treat it like a password"));
+    }
+
+    #[test]
+    fn pairing_string_output_is_single_line_json() {
+        let _g = crate::config::tests_lock();
+        let cfg = fresh_cfg("tcp://et.example.com:11010");
+        let output = super::pairing_string_output(&cfg).unwrap();
+        let trimmed = output.trim();
+        assert!(trimmed.starts_with('{'));
+        assert!(trimmed.ends_with('}'));
+        assert!(!trimmed.contains('\n'));
+        let v: serde_json::Value = serde_json::from_str(trimmed).unwrap();
+        assert_eq!(v["v"], 1);
+        assert_eq!(v["secret"], "s3cret");
     }
 
     #[test]

@@ -104,6 +104,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addDevice => '添加设备';
 
   @override
+  String get addFromString => '字符串添加';
+
+  @override
+  String get addFromStringTitle => '粘贴配对字符串';
+
+  @override
+  String get addFromStringHelp =>
+      '在电脑端运行 `herdr plugin action invoke herdrgo.pair-string`（或 `herdrgo-bridge pair --string`），把输出的字符串粘贴到这里。';
+
+  @override
+  String get addFromStringHint => '粘贴配对 JSON 字符串';
+
+  @override
+  String get invalidPairingString => '配对字符串无效';
+
+  @override
   String get sectionPinned => '已置顶';
 
   @override
@@ -549,6 +565,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get scanPairingHelp => '对准 bridge 启动时打印的配对二维码。';
+
+  @override
+  String get scanFromImageTooltip => '从相册/文件夹选择图片';
+
+  @override
+  String get scanImageNoCode => '图片里没有识别到二维码';
+
+  @override
+  String get scanImageInvalid => '二维码不是 HerdrGo 配对信息';
+
+  @override
+  String scanImageFailed(String error) {
+    return '图片读取失败：$error';
+  }
+
+  @override
+  String cameraUnavailable(String error) {
+    return '相机不可用：$error，可从相册选择二维码图片';
+  }
 
   @override
   String get toggleFlashTooltip => '开关手电筒';

@@ -114,6 +114,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addDevice => 'Add computer';
 
   @override
+  String get addFromString => 'Add from string';
+
+  @override
+  String get addFromStringTitle => 'Paste pairing string';
+
+  @override
+  String get addFromStringHelp =>
+      'On the computer, run `herdr plugin action invoke herdrgo.pair-string` (or `herdrgo-bridge pair --string`) and paste the output here.';
+
+  @override
+  String get addFromStringHint => 'Paste the pairing JSON string';
+
+  @override
+  String get invalidPairingString => 'Invalid pairing string';
+
+  @override
   String get sectionPinned => 'Pinned';
 
   @override
@@ -599,6 +615,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get scanPairingHelp =>
       'Point the camera at the pairing QR code printed when the bridge starts.';
+
+  @override
+  String get scanFromImageTooltip => 'Choose an image from gallery/files';
+
+  @override
+  String get scanImageNoCode => 'No QR code found in the image';
+
+  @override
+  String get scanImageInvalid => 'The QR code is not HerdrGo pairing data';
+
+  @override
+  String scanImageFailed(String error) {
+    return 'Could not read the image: $error';
+  }
+
+  @override
+  String cameraUnavailable(String error) {
+    return 'Camera unavailable: $error. Choose a QR image from the gallery instead.';
+  }
 
   @override
   String get toggleFlashTooltip => 'Toggle flashlight';

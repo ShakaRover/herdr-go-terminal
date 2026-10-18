@@ -1,6 +1,6 @@
 id = "herdrgo"
 name = "HerdrGo"
-version = "3.0.0"
+version = "3.0.1"
 min_herdr_version = "0.8.2"
 description = "Native mobile remote control bridge for Herdr"
 platforms = ["linux", "macos"]
@@ -19,6 +19,12 @@ id = "pair"
 title = "Pair HerdrGo"
 contexts = ["workspace"]
 command = ["sh", "plugin/herdrgo-action.sh", "pair-ui"]
+
+[[actions]]
+id = "pair-string"
+title = "Show HerdrGo pairing string"
+contexts = ["workspace"]
+command = ["sh", "plugin/herdrgo-action.sh", "pair-string-ui"]
 
 [[actions]]
 id = "status"
@@ -61,6 +67,12 @@ id = "pair-ui"
 title = "Pair HerdrGo"
 placement = "overlay"
 command = ["sh", "plugin/herdrgo-ctl.sh", "pair"]
+
+[[panes]]
+id = "pair-string-ui"
+title = "HerdrGo Pairing String"
+placement = "overlay"
+command = ["sh", "plugin/herdrgo-ctl.sh", "pair", "--string"]
 
 [[panes]]
 id = "status-ui"

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,12 +42,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() => _profiles = profiles);
   }
 
-  Future<void> _scanAndAdd() async {
-    final l10n = context.l10n;
-    final profile = await Navigator.of(context).push<RemoteProfile>(
-      MaterialPageRoute(builder: (_) => const ScanPairingScreen()),
-    );
-    if (profile == null || !mounted) return;
+  Future<void> _addProfile(RemoteProfile profile) async {
     // 新 profile 默认 enabled=true（见 RemoteProfile），仅落盘 + 刷新连接
     // 集合，不再有「设为 active」语义。
     await ref.read(profileStoreProvider).add(profile);
@@ -53,9 +50,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _reloadProfiles();
     if (!mounted) return;
     setState(() {
-      _message = l10n.profileAdded(profile.label);
+      _message = context.l10n.profileAdded(profile.label);
       _messageIsError = false;
     });
+  }
+
+  Future<void> _scanAndAdd() async {
+    final profile = await Navigator.of(context).push<RemoteProfile>(
+      MaterialPageRoute(builder: (_) => const ScanPairingScreen()),
+    );
+    if (profile == null || !mounted) return;
+    await _addProfile(profile);
+  }
+
+  Future<void> _addFromString() async {
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (_) => const _PairingStringDialog(),
+    );
+    if (raw == null || raw.isEmpty || !mounted) return;
+    RemoteProfile profile;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('not a json object');
+      }
+      profile = RemoteProfile.fromPairingJson(decoded);
+    } on FormatException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.invalidPairingString)),
+      );
+      return;
+    }
+    await _addProfile(profile);
   }
 
   Future<void> _openWebsitePage({
@@ -318,6 +346,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               label: Text(l10n.addDevice),
             ),
           ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _addFromString,
+              icon: const Icon(Icons.content_paste),
+              label: Text(l10n.addFromString),
+            ),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -558,6 +595,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// 粘贴配对字符串的对话框。控制器由 State 持有，避免在路由退出动画
+/// 期间提前 dispose 导致 "TextEditingController used after being disposed"。
+class _PairingStringDialog extends StatefulWidget {
+  const _PairingStringDialog();
+
+  @override
+  State<_PairingStringDialog> createState() => _PairingStringDialogState();
+}
+
+class _PairingStringDialogState extends State<_PairingStringDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return AlertDialog(
+      scrollable: true,
+      title: Text(l10n.addFromStringTitle),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.addFromStringHelp),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            minLines: 3,
+            maxLines: 5,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: l10n.addFromStringHint,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.commonCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
+          child: Text(l10n.commonConfirm),
+        ),
+      ],
     );
   }
 }

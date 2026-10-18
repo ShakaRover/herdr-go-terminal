@@ -94,7 +94,8 @@ herdr plugin action invoke herdrgo.setup
 ```
 
 The setup action installs a systemd user service on Linux or a LaunchAgent on
-macOS, starts it, and displays the pairing QR code. Re-running setup upgrades
+macOS, starts it, and displays the pairing QR code plus a pasteable pairing
+string. Re-running setup upgrades
 the bridge without changing the existing EasyTier secret, so paired phones keep
 working. No Rust toolchain or root access is required.
 
@@ -102,6 +103,7 @@ Useful actions:
 
 ```bash
 herdr plugin action invoke herdrgo.pair
+herdr plugin action invoke herdrgo.pair-string
 herdr plugin action invoke herdrgo.status
 herdr plugin action invoke herdrgo.restart
 herdr plugin action invoke herdrgo.uninstall-service
@@ -134,6 +136,8 @@ flutter build apk --debug
 Release builds deliberately fail unless `ANDROID_KEYSTORE_FILE`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`
 are set. GitHub Actions supplies them from encrypted repository secrets.
+The release workflow builds split APKs and publishes
+`HerdrGoT-<version>-arm64-v8a.apk` and `HerdrGoT-<version>-x86_64.apk`.
 
 ### EasyTier JNI sync
 
@@ -169,7 +173,7 @@ A systemd unit is available under `bridge/systemd/`. The bridge **enters
 EasyTier mode with zero configuration by default**: it generates and persists a
 network secret, joins via the default relay `txt://herdrgo.et-link.cc`, and
 serves the REST API over the data-plane virtual TCP — listening on no OS port,
-needing no TUN/root. Run `herdrgo-bridge pair` in a private terminal to display
+needing no TUN/root. Run `herdrgo-bridge pair` in a private terminal to display the QR code and pairing string
 the pairing QR code; normal service startup never writes the secret to service
 logs. The app likewise uses embedded EasyTier + a local port forward, with no
 VpnService. The only common options are `--secret` / `--server` / `--port`

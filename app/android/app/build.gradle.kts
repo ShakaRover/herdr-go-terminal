@@ -50,6 +50,8 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
+    val splitPerAbi = project.findProperty("split-per-abi") == "true"
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "dev.herdr.herdrgot"
@@ -57,9 +59,14 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        ndk {
-            abiFilters.clear()
-            abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
+        // Flutter 的 --split-per-abi 由 Flutter Gradle 插件配置 splits；
+        // 此处再设置 abiFilters 会与 splits 冲突。分 ABI 构建时只保留
+        // EasyTier JNI 实际提供的两个 ABI。
+        if (!splitPerAbi) {
+            ndk {
+                abiFilters.clear()
+                abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
+            }
         }
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)

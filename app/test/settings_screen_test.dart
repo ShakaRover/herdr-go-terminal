@@ -90,7 +90,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Privacy policy'),
       300,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('About'), findsOneWidget);
     expect(find.text('Support'), findsOneWidget);
@@ -101,7 +101,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Setup help'),
       -300,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.tap(find.text('Setup help'));
     await tester.pumpAndSettle();
@@ -120,6 +120,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsNothing);
     expect(find.byType(DashboardScreen), findsOneWidget);
+  });
+
+  testWidgets('pairing string dialog rejects invalid input without crashing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpApp(tester, AppLocalePreference.english);
+    await tester.tap(find.text('Add computer'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add from string'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'not-json');
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid pairing string'), findsOneWidget);
   });
 
   testWidgets('Chinese setup help opens the localized website guide', (
@@ -144,7 +165,11 @@ void main() {
 
     expect(launcher.launchedUrl, 'https://herdr-go.github.io/zh/#install');
 
-    await tester.ensureVisible(find.text('技术支持'));
+    await tester.scrollUntilVisible(
+      find.text('技术支持'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('技术支持'));
     await tester.pump();
@@ -179,14 +204,14 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('EasyTier diagnostic logs'),
       300,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find.byType(Scrollable).first,
     );
 
     expect(find.text('EasyTier diagnostic logs'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Share logs'),
       200,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Share logs'), findsOneWidget);
     expect(find.text('Clear logs'), findsOneWidget);

@@ -16,9 +16,11 @@ async fn main() {
         std::fs::set_permissions(&cfg.state_dir, std::fs::Permissions::from_mode(0o700))
             .expect("chmod state dir");
     }
-    if let Some(herdrgo_bridge::config::BridgeCommand::Pair { json }) = cli.command {
+    if let Some(herdrgo_bridge::config::BridgeCommand::Pair { json, string }) = cli.command {
         let output = if json {
             herdrgo_bridge::easytier_net::pairing_json_output(&cfg)
+        } else if string {
+            herdrgo_bridge::easytier_net::pairing_string_output(&cfg)
         } else {
             herdrgo_bridge::easytier_net::pairing_output(&cfg)
         };

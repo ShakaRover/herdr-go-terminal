@@ -141,8 +141,11 @@ pub enum BridgeCommand {
     /// 显示手机扫码所需的二维码后退出
     Pair {
         /// 输出含完整凭据的原始配对 JSON（仅限调试/手工导入）
-        #[arg(long)]
+        #[arg(long, conflicts_with = "string")]
         json: bool,
+        /// 输出可直接粘贴到 app 的单行配对字符串
+        #[arg(long, conflicts_with = "json")]
+        string: bool,
     },
 }
 
@@ -558,10 +561,31 @@ pub(crate) mod tests {
         let _g = tests_lock();
         clear();
         let cli = Cli::parse_from(["herdrgo-bridge", "pair"]);
-        assert_eq!(cli.command, Some(BridgeCommand::Pair { json: false }));
+        assert_eq!(
+            cli.command,
+            Some(BridgeCommand::Pair {
+                json: false,
+                string: false
+            })
+        );
 
         let cli = Cli::parse_from(["herdrgo-bridge", "pair", "--json"]);
-        assert_eq!(cli.command, Some(BridgeCommand::Pair { json: true }));
+        assert_eq!(
+            cli.command,
+            Some(BridgeCommand::Pair {
+                json: true,
+                string: false
+            })
+        );
+
+        let cli = Cli::parse_from(["herdrgo-bridge", "pair", "--string"]);
+        assert_eq!(
+            cli.command,
+            Some(BridgeCommand::Pair {
+                json: false,
+                string: true
+            })
+        );
         clear();
     }
 

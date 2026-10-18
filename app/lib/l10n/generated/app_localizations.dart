@@ -266,6 +266,36 @@ abstract class AppLocalizations {
   /// **'Add computer'**
   String get addDevice;
 
+  /// No description provided for @addFromString.
+  ///
+  /// In en, this message translates to:
+  /// **'Add from string'**
+  String get addFromString;
+
+  /// No description provided for @addFromStringTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste pairing string'**
+  String get addFromStringTitle;
+
+  /// No description provided for @addFromStringHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'On the computer, run `herdr plugin action invoke herdrgo.pair-string` (or `herdrgo-bridge pair --string`) and paste the output here.'**
+  String get addFromStringHelp;
+
+  /// No description provided for @addFromStringHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the pairing JSON string'**
+  String get addFromStringHint;
+
+  /// No description provided for @invalidPairingString.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid pairing string'**
+  String get invalidPairingString;
+
   /// No description provided for @sectionPinned.
   ///
   /// In en, this message translates to:
@@ -1075,6 +1105,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Point the camera at the pairing QR code printed when the bridge starts.'**
   String get scanPairingHelp;
+
+  /// No description provided for @scanFromImageTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an image from gallery/files'**
+  String get scanFromImageTooltip;
+
+  /// No description provided for @scanImageNoCode.
+  ///
+  /// In en, this message translates to:
+  /// **'No QR code found in the image'**
+  String get scanImageNoCode;
+
+  /// No description provided for @scanImageInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The QR code is not HerdrGo pairing data'**
+  String get scanImageInvalid;
+
+  /// No description provided for @scanImageFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the image: {error}'**
+  String scanImageFailed(String error);
+
+  /// No description provided for @cameraUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera unavailable: {error}. Choose a QR image from the gallery instead.'**
+  String cameraUnavailable(String error);
 
   /// No description provided for @toggleFlashTooltip.
   ///

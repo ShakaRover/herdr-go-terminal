@@ -224,48 +224,50 @@ jobs:
           chmod 600 "${keystore_file}"
           echo "ANDROID_KEYSTORE_FILE=${keystore_file}" >> "${GITHUB_ENV}"
 
-      - name: Build signed universal APK
+      - name: Build signed split APKs
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         working-directory: app
-        run: flutter build apk --release
+        run: flutter build apk --release --split-per-abi
 
-      - name: Package Android artifact
+      - name: Package Android artifacts
         shell: bash
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
-          source_apk="app/build/app/outputs/flutter-apk/app-release.apk"
-          asset="HerdrGoT-${version}-android.apk"
           aapt="${ANDROID_SDK_ROOT}/build-tools/36.0.0/aapt"
           apksigner="${ANDROID_SDK_ROOT}/build-tools/36.0.0/apksigner"
           zipalign="${ANDROID_SDK_ROOT}/build-tools/36.0.0/zipalign"
 
-          "${aapt}" dump badging "${source_apk}" | \
-            grep -Fqx "native-code: 'arm64-v8a' 'x86_64'"
-          unzip -Z1 "${source_apk}" | \
-            grep -Fqx 'lib/arm64-v8a/libeasytier_android_jni.so'
-          unzip -Z1 "${source_apk}" | \
-            grep -Fqx 'lib/x86_64/libeasytier_android_jni.so'
-          "${zipalign}" -c -P 16 4 "${source_apk}"
-          "${apksigner}" verify --verbose --print-certs "${source_apk}"
-
           mkdir -p dist
-          cp "${source_apk}" "dist/${asset}"
-          (cd dist && sha256sum "${asset}" > "${asset}.sha256")
-          signer_digest=$("${apksigner}" verify --print-certs "${source_apk}" | \
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
-          test -n "${signer_digest}"
-          {
-            printf 'herdrgo_version=%s\n' "${version}"
-            printf 'herdrgo_commit=%s\n' "${GITHUB_SHA}"
-            printf 'easytier_commit=%s\n' \
-              'ae8f4398240e103e0bde89e38497612a18a65c85'
-            printf 'target=android-universal\n'
-            printf 'signer_cert_sha256=%s\n' "${signer_digest}"
-          } > "dist/${asset}.provenance.txt"
+          for abi in arm64-v8a x86_64; do
+            source_apk="app/build/app/outputs/flutter-apk/app-${abi}-release.apk"
+            asset="HerdrGoT-${version}-${abi}.apk"
+            test -f "${source_apk}"
+
+            "${aapt}" dump badging "${source_apk}" | \
+              grep -Fqx "native-code: '${abi}'"
+            unzip -Z1 "${source_apk}" | \
+              grep -Fqx "lib/${abi}/libeasytier_android_jni.so"
+            "${zipalign}" -c -P 16 4 "${source_apk}"
+            "${apksigner}" verify --verbose --print-certs "${source_apk}"
+
+            cp "${source_apk}" "dist/${asset}"
+            (cd dist && sha256sum "${asset}" > "${asset}.sha256")
+            signer_digest=$("${apksigner}" verify --print-certs "${source_apk}" | \
+              sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            test -n "${signer_digest}"
+            {
+              printf 'herdrgo_version=%s\n' "${version}"
+              printf 'herdrgo_commit=%s\n' "${GITHUB_SHA}"
+              printf 'easytier_commit=%s\n' \
+                'ae8f4398240e103e0bde89e38497612a18a65c85'
+              printf 'target=android-%s\n' "${abi}"
+              printf 'signer_cert_sha256=%s\n' "${signer_digest}"
+            } > "dist/${asset}.provenance.txt"
+          done
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4

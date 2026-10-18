@@ -493,7 +493,10 @@ setup_service() {
 pair_bridge() {
     require_runtime
     export_bridge_env
-    "$runtime_bridge" pair || fail "could not generate pairing information"
+    case "${2:-}" in
+        --string) "$runtime_bridge" pair --string ;;
+        *) "$runtime_bridge" pair ;;
+    esac
     pause_for_close
 }
 
@@ -553,7 +556,7 @@ uninstall_service() {
 command=${1:-}
 case "$command" in
     setup) setup_service ;;
-    pair) pair_bridge ;;
+    pair) pair_bridge "$@" ;;
     status) status_bridge ;;
     start)
         require_runtime

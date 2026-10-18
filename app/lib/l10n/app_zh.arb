@@ -191,5 +191,15 @@
   "absolutePathRequired": "请输入绝对路径。",
   "agentCreatePartialTitle": "终端已创建，但初始化未完成",
   "agentCreatePartialBody": "已创建 pane {paneId}。请先打开检查 agent 的实际状态，再决定是否重试。\n\n{error}",
-  "openTerminal": "打开终端"
+  "openTerminal": "打开终端",
+  "addFromString": "字符串添加",
+  "addFromStringTitle": "粘贴配对字符串",
+  "addFromStringHelp": "在电脑端运行 `herdr plugin action invoke herdrgo.pair-string`（或 `herdrgo-bridge pair --string`），把输出的字符串粘贴到这里。",
+  "addFromStringHint": "粘贴配对 JSON 字符串",
+  "invalidPairingString": "配对字符串无效",
+  "scanFromImageTooltip": "从相册/文件夹选择图片",
+  "scanImageNoCode": "图片里没有识别到二维码",
+  "scanImageInvalid": "二维码不是 HerdrGo 配对信息",
+  "scanImageFailed": "图片读取失败：{error}",
+  "cameraUnavailable": "相机不可用：{error}，可从相册选择二维码图片"
 }
