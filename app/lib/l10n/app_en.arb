@@ -209,8 +209,6 @@
   "scanImageInvalid": "The QR code is not HerdrGo pairing data",
   "scanImageFailed": "Could not read the image: {error}",
   "@scanImageFailed": {"placeholders": {"error": {"type": "String"}}},
-  "cameraUnavailable": "Camera unavailable: {error}. Choose a QR image from the gallery instead.",
-  "@cameraUnavailable": {"placeholders": {"error": {"type": "String"}}},
   "toggleFlashTooltip": "Toggle flashlight",
   "switchCameraTooltip": "Switch camera",
   "blockedNotificationTitle": "{name} needs your attention",

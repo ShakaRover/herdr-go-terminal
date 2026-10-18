@@ -200,6 +200,5 @@
   "scanFromImageTooltip": "从相册/文件夹选择图片",
   "scanImageNoCode": "图片里没有识别到二维码",
   "scanImageInvalid": "二维码不是 HerdrGo 配对信息",
-  "scanImageFailed": "图片读取失败：{error}",
-  "cameraUnavailable": "相机不可用：{error}，可从相册选择二维码图片"
+  "scanImageFailed": "图片读取失败：{error}"
 }

@@ -581,11 +581,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String cameraUnavailable(String error) {
-    return '相机不可用：$error，可从相册选择二维码图片';
-  }
-
-  @override
   String get toggleFlashTooltip => '开关手电筒';
 
   @override

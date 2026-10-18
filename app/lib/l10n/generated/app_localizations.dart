@@ -1130,12 +1130,6 @@ abstract class AppLocalizations {
   /// **'Could not read the image: {error}'**
   String scanImageFailed(String error);
 
-  /// No description provided for @cameraUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Camera unavailable: {error}. Choose a QR image from the gallery instead.'**
-  String cameraUnavailable(String error);
-
   /// No description provided for @toggleFlashTooltip.
   ///
   /// In en, this message translates to:

@@ -631,11 +631,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String cameraUnavailable(String error) {
-    return 'Camera unavailable: $error. Choose a QR image from the gallery instead.';
-  }
-
-  @override
   String get toggleFlashTooltip => 'Toggle flashlight';
 
   @override
