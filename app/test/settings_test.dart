@@ -200,7 +200,7 @@ void main() {
         terminalFontSizePreferenceKey: 1.0,
       });
       expect(tooSmall.read(terminalFontSizeProvider), terminalMinFontSize);
-      expect(terminalMinFontSize, 7.5);
+      expect(terminalMinFontSize, 5.5);
     });
   });
 

@@ -57,7 +57,7 @@ void main() {
     expect(find.text('11.0 pt'), findsOneWidget);
     expect(tester.widget<Slider>(find.byType(Slider)).value, 11.0);
     expect(tester.widget<Slider>(find.byType(Slider)).min, terminalMinFontSize);
-    expect(terminalMinFontSize, 7.5);
+    expect(terminalMinFontSize, 5.5);
   });
 
   testWidgets('language selection updates the app and persists', (

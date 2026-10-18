@@ -24,7 +24,7 @@ const terminalFontSizePreferenceKey = 'terminal_font_size_v1';
 const terminalRefreshRatePreferenceKey = 'terminal_refresh_rate_v1';
 const diagnosticLoggingPreferenceKey = 'easytier_diagnostic_logging_v1';
 const terminalDefaultFontSize = 12.5;
-const terminalMinFontSize = 7.5;
+const terminalMinFontSize = 5.5;
 const terminalMaxFontSize = 16.0;
 
 double normalizeTerminalFontSize(double value) {
