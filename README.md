@@ -45,6 +45,10 @@ Claude-style approval menu recognized as native buttons — one tap to approve.*
 - **Dashboard triage** — blocked agents float to the top ("needs you"), working
   next, the rest sink; pull-to-refresh, offline/read-only banners, multi-session
   switching.
+- **Spaces** — switch between Agents and Spaces inside a connected computer.
+  Spaces lists Herdr workspaces; opening one shows every pane grouped by tab.
+  Agent and shell panes both open the terminal, accept input, and temporarily
+  take over terminal sizing.
 - **Agent conversation** — ANSI-colored terminal mirror with auto-follow, a reply
   box, and a special key bar (Esc / Ctrl+C / arrows / Tab / Shift+Tab / Enter).
 - **Native dialog buttons** — Claude-style single-select approval/prompt menus

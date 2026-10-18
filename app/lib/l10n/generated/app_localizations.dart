@@ -290,6 +290,90 @@ abstract class AppLocalizations {
   /// **'Other'**
   String get sectionOther;
 
+  /// No description provided for @agentsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Agents'**
+  String get agentsTab;
+
+  /// No description provided for @spacesTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Spaces'**
+  String get spacesTab;
+
+  /// No description provided for @noSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'No spaces detected\nCreate a workspace in Herdr on your computer and it will appear here.'**
+  String get noSpaces;
+
+  /// No description provided for @spaceNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Space {number}'**
+  String spaceNumber(int number);
+
+  /// No description provided for @spaceSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{tabs} tabs · {panes} panes · {agents} agents'**
+  String spaceSummary(int tabs, int panes, int agents);
+
+  /// No description provided for @spaceWindowNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Tab {number}'**
+  String spaceWindowNumber(int number);
+
+  /// No description provided for @spaceWindowUnnamed.
+  ///
+  /// In en, this message translates to:
+  /// **'Tab'**
+  String get spaceWindowUnnamed;
+
+  /// No description provided for @spaceWindowPaneCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 pane} other{{count} panes}}'**
+  String spaceWindowPaneCount(int count);
+
+  /// No description provided for @spaceNoPanes.
+  ///
+  /// In en, this message translates to:
+  /// **'No panes in this tab'**
+  String get spaceNoPanes;
+
+  /// No description provided for @spaceEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This space has no tabs'**
+  String get spaceEmpty;
+
+  /// No description provided for @spaceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This space is no longer available'**
+  String get spaceUnavailable;
+
+  /// No description provided for @spaceFocused.
+  ///
+  /// In en, this message translates to:
+  /// **'Focused'**
+  String get spaceFocused;
+
+  /// No description provided for @shellPane.
+  ///
+  /// In en, this message translates to:
+  /// **'Shell'**
+  String get shellPane;
+
+  /// No description provided for @shellReplyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Send input…'**
+  String get shellReplyHint;
+
   /// No description provided for @statusBlocked.
   ///
   /// In en, this message translates to:
@@ -529,6 +613,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rename agent'**
   String get renameAgentTitle;
+
+  /// No description provided for @renamePaneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename pane'**
+  String get renamePaneTitle;
 
   /// No description provided for @renameAgentHelper.
   ///

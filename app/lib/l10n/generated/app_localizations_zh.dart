@@ -116,6 +116,56 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sectionOther => '其他';
 
   @override
+  String get agentsTab => 'Agents';
+
+  @override
+  String get spacesTab => 'Spaces';
+
+  @override
+  String get noSpaces => '没有检测到 space\n在电脑上的 herdr 里创建一个 workspace，这里就会出现';
+
+  @override
+  String spaceNumber(int number) {
+    return '空间 $number';
+  }
+
+  @override
+  String spaceSummary(int tabs, int panes, int agents) {
+    return '$tabs 个窗口 · $panes 个窗格 · $agents 个 agent';
+  }
+
+  @override
+  String spaceWindowNumber(int number) {
+    return '窗口 $number';
+  }
+
+  @override
+  String get spaceWindowUnnamed => '窗口';
+
+  @override
+  String spaceWindowPaneCount(int count) {
+    return '$count 个窗格';
+  }
+
+  @override
+  String get spaceNoPanes => '这个窗口里没有窗格';
+
+  @override
+  String get spaceEmpty => '这个空间还没有窗口';
+
+  @override
+  String get spaceUnavailable => '这个空间已不存在';
+
+  @override
+  String get spaceFocused => '当前焦点';
+
+  @override
+  String get shellPane => 'Shell';
+
+  @override
+  String get shellReplyHint => '发送输入…';
+
+  @override
   String get statusBlocked => '待处理';
 
   @override
@@ -250,6 +300,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get renameAgentTitle => '重命名 agent';
+
+  @override
+  String get renamePaneTitle => '重命名窗格';
 
   @override
   String get renameAgentHelper => '留空则清除别名，恢复默认名';

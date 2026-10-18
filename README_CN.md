@@ -41,6 +41,9 @@ TUN、不用 root、不用申请 VPN 权限，secret 自动生成并持久化。
 
 - **Dashboard triage**：blocked 置顶（「需要你处理」），working 其次，其余沉底；
   下拉刷新、断线/只读横幅、多 herdr session 切换。
+- **Spaces**：单机 tab 内可在 Agents / Spaces 间切换。Spaces 按 herdr workspace
+  列出空间，点进去按窗口（tab）展示全部窗格；agent 与 shell 窗格都能打开终端、
+  发送输入并临时接管终端尺寸。
 - **agent 对话**：ANSI 彩色输出镜像（自动跟随底部）、回复框、特殊按键条
   （Esc / Ctrl+C / 方向键 / Tab / Shift+Tab / Enter）。
 - **对话框按钮**：识别 Claude 式单选审批/提问菜单（prompt-select）为原生按钮；

@@ -126,6 +126,63 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sectionOther => 'Other';
 
   @override
+  String get agentsTab => 'Agents';
+
+  @override
+  String get spacesTab => 'Spaces';
+
+  @override
+  String get noSpaces =>
+      'No spaces detected\nCreate a workspace in Herdr on your computer and it will appear here.';
+
+  @override
+  String spaceNumber(int number) {
+    return 'Space $number';
+  }
+
+  @override
+  String spaceSummary(int tabs, int panes, int agents) {
+    return '$tabs tabs · $panes panes · $agents agents';
+  }
+
+  @override
+  String spaceWindowNumber(int number) {
+    return 'Tab $number';
+  }
+
+  @override
+  String get spaceWindowUnnamed => 'Tab';
+
+  @override
+  String spaceWindowPaneCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count panes',
+      one: '1 pane',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get spaceNoPanes => 'No panes in this tab';
+
+  @override
+  String get spaceEmpty => 'This space has no tabs';
+
+  @override
+  String get spaceUnavailable => 'This space is no longer available';
+
+  @override
+  String get spaceFocused => 'Focused';
+
+  @override
+  String get shellPane => 'Shell';
+
+  @override
+  String get shellReplyHint => 'Send input…';
+
+  @override
   String get statusBlocked => 'Waiting';
 
   @override
@@ -283,6 +340,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get renameAgentTitle => 'Rename agent';
+
+  @override
+  String get renamePaneTitle => 'Rename pane';
 
   @override
   String get renameAgentHelper =>

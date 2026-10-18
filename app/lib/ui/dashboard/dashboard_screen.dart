@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../model/models.dart';
+import '../../model/spaces.dart';
 import '../../state/bridges.dart';
 import '../../state/easytier_runtime.dart';
 import '../../state/pinned.dart';
@@ -13,6 +14,7 @@ import '../../util/relative_time.dart';
 import '../agent/agent_screen.dart';
 import '../content_pane.dart';
 import '../settings/settings_screen.dart';
+import '../spaces/space_screen.dart';
 import '../status_style.dart';
 import 'agent_preview_sheet.dart';
 import 'create_agent_sheet.dart';
@@ -334,14 +336,28 @@ class _AllBridgeTab extends ConsumerWidget {
   }
 }
 
-/// 单 bridge tab：原 dashboard 视图（四档断线横幅 + session 过滤后的列表）。
-class _SingleBridgeTab extends ConsumerWidget {
+/// 单 bridge tab 内的两种视图。全部 tab 不受影响，仍是纯 agents 列表。
+enum _BridgeView { agents, spaces }
+
+/// 单 bridge tab：四档断线横幅 + Agents/Spaces 切换。
+///
+/// Agents 保持原 triage 列表；Spaces 按 herdr workspace 列出空间，点进去看
+/// 窗口/窗格并接管终端。
+class _SingleBridgeTab extends ConsumerStatefulWidget {
   const _SingleBridgeTab({required this.conn});
 
   final BridgeConn conn;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SingleBridgeTab> createState() => _SingleBridgeTabState();
+}
+
+class _SingleBridgeTabState extends ConsumerState<_SingleBridgeTab> {
+  _BridgeView _view = _BridgeView.agents;
+
+  @override
+  Widget build(BuildContext context) {
+    final conn = widget.conn;
     final l10n = context.l10n;
     final state = ref.watch(bridgeSnapshotProvider(conn.id));
     final session = ref.watch(sessionFilterProvider(conn.id));
@@ -386,18 +402,48 @@ class _SingleBridgeTab extends ConsumerWidget {
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             text: l10n.readOnlyMode,
           ),
+        if (snap != null)
+          Padding(
+            padding: contentPanePadding(
+              context,
+              const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<_BridgeView>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                    value: _BridgeView.agents,
+                    icon: const Icon(Icons.smart_toy_outlined),
+                    label: Text(l10n.agentsTab),
+                  ),
+                  ButtonSegment(
+                    value: _BridgeView.spaces,
+                    icon: const Icon(Icons.space_dashboard_outlined),
+                    label: Text(l10n.spacesTab),
+                  ),
+                ],
+                selected: {_view},
+                onSelectionChanged: (selection) =>
+                    setState(() => _view = selection.first),
+              ),
+            ),
+          ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () =>
                 ref.read(bridgeSnapshotProvider(conn.id).notifier).refresh(),
             child: snap == null
                 ? const _LoadingOrEmpty()
-                : _BridgePaneList(
+                : _view == _BridgeView.agents
+                ? _BridgePaneList(
                     panes: panes,
                     pinned: ref.watch(pinnedPanesProvider),
                     showBridgeLabel: false,
                     session: session,
-                  ),
+                  )
+                : _SpaceList(bridgeId: conn.id, spaces: snap.spaces),
           ),
         ),
       ],
@@ -446,6 +492,32 @@ class _LoadingOrEmpty extends StatelessWidget {
   }
 }
 
+/// 列表空态：图标 + 居中说明；保留可滚动以支持下拉刷新。
+class _EmptyList extends StatelessWidget {
+  const _EmptyList({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: contentPanePadding(context, const EdgeInsets.all(32)),
+      children: [
+        const SizedBox(height: 80),
+        Icon(icon, size: 48, color: Theme.of(context).colorScheme.outline),
+        const SizedBox(height: 16),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
+    );
+  }
+}
+
 /// 四段分组列表（已置顶 / 需要你处理 / 工作中 / 其他），单 bridge 与聚合
 /// 视图共用：入参已按目标序排好（单 bridge 为 triageSorted，聚合为
 /// aggregateBridgePanes），pin 三段式按各自 bridgeId + session 判。
@@ -470,23 +542,9 @@ class _BridgePaneList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (panes.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: contentPanePadding(context, const EdgeInsets.all(32)),
-        children: [
-          const SizedBox(height: 80),
-          Icon(
-            Icons.pest_control_rodent_outlined,
-            size: 48,
-            color: Theme.of(context).colorScheme.outline,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            context.l10n.noAgents,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
+      return _EmptyList(
+        icon: Icons.pest_control_rodent_outlined,
+        text: context.l10n.noAgents,
       );
     }
 
@@ -573,6 +631,106 @@ class _BridgePaneList extends StatelessWidget {
         context,
         listen: false,
       ).read(sessionFilterProvider(bridgeId));
+}
+
+/// Spaces 列表：每个 herdr workspace 一张卡，点进去看窗口/窗格。
+class _SpaceList extends StatelessWidget {
+  const _SpaceList({required this.bridgeId, required this.spaces});
+
+  final String bridgeId;
+  final List<SpaceInfo> spaces;
+
+  @override
+  Widget build(BuildContext context) {
+    if (spaces.isEmpty) {
+      return _EmptyList(
+        icon: Icons.space_dashboard_outlined,
+        text: context.l10n.noSpaces,
+      );
+    }
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: contentPanePadding(
+        context,
+        const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      children: [
+        for (final space in spaces)
+          _SpaceCard(bridgeId: bridgeId, space: space),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+class _SpaceCard extends StatelessWidget {
+  const _SpaceCard({required this.bridgeId, required this.space});
+
+  final String bridgeId;
+  final SpaceInfo space;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final scheme = Theme.of(context).colorScheme;
+    final status = space.status;
+    final title = spaceTitle(l10n, space);
+    final cwd = space.cwd?.trim();
+    final summary = l10n.spaceSummary(
+      space.tabCount,
+      space.paneCount,
+      space.agentCount,
+    );
+    final subtitle = [
+      summary,
+      if (cwd != null && cwd.isNotEmpty) cwd,
+    ].join('\n');
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        leading: Icon(
+          Icons.space_dashboard_outlined,
+          color: status == null ? scheme.outline : statusColor(scheme, status),
+        ),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (space.focused) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.my_location, size: 14, color: scheme.primary),
+            ],
+          ],
+        ),
+        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+        isThreeLine: cwd != null && cwd.isNotEmpty,
+        trailing: status == null
+            ? const Icon(Icons.chevron_right)
+            : Chip(
+                label: Text(statusLabel(l10n, status)),
+                visualDensity: VisualDensity.compact,
+                side: BorderSide.none,
+                backgroundColor: statusColor(
+                  scheme,
+                  status,
+                ).withValues(alpha: 0.15),
+              ),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => SpaceScreen(
+                bridgeId: bridgeId,
+                workspaceId: space.workspace.workspaceId,
+                initialTitle: title,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _SectionHeader extends StatelessWidget {

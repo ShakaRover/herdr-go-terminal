@@ -592,9 +592,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final pane = ref
         .read(bridgeSnapshotProvider(widget.bridgeId))
         .data
-        ?.agents
-        .where((p) => p.paneId == widget.paneId)
-        .firstOrNull;
+        ?.paneById(widget.paneId);
     if (api == null || pane == null || _sending) return;
     final label = await showRenamePaneDialog(context, pane);
     if (label == null || !mounted) return;
@@ -626,9 +624,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final readState = ref.watch(paneReadProvider(paneKey));
     final snapshotState = ref.watch(bridgeSnapshotProvider(widget.bridgeId));
     final snap = snapshotState.data;
-    final pane = snap?.agents
-        .where((p) => p.paneId == widget.paneId)
-        .firstOrNull;
+    final pane = snap?.paneById(widget.paneId);
     final readOnly = snap?.readOnly ?? false;
     final terminalAutoResize = ref.watch(terminalAutoResizeProvider);
     final storedTerminalFontSize = ref.watch(terminalFontSizeProvider);
@@ -650,7 +646,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final text = readState.data?.text ?? '';
     final lines = splitLines(parseAnsi(text));
     // 尾部对话框识别：命中则菜单区域换成原生按钮（问题与前言保持原文）。
-    final promptRegion = text.isEmpty ? null : detectPromptSelectRegion(lines);
+    // shell pane 的输出不是 agent 对话框，误判成按钮会盲发方向键，跳过。
+    final promptRegion = text.isEmpty || (pane?.isShell ?? false)
+        ? null
+        : detectPromptSelectRegion(lines);
     _lastPromptRegion = promptRegion;
     final mirrorLines = promptRegion != null
         ? trimTrailingBlank(lines.sublist(0, promptRegion.startLine))
@@ -668,13 +667,18 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             ),
             if (pane != null)
               Text(
-                '${pane.workspaceLabel} · ${pane.agent}',
+                [
+                  pane.workspaceLabel,
+                  if (pane.tabLabel != null) pane.tabLabel!,
+                  pane.isShell ? l10n.shellPane : pane.agent,
+                ].where((part) => part.isNotEmpty).join(' · '),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
           ],
         ),
         actions: [
-          if (pane != null)
+          // shell pane 的 status 是缺省 unknown，显示状态 chip 只会误导。
+          if (pane != null && !pane.isShell)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Chip(
@@ -883,14 +887,16 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             ),
           if (!readOnly) ...[
             const Divider(height: 1),
-            ContentPane(child: _buildComposer(context)),
+            ContentPane(
+              child: _buildComposer(context, shell: pane?.isShell == true),
+            ),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildComposer(BuildContext context) {
+  Widget _buildComposer(BuildContext context, {required bool shell}) {
     return SafeArea(
       top: false,
       child: Column(
@@ -932,7 +938,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     maxLines: 4,
                     textInputAction: TextInputAction.newline,
                     decoration: InputDecoration(
-                      hintText: context.l10n.replyHint,
+                      hintText: shell
+                          ? context.l10n.shellReplyHint
+                          : context.l10n.replyHint,
                       isDense: true,
                       border: OutlineInputBorder(),
                     ),

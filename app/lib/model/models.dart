@@ -100,8 +100,23 @@ class PaneInfo {
   /// 该 pane 可能有对话历史（agent 命名了会话且有 journal 适配器）。
   final bool hasSession;
 
-  /// 展示名优先级：paneLabel > sessionName > agent。
-  String get displayName => paneLabel ?? sessionName ?? agent;
+  /// 展示名优先级：paneLabel > sessionName > agent；
+  /// shell pane 没有 agent 名时退回 cwd 末级目录，避免列表里全是 "shell"。
+  String get displayName {
+    final label = paneLabel?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    final session = sessionName?.trim();
+    if (session != null && session.isNotEmpty) return session;
+    if (isShell) {
+      final parts = cwd
+          .trim()
+          .split('/')
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (parts.isNotEmpty) return parts.last;
+    }
+    return agent;
+  }
 
   bool get isShell => kind == 'shell';
 
@@ -260,6 +275,20 @@ class Snapshot {
 
   bool get readOnly =>
       device != null && device!.enforced && !device!.authorized;
+
+  /// agents + shellPanes 的合并视图（spaces 拓扑、详情页共用）。
+  List<PaneInfo> get allPanes => [...agents, ...shellPanes];
+
+  /// 按 paneId 查任意 pane（agent 或 shell）；不存在返回 null。
+  PaneInfo? paneById(String paneId) {
+    for (final pane in agents) {
+      if (pane.paneId == paneId) return pane;
+    }
+    for (final pane in shellPanes) {
+      if (pane.paneId == paneId) return pane;
+    }
+    return null;
+  }
 
   factory Snapshot.fromJson(Map<String, dynamic> j) => Snapshot(
     bridgeConnected: _s(j, 'bridge', 'disconnected') == 'connected',

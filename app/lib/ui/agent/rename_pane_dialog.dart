@@ -13,7 +13,9 @@ Future<String?> showRenamePaneDialog(BuildContext context, PaneInfo pane) {
   return showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text(ctx.l10n.renameAgentTitle),
+      title: Text(
+        pane.isShell ? ctx.l10n.renamePaneTitle : ctx.l10n.renameAgentTitle,
+      ),
       content: TextField(
         controller: controller,
         autofocus: true,
