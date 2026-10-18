@@ -473,7 +473,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             value: terminalFontSize,
             min: terminalMinFontSize,
             max: terminalMaxFontSize,
-            divisions: 65,
+            divisions: ((terminalMaxFontSize - terminalMinFontSize) * 10)
+                .round(),
             onChanged: (value) =>
                 ref.read(terminalFontSizeProvider.notifier).preview(value),
             onChangeEnd: (value) =>

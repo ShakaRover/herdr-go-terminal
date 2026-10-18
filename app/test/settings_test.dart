@@ -195,6 +195,12 @@ void main() {
         terminalFontSizePreferenceKey: 99.0,
       });
       expect(tooLarge.read(terminalFontSizeProvider), 16.0);
+
+      final tooSmall = await buildContainer({
+        terminalFontSizePreferenceKey: 1.0,
+      });
+      expect(tooSmall.read(terminalFontSizeProvider), terminalMinFontSize);
+      expect(terminalMinFontSize, 7.5);
     });
   });
 
