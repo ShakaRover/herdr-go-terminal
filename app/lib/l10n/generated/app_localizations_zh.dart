@@ -10,7 +10,7 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appName => 'HerdrGo';
+  String get appName => 'HerdrGoT';
 
   @override
   String get allBridges => '全部';

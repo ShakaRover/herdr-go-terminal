@@ -1,4 +1,4 @@
-package dev.herdr.herdrgo
+package dev.herdr.herdrgot
 
 import com.easytier.jni.EasyTierJNI
 import io.flutter.embedding.android.FlutterActivity

@@ -26,7 +26,7 @@ gradle.taskGraph.whenReady {
 }
 
 android {
-    namespace = "dev.herdr.herdrgo"
+    namespace = "dev.herdr.herdrgot"
     compileSdk = flutter.compileSdkVersion
     // EasyTier JNI is built with this NDK locally and in release CI.
     ndkVersion = "28.2.13676358"
@@ -52,7 +52,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "dev.herdr.herdrgo"
+        applicationId = "dev.herdr.herdrgot"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

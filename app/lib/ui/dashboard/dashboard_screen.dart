@@ -62,7 +62,7 @@ class DashboardScreen extends ConsumerWidget {
 
           return Scaffold(
             appBar: AppBar(
-              title: const Text('HerdrGo'),
+              title: Text(l10n.appName),
               bottom: TabBar(
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
