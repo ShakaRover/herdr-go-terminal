@@ -101,3 +101,8 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# shared_preferences_android 2.5.0 在 release/R8 下会触发 Pigeon
+# NoSuchMethodError（getAll），固定到 3.0.0 已验证的版本。
+dependency_overrides:
+  shared_preferences_android: 2.4.27
