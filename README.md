@@ -55,7 +55,9 @@ Claude-style approval menu recognized as native buttons — one tap to approve.*
   (prompt-select) become native buttons, guarded by a fresh-read → re-recognize →
   structural-equality → expectedPrompt-binding chain before any key is sent.
 - **History** — paged full conversation read from the agent's own session log
-  (beyond the terminal scrollback).
+  (beyond the terminal scrollback); supports Claude, Codex, pi, OMP, and
+  opencode. OMP sessions are resolved from the pane cwd when Herdr does not
+  report a session reference.
 - **Agent creation** — start a supported Herdr agent from the phone in an
   existing or new workspace, with an optional initial task (Herdr 0.8.2+).
 - **Images** — pick from the gallery, upload to the host, and the returned path

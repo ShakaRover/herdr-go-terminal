@@ -27,7 +27,7 @@ session（缺省为 primary）。写端点（POST）受 device gate 约束（见
 | GET | `/api/v1/agents/kinds` | 从 Herdr 动态读取可用 agent 类型（需 Herdr 0.8.2+） |
 | POST | `/api/v1/agents` | 在新建 workspace 或已有 workspace 的新 tab 中启动 agent，可选发送 `initialPrompt` |
 | GET | `/api/v1/pane/{id}` | 读 pane 终端镜像（ANSI 文本），`?lines=`（默认 200，上限 10000）；带 ETag，支持 `If-None-Match` → 304 |
-| GET | `/api/v1/pane/{id}/history` | 从 agent 自己的会话日志分页读历史，`?limit=&before=` 游标分页 |
+| GET | `/api/v1/pane/{id}/history` | 从 agent 自己的会话日志分页读历史，`?limit=&before=` 游标分页（claude / codex / pi / omp / opencode） |
 | POST | `/api/v1/pane/{id}/reply` | 发送文本，body `{text?, submit?, expectedPrompt?}`；带 `expectedPrompt` 时先做 prompt-binding 校验，不匹配返回 409 `prompt_changed` |
 | POST | `/api/v1/pane/{id}/keys` | 发送按键，body `{keys: [...], expectedPrompt?}`，同样支持 prompt-binding |
 | POST | `/api/v1/pane/{id}/resize` | 用 `{cols, rows, leaseId?}` 获取或续期 terminal controller 租约；首次请求会 takeover，返回 `{leaseId}`，租约 20 秒未续期会自动释放 |
@@ -182,6 +182,7 @@ herdrgot-bridge --server tcp://et.example.com:11010 --port 23000
 | `HERDRGOT_BRIDGE_TRANSCRIPT_ROOT` | `~/.claude/projects`（逗号多 root） | claude 日志 root |
 | `HERDRGOT_BRIDGE_CODEX_ROOT` | `$CODEX_HOME/sessions` | codex 日志 root |
 | `HERDRGOT_BRIDGE_PI_ROOT` | `$PI_CODING_AGENT_DIR/sessions` | pi 日志 root |
+| `HERDRGOT_BRIDGE_OMP_ROOT` | `~/.omp/agent/sessions` | omp 会话日志 root（按 pane cwd 推断最新会话） |
 | `HERDRGOT_BRIDGE_OPENCODE_ROOT` | `$XDG_DATA_HOME/opencode` 或 `~/.local/share/opencode` | opencode 数据目录 |
 | `HERDRGOT_BRIDGE_EASYTIERSERWORKNAME` | 空 | 覆盖网络名；缺省用 state 目录持久化的 uuid（`<state_dir>/easytier_network_id`，0600） |
 | `HERDRGOT_BRIDGE_EASYTIERSERVIRTUALIP` | `10.126.0.1/24` | 静态虚拟 IPv4（CIDR）；缺省固定值，一般无需配置 |

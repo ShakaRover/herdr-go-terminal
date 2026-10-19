@@ -1,6 +1,6 @@
 id = "herdrgot"
 name = "HerdrGoT"
-version = "3.0.2"
+version = "3.0.3"
 min_herdr_version = "0.8.2"
 description = "Native mobile remote control bridge for Herdr"
 platforms = ["linux", "macos"]

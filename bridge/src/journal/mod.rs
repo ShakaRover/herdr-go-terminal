@@ -1,6 +1,7 @@
 pub mod claude;
 pub mod codex;
 pub mod files;
+pub mod omp;
 pub mod opencode;
 pub mod pi;
 pub mod text;
@@ -88,6 +89,7 @@ pub struct JournalRegistry {
     claude: claude::ClaudeAdapter,
     codex: codex::CodexAdapter,
     pi: pi::PiAdapter,
+    omp: omp::OmpAdapter,
     opencode: opencode::OpencodeAdapter,
     enabled: bool,
 }
@@ -98,13 +100,50 @@ impl JournalRegistry {
             claude: claude::ClaudeAdapter::new(cfg.transcript_roots.clone()),
             codex: codex::CodexAdapter::new(cfg.codex_root.clone()),
             pi: pi::PiAdapter::new(cfg.pi_root.clone()),
+            omp: omp::OmpAdapter::new(cfg.omp_root.clone()),
             opencode: opencode::OpencodeAdapter::new(cfg.opencode_root.clone()),
             enabled: cfg.transcript,
         }
     }
 
     pub fn has_adapter(&self, agent: &str) -> bool {
-        matches!(agent, "claude" | "codex" | "pi" | "opencode")
+        matches!(agent, "claude" | "codex" | "pi" | "omp" | "opencode")
+    }
+
+    /// 解析 pane 的历史会话引用。herdr 对 omp 不上报 agent_session，
+    /// 回退到 pane cwd 下最新的 OMP 会话文件。
+    pub fn pane_session(
+        &self, pane: &crate::herdr::types::PaneInfo,
+    ) -> Option<AgentSessionRef> {
+        let agent = pane.agent.as_deref().unwrap_or("");
+        if !self.has_adapter(agent) {
+            return None;
+        }
+        if let Some(session) = &pane.agent_session {
+            if session.agent.as_deref().is_some_and(|a| a != agent) {
+                return None;
+            }
+            let kind = match session.kind.as_str() {
+                "id" => RefKind::Id,
+                "path" => RefKind::Path,
+                _ => return None,
+            };
+            return Some(AgentSessionRef { kind, value: session.value.clone() });
+        }
+        if agent == "omp" {
+            let cwd = pane.cwd.as_deref()?;
+            let path = self.omp.find_for_cwd(cwd)?;
+            return Some(AgentSessionRef {
+                kind: RefKind::Path,
+                value: path.to_string_lossy().to_string(),
+            });
+        }
+        None
+    }
+
+    /// 该 pane 是否有可尝试的历史（与 history 端点的可用性保持一致）。
+    pub fn pane_has_session(&self, pane: &crate::herdr::types::PaneInfo) -> bool {
+        self.pane_session(pane).is_some()
     }
 
     fn adapter(&self, agent: &str) -> Option<&dyn JournalAdapter> {
@@ -112,6 +151,7 @@ impl JournalRegistry {
             "claude" => Some(&self.claude),
             "codex" => Some(&self.codex),
             "pi" => Some(&self.pi),
+            "omp" => Some(&self.omp),
             "opencode" => Some(&self.opencode),
             _ => None,
         }

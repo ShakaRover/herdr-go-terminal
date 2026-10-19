@@ -93,7 +93,7 @@ fn meaningful_tab_label(label: &str) -> Option<String> {
 pub fn pane_wire(
     pane: &PaneInfo, workspaces: &[WorkspaceInfo], tabs: &[TabInfo],
     activity: &HashMap<String, (u64, u64)>, names: &HashMap<String, String>,
-    has_adapter: &dyn Fn(&str) -> bool,
+    has_session: &dyn Fn(&PaneInfo) -> bool,
 ) -> PaneWire {
     let ws = workspaces.iter().find(|w| w.workspace_id == pane.workspace_id);
     let tab = tabs.iter().find(|t| t.tab_id == pane.tab_id);
@@ -115,10 +115,7 @@ pub fn pane_wire(
         tab_label: tab.and_then(|t| meaningful_tab_label(&t.label)),
         last_active_at: None, // 下方由账本填充
         last_seen_at: None,   // 下方由账本填充
-        has_session: pane.agent_session.as_ref().is_some_and(|s| {
-            s.agent.as_deref().is_none_or(|a| a == pane.agent.as_deref().unwrap_or(""))
-                && has_adapter(pane.agent.as_deref().unwrap_or(""))
-        }),
+        has_session: has_session(pane),
     };
     if let Some((a, s)) = activity.get(&w.pane_id).copied() {
         w.last_active_at = Some(a);
@@ -131,12 +128,12 @@ pub fn pane_wire(
 /// shellPanes 按 workspaceNumber → paneId。
 pub fn build_pane_wires(
     view: &EngineView, activity: &HashMap<String, (u64, u64)>,
-    names: &HashMap<String, String>, has_adapter: &dyn Fn(&str) -> bool,
+    names: &HashMap<String, String>, has_session: &dyn Fn(&PaneInfo) -> bool,
 ) -> (Vec<PaneWire>, Vec<PaneWire>) {
     let mut agents: Vec<PaneWire> = Vec::new();
     let mut shells: Vec<PaneWire> = Vec::new();
     for p in &view.panes {
-        let w = pane_wire(p, &view.workspaces, &view.tabs, activity, names, has_adapter);
+        let w = pane_wire(p, &view.workspaces, &view.tabs, activity, names, has_session);
         if p.agent.as_ref().is_some_and(|a| !a.is_empty()) { agents.push(w) } else { shells.push(w) }
     }
     agents.sort_by(|a, b| status_rank(&a.status).cmp(&status_rank(&b.status))

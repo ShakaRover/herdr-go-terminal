@@ -185,7 +185,7 @@ async fn registry_discovers_named_sessions() {
     assert!(registry.runtime(Some("work")).is_ok());
     let err = registry.runtime(Some("../evil")).unwrap_err();
     assert_eq!(err.status, axum::http::StatusCode::NOT_FOUND); // 不拼路径
-    let names: Vec<String> = registry.summaries(&|_| false).iter().map(|s| s.name.clone()).collect();
+    let names: Vec<String> = registry.summaries().iter().map(|s| s.name.clone()).collect();
     assert_eq!(names, vec!["default".to_string(), "work".to_string()]);
 }
 

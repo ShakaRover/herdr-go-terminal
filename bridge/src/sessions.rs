@@ -97,14 +97,13 @@ impl SessionRegistry {
     }
 
     /// primary 第一，其余按 name 字典序；unreachable 时 agents/working/blocked 为 0。
-    /// has_adapter 由调用方注入（journal 判定），registry 不依赖 journal 模块。
-    pub fn summaries(&self, has_adapter: &dyn Fn(&str) -> bool) -> Vec<SessionSummary> {
+    pub fn summaries(&self) -> Vec<SessionSummary> {
         let entries = self.entries.lock().unwrap();
         let mut out: Vec<SessionSummary> = entries.iter().map(|(name, e)| {
             let view = e.runtime.engine.current();
             let activity = e.runtime.engine.activity_snapshot();
             let names = e.runtime.engine.session_names();
-            let (agents, _) = build_pane_wires(&view, &activity, &names, has_adapter);
+            let (agents, _) = build_pane_wires(&view, &activity, &names, &|_| false);
             let reachable = view.connected;
             SessionSummary {
                 name: name.clone(),

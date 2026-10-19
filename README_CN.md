@@ -48,7 +48,9 @@ TUN、不用 root、不用申请 VPN 权限，secret 自动生成并持久化。
   （Esc / Ctrl+C / 方向键 / Tab / Shift+Tab / Enter）。
 - **对话框按钮**：识别 Claude 式单选审批/提问菜单（prompt-select）为原生按钮；
   点击时经「新鲜读取 → 重新识别 → 结构相等 → expectedPrompt 绑定」防护链后才发键。
-- **历史**：从 agent 自己的会话日志分页读完整对话（终端滚屏之外的部分）。
+- **历史**：从 agent 自己的会话日志分页读完整对话（终端滚屏之外的部分），
+  支持 Claude / Codex / pi / OMP / opencode；OMP 在 Herdr 未上报会话引用时
+  按 pane cwd 自动定位最新会话。
 - **创建 agent**：直接从手机在新建或已有 workspace 中启动 Herdr
   支持的 agent，并可选填入初始任务（需 Herdr 0.8.2+）。
 - **图片**：相册选图上传到宿主机，返回路径自动填入回复框。

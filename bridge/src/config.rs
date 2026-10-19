@@ -32,6 +32,7 @@ pub struct Config {
     pub transcript_roots: Vec<PathBuf>,
     pub codex_root: Option<PathBuf>,
     pub pi_root: Option<PathBuf>,
+    pub omp_root: Option<PathBuf>,
     pub opencode_root: Option<PathBuf>,
     pub easytier_server: Vec<String>,
     /// None = 显式关闭 EasyTier（--secret ""），走 HTTP 直连；Some = 纯 EasyTier 模式。
@@ -121,6 +122,9 @@ pub struct Cli {
     /// pi 日志 root
     #[arg(long, env = "HERDRGOT_BRIDGE_PI_ROOT", hide = true)]
     pub pi_root: Option<PathBuf>,
+    /// omp 会话 root
+    #[arg(long, env = "HERDRGOT_BRIDGE_OMP_ROOT", hide = true)]
+    pub omp_root: Option<PathBuf>,
     /// opencode 数据目录
     #[arg(long, env = "HERDRGOT_BRIDGE_OPENCODE_ROOT", hide = true)]
     pub opencode_root: Option<PathBuf>,
@@ -381,6 +385,7 @@ impl Config {
             transcript_roots,
             codex_root: cli.codex_root.clone().and_then(norm_path),
             pi_root: cli.pi_root.clone().and_then(norm_path),
+            omp_root: cli.omp_root.clone().and_then(norm_path),
             opencode_root: cli.opencode_root.clone().and_then(norm_path),
             easytier_server,
             easytier_secret,
@@ -452,7 +457,8 @@ pub(crate) mod tests {
             "HERDRGOT_BRIDGE_DEVICE_HEADER", "HERDRGOT_BRIDGE_DEVICE_ALLOWLIST",
             "HERDRGOT_BRIDGE_MULTI_SESSION", "HERDRGOT_BRIDGE_TRANSCRIPT",
             "HERDRGOT_BRIDGE_TRANSCRIPT_ROOT", "HERDRGOT_BRIDGE_CODEX_ROOT",
-            "HERDRGOT_BRIDGE_PI_ROOT", "HERDRGOT_BRIDGE_OPENCODE_ROOT",
+            "HERDRGOT_BRIDGE_PI_ROOT", "HERDRGOT_BRIDGE_OMP_ROOT",
+            "HERDRGOT_BRIDGE_OPENCODE_ROOT",
             "HERDRGOT_BRIDGE_EASYTIERSERWORKNAME", "HERDRGOT_BRIDGE_EASYTIERSERVIRTUALIP",
             "HERDRGOT_BRIDGE_EASYTIERSER_TEST_LISTENERS",
         ] {

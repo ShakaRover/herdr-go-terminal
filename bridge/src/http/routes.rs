@@ -45,8 +45,8 @@ pub async fn get_snapshot(
     let view = rt.engine.current();
     let (agents, shells) = build_pane_wires(
         &view, &rt.engine.activity_snapshot(), &rt.engine.session_names(),
-        &|a| state.journal.has_adapter(a));
-    let sessions = state.registry.summaries(&|a| state.journal.has_adapter(a));
+        &|pane| state.journal.pane_has_session(pane));
+    let sessions = state.registry.summaries();
     let workspaces: Vec<WorkspaceView> = {
         let mut v: Vec<_> = view.workspaces.iter().map(|w| WorkspaceView {
             workspace_id: w.workspace_id.clone(), number: w.number,
@@ -344,19 +344,10 @@ pub async fn pane_history(
     let Some(pane) = view.panes.iter().find(|p| p.pane_id == id) else {
         return Ok(unavailable("no-session"));
     };
-    let Some(session) = &pane.agent_session else { return Ok(unavailable("no-session")) };
     let agent = pane.agent.as_deref().unwrap_or("");
-    if session.agent.as_deref().is_some_and(|a| a != agent)
-        || !state.journal.has_adapter(agent)
-    {
+    let Some(r) = state.journal.pane_session(pane) else {
         return Ok(unavailable("no-session"));
-    }
-    let kind = match session.kind.as_str() {
-        "id" => crate::journal::RefKind::Id,
-        "path" => crate::journal::RefKind::Path,
-        _ => return Ok(unavailable("no-session")),
     };
-    let r = crate::journal::AgentSessionRef { kind, value: session.value.clone() };
     let limit = q.limit.filter(|l| *l > 0).map(|l| l.min(5000)).unwrap_or(200);
     let before = q.before.as_deref().filter(|b| b.len() <= 100);
     match state.journal.history(agent, &r, limit, before) {
