@@ -51,6 +51,9 @@ Claude-style approval menu recognized as native buttons — one tap to approve.*
   take over terminal sizing.
 - **Agent conversation** — ANSI-colored terminal mirror with auto-follow, a reply
   box, and a special key bar (Esc / Ctrl+C / arrows / Tab / Shift+Tab / Enter).
+- **History recall** — the history button beside the composer merges locally sent
+  replies with the agent journal's user messages and fills the selection; while
+  the composer is focused, ↑/↓ cycle history, long-press still sends the raw key.
 - **Native dialog buttons** — Claude-style single-select approval/prompt menus
   (prompt-select) become native buttons, guarded by a fresh-read → re-recognize →
   structural-equality → expectedPrompt-binding chain before any key is sent.

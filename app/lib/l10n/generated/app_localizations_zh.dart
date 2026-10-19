@@ -295,6 +295,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyTooltip => '历史';
 
   @override
+  String get recallHistoryTitle => '历史输入';
+
+  @override
+  String get recallHistoryShellTitle => '已发送命令';
+
+  @override
+  String get recallHistoryHint => '点击填入输入框，可编辑后发送。';
+
+  @override
+  String get recallHistoryEmpty => '没有可回填的历史。';
+
+  @override
+  String get recallHistoryTooltip => '从历史填入输入框';
+
+  @override
+  String get historyArrowHint => '短按切换历史，长按发送方向键';
+
+  @override
   String outputRefreshFailed(String error) {
     return '输出刷新失败，显示的是旧数据（$error）';
   }

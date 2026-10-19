@@ -335,6 +335,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get historyTooltip => 'History';
 
   @override
+  String get recallHistoryTitle => 'History';
+
+  @override
+  String get recallHistoryShellTitle => 'Sent commands';
+
+  @override
+  String get recallHistoryHint =>
+      'Tap to fill the input box, edit it, then send.';
+
+  @override
+  String get recallHistoryEmpty => 'No history to recall.';
+
+  @override
+  String get recallHistoryTooltip => 'Fill from history';
+
+  @override
+  String get historyArrowHint =>
+      'Tap for history, long press for the raw arrow key';
+
+  @override
   String outputRefreshFailed(String error) {
     return 'Output refresh failed. Showing old data ($error)';
   }

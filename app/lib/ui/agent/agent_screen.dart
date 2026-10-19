@@ -10,14 +10,17 @@ import '../../blocks/prompt_action.dart';
 import '../../blocks/prompt_model.dart';
 import '../../blocks/prompt_select.dart';
 import '../../l10n/l10n.dart';
+import '../../model/history.dart';
 import '../../state/bridges.dart';
 import '../../state/pane_read.dart';
+import '../../state/sent_history.dart';
 import '../../state/settings.dart';
 import '../../state/snapshot.dart';
 import '../history/history_screen.dart';
 import '../content_pane.dart';
 import '../status_style.dart';
 import 'ansi_span.dart';
+import 'recall_history.dart';
 import 'rename_pane_dialog.dart';
 
 typedef _TerminalGridSize = ({int cols, int rows});
@@ -62,6 +65,7 @@ class AgentScreen extends ConsumerStatefulWidget {
 class _AgentScreenState extends ConsumerState<AgentScreen> {
   final _scrollController = ScrollController();
   final _replyController = TextEditingController();
+  final _replyFocus = FocusNode();
 
   /// 用户停留在底部时，新内容到达自动跟随；上翻后不再抢滚动条。
   bool _stickToBottom = true;
@@ -69,6 +73,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   bool _atTop = false;
   bool _sending = false;
   bool _historyLoading = false;
+  bool _cyclingHistory = false;
   bool _foreground = true;
   bool _resizeEligible = false;
   bool _leaseRequestInFlight = false;
@@ -94,16 +99,22 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   /// 最近一次 build 时识别到的尾部对话框（供回复发送前的误批准拦截）。
   PromptRegion? _lastPromptRegion;
 
-  static const _keys = [
-    (label: 'Esc', keys: ['Escape']),
-    (label: 'Ctrl+C', keys: ['ctrl+c']),
-    (label: '↑', keys: ['Up']),
-    (label: '↓', keys: ['Down']),
-    (label: '←', keys: ['Left']),
-    (label: '→', keys: ['Right']),
-    (label: 'Tab', keys: ['Tab']),
-    (label: '⇧Tab', keys: ['shift+tab']),
-    (label: 'Enter', keys: ['Enter']),
+  /// 输入框历史回填游标：0 = 当前草稿，1 = 最近一条，依次向前。
+  int _historyIndex = 0;
+  String? _historyDraft;
+  bool _settingHistory = false;
+  List<String>? _recallHistoryCache;
+
+  static const _keys = <({String label, List<String> keys, int? historyStep})>[
+    (label: 'Esc', keys: ['Escape'], historyStep: null),
+    (label: 'Ctrl+C', keys: ['ctrl+c'], historyStep: null),
+    (label: '↑', keys: ['Up'], historyStep: 1),
+    (label: '↓', keys: ['Down'], historyStep: -1),
+    (label: '←', keys: ['Left'], historyStep: null),
+    (label: '→', keys: ['Right'], historyStep: null),
+    (label: 'Tab', keys: ['Tab'], historyStep: null),
+    (label: '⇧Tab', keys: ['shift+tab'], historyStep: null),
+    (label: 'Enter', keys: ['Enter'], historyStep: null),
   ];
 
   @override
@@ -121,6 +132,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         }
       },
     );
+    _replyController.addListener(_handleReplyChanged);
     _scrollController.addListener(() {
       if (!_scrollController.hasClients) return;
       final pos = _scrollController.position;
@@ -140,6 +152,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     _lifecycleListener?.dispose();
     unawaited(_releaseTerminalLease());
     _scrollController.dispose();
+    _replyFocus.dispose();
     _replyController.dispose();
     super.dispose();
   }
@@ -402,6 +415,123 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
   }
 
+  SentHistoryKey get _sentHistoryKey => (
+    bridgeId: widget.bridgeId,
+    session: ref.read(sessionFilterProvider(widget.bridgeId)),
+    paneId: widget.paneId,
+  );
+
+  void _handleReplyChanged() {
+    if (_settingHistory) return;
+    // 程序化回填也会触发 onChanged；若文本仍等于当前选中的历史项，
+    // 不要重置游标，否则连续 Up 会一直停在最新一条。
+    final history = _recallHistoryCache;
+    if (_historyIndex > 0 &&
+        history != null &&
+        _historyIndex <= history.length &&
+        history[_historyIndex - 1] == _replyController.text) {
+      return;
+    }
+    // 手动编辑后重新从“当前草稿”开始，避免下一次 Up 跳到旧位置。
+    _historyIndex = 0;
+    _historyDraft = null;
+  }
+
+  void _setComposerText(String text) {
+    _settingHistory = true;
+    _replyController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _settingHistory = false;
+  }
+
+  /// agent：journal user 消息 + 本机发送记录；shell：仅本机发送记录。
+  Future<List<String>> _loadRecallHistory({bool refresh = false}) async {
+    if (!refresh && _recallHistoryCache != null) {
+      return _recallHistoryCache!;
+    }
+    final key = _sentHistoryKey;
+    final local = ref.read(sentHistoryProvider(key));
+    final journal = <String>[];
+    final pane = ref
+        .read(bridgeSnapshotProvider(widget.bridgeId))
+        .data
+        ?.paneById(widget.paneId);
+    if (pane?.isShell != true) {
+      final api = ref.read(apiProvider(widget.bridgeId));
+      if (api != null) {
+        try {
+          final page = await api.fetchHistory(
+            widget.paneId,
+            limit: 50,
+            session: key.session,
+          );
+          if (page is HistoryPage) {
+            for (final entry in page.entries.reversed) {
+              if (entry.role != TranscriptRole.user) continue;
+              final text = entry.parts
+                  .whereType<TextPart>()
+                  .map((part) => part.text)
+                  .join('\n')
+                  .trim();
+              if (text.isNotEmpty) journal.add(text);
+            }
+          }
+        } on ApiException {
+          // journal 不可用时仍回填本机发送记录。
+        }
+      }
+    }
+    final seen = <String>{};
+    final merged = <String>[];
+    for (final text in [...local, ...journal]) {
+      if (seen.add(text)) merged.add(text);
+    }
+    _recallHistoryCache = merged;
+    return merged;
+  }
+
+  Future<void> _cycleHistory(int step) async {
+    if (_sending || _cyclingHistory) return;
+    _cyclingHistory = true;
+    try {
+      final history = await _loadRecallHistory();
+      if (!mounted) return;
+      if (history.isEmpty) {
+        _toast(context.l10n.recallHistoryEmpty);
+        return;
+      }
+      if (_historyIndex == 0) _historyDraft = _replyController.text;
+      final next = (_historyIndex + step).clamp(0, history.length).toInt();
+      if (next == _historyIndex) return;
+      setState(() => _historyIndex = next);
+      _setComposerText(next == 0 ? (_historyDraft ?? '') : history[next - 1]);
+      _replyFocus.requestFocus();
+    } finally {
+      _cyclingHistory = false;
+    }
+  }
+
+  Future<void> _showRecallHistory() async {
+    final pane = ref
+        .read(bridgeSnapshotProvider(widget.bridgeId))
+        .data
+        ?.paneById(widget.paneId);
+    final text = await RecallHistorySheet.show(
+      context,
+      historyKey: _sentHistoryKey,
+      shell: pane?.isShell == true,
+    );
+    if (text == null || !mounted) return;
+    setState(() {
+      _historyIndex = 0;
+      _historyDraft = null;
+    });
+    _setComposerText(text);
+    _replyFocus.requestFocus();
+  }
+
   Future<void> _sendReply() async {
     final l10n = context.l10n;
     // 发送前 trim（对齐 collie composer）：尾随换行会变成额外的 Enter 打进 PTY。
@@ -432,15 +562,18 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       );
       if (go != true) return;
     }
+    final historyKey = _sentHistoryKey;
     setState(() => _sending = true);
     try {
       final res = await api.sendReply(
         widget.paneId,
         text,
-        session: ref.read(sessionFilterProvider(widget.bridgeId)),
+        session: historyKey.session,
       );
       if (!mounted) return;
       if (res.success) {
+        await ref.read(sentHistoryProvider(historyKey).notifier).add(text);
+        _recallHistoryCache = null;
         _replyController.clear();
         _toast(l10n.sent);
       } else if (res.promptChanged) {
@@ -913,10 +1046,20 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               separatorBuilder: (_, _) => const SizedBox(width: 6),
               itemBuilder: (_, i) {
                 final k = _keys[i];
-                return ActionChip(
-                  label: Text(k.label),
-                  materialTapTargetSize: MaterialTapTargetSize.padded,
-                  onPressed: _sending ? null : () => _sendKeys(k.keys),
+                final historyStep = k.historyStep;
+                return _KeyChip(
+                  label: k.label,
+                  tooltip: historyStep == null
+                      ? null
+                      : context.l10n.historyArrowHint,
+                  onTap: _sending
+                      ? null
+                      : historyStep == null
+                      ? () => _sendKeys(k.keys)
+                      : () => _cycleHistory(historyStep),
+                  onLongPress: _sending || historyStep == null
+                      ? null
+                      : () => _sendKeys(k.keys),
                 );
               },
             ),
@@ -927,6 +1070,11 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 IconButton(
+                  tooltip: context.l10n.recallHistoryTooltip,
+                  icon: const Icon(Icons.manage_history),
+                  onPressed: _sending ? null : _showRecallHistory,
+                ),
+                IconButton(
                   tooltip: context.l10n.sendImageTooltip,
                   icon: const Icon(Icons.image_outlined),
                   onPressed: _sending ? null : _pickAndUpload,
@@ -934,6 +1082,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                 Expanded(
                   child: TextField(
                     controller: _replyController,
+                    focusNode: _replyFocus,
                     minLines: 1,
                     maxLines: 4,
                     textInputAction: TextInputAction.newline,
@@ -963,6 +1112,50 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         ],
       ),
     );
+  }
+}
+
+/// 键条按钮：Up/Down 短按切换历史，长按才发送原始方向键。
+class _KeyChip extends StatelessWidget {
+  const _KeyChip({
+    required this.label,
+    this.tooltip,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  final String label;
+  final String? tooltip;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled = onTap != null || onLongPress != null;
+    final chip = Opacity(
+      opacity: enabled ? 1 : 0.4,
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Center(
+                widthFactor: 1,
+                child: Text(label, style: theme.textTheme.labelLarge),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return Semantics(label: tooltip, button: true, child: chip);
   }
 }
 

@@ -602,6 +602,42 @@ abstract class AppLocalizations {
   /// **'History'**
   String get historyTooltip;
 
+  /// No description provided for @recallHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get recallHistoryTitle;
+
+  /// No description provided for @recallHistoryShellTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent commands'**
+  String get recallHistoryShellTitle;
+
+  /// No description provided for @recallHistoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to fill the input box, edit it, then send.'**
+  String get recallHistoryHint;
+
+  /// No description provided for @recallHistoryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No history to recall.'**
+  String get recallHistoryEmpty;
+
+  /// No description provided for @recallHistoryTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill from history'**
+  String get recallHistoryTooltip;
+
+  /// No description provided for @historyArrowHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap for history, long press for the raw arrow key'**
+  String get historyArrowHint;
+
   /// No description provided for @outputRefreshFailed.
   ///
   /// In en, this message translates to:
