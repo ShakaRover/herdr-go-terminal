@@ -1,6 +1,6 @@
-id = "herdrgo"
-name = "HerdrGo"
-version = "3.0.1"
+id = "herdrgot"
+name = "HerdrGoT"
+version = "3.0.2"
 min_herdr_version = "0.8.2"
 description = "Native mobile remote control bridge for Herdr"
 platforms = ["linux", "macos"]
@@ -10,78 +10,78 @@ command = ["sh", "plugin/install.sh"]
 
 [[actions]]
 id = "setup"
-title = "Set up HerdrGo bridge"
+title = "Set up HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-action.sh", "setup-ui"]
+command = ["sh", "plugin/herdrgot-action.sh", "setup-ui"]
 
 [[actions]]
 id = "pair"
-title = "Pair HerdrGo"
+title = "Pair HerdrGoT"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-action.sh", "pair-ui"]
+command = ["sh", "plugin/herdrgot-action.sh", "pair-ui"]
 
 [[actions]]
 id = "pair-string"
-title = "Show HerdrGo pairing string"
+title = "Show HerdrGoT pairing string"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-action.sh", "pair-string-ui"]
+command = ["sh", "plugin/herdrgot-action.sh", "pair-string-ui"]
 
 [[actions]]
 id = "status"
-title = "Show HerdrGo status"
+title = "Show HerdrGoT status"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-action.sh", "status-ui"]
+command = ["sh", "plugin/herdrgot-action.sh", "status-ui"]
 
 [[actions]]
 id = "start"
-title = "Start HerdrGo bridge"
+title = "Start HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-ctl.sh", "start"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "start"]
 
 [[actions]]
 id = "stop"
-title = "Stop HerdrGo bridge"
+title = "Stop HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-ctl.sh", "stop"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "stop"]
 
 [[actions]]
 id = "restart"
-title = "Restart HerdrGo bridge"
+title = "Restart HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-ctl.sh", "restart"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "restart"]
 
 [[actions]]
 id = "uninstall-service"
-title = "Uninstall HerdrGo bridge service"
+title = "Uninstall HerdrGoT bridge service"
 contexts = ["workspace"]
-command = ["sh", "plugin/herdrgo-action.sh", "uninstall-service-ui"]
+command = ["sh", "plugin/herdrgot-action.sh", "uninstall-service-ui"]
 
 [[panes]]
 id = "setup-ui"
-title = "HerdrGo Setup"
+title = "HerdrGoT Setup"
 placement = "zoomed"
-command = ["sh", "plugin/herdrgo-ctl.sh", "setup"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "setup"]
 
 [[panes]]
 id = "pair-ui"
-title = "Pair HerdrGo"
+title = "Pair HerdrGoT"
 placement = "overlay"
-command = ["sh", "plugin/herdrgo-ctl.sh", "pair"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "pair"]
 
 [[panes]]
 id = "pair-string-ui"
-title = "HerdrGo Pairing String"
+title = "HerdrGoT Pairing String"
 placement = "overlay"
-command = ["sh", "plugin/herdrgo-ctl.sh", "pair", "--string"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "pair", "--string"]
 
 [[panes]]
 id = "status-ui"
-title = "HerdrGo Status"
+title = "HerdrGoT Status"
 placement = "overlay"
-command = ["sh", "plugin/herdrgo-ctl.sh", "status"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "status"]
 
 [[panes]]
 id = "uninstall-service-ui"
-title = "Uninstall HerdrGo bridge service"
+title = "Uninstall HerdrGoT bridge service"
 placement = "zoomed"
-command = ["sh", "plugin/herdrgo-ctl.sh", "uninstall-service"]
+command = ["sh", "plugin/herdrgot-ctl.sh", "uninstall-service"]

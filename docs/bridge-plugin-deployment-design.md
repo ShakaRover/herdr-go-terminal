@@ -1,11 +1,11 @@
-# HerdrGo Bridge 插件化部署设计
+# HerdrGoT Bridge 插件化部署设计
 
 状态：已实现，待发布首个 Release  
 日期：2026-08-25
 
 ## 1. 背景
 
-HerdrGo 手机端通过宿主机上的 `herdrgo-bridge` 访问 Herdr。bridge 已经具备零配置
+HerdrGoT 手机端通过宿主机上的 `herdrgot-bridge` 访问 Herdr。bridge 已经具备零配置
 EasyTier 组网、自动生成并持久化网络凭据、连接 Herdr socket 和提供 REST API 的能力，
 但当前部署仍要求用户自行编译二进制、复制 systemd unit 并启动服务。
 
@@ -53,9 +53,9 @@ setup 控制脚本
         └── 在当前 setup pane 显示配对二维码
                          │
                          ▼
-               herdrgo-bridge 用户服务
+               herdrgot-bridge 用户服务
                     ├── Herdr Unix socket
-                    └── EasyTier data plane ◄──► HerdrGo 手机端
+                    └── EasyTier data plane ◄──► HerdrGoT 手机端
 ```
 
 plugin 是安装和操作入口，bridge 仍是独立进程。这样既沿用 Herdr plugin 的用户体验，
@@ -72,7 +72,7 @@ herdr plugin action invoke herdrgo.setup
 
 已经安装插件时只需执行第二条命令。`setup` action 是稳定的用户入口，它在插件内部
 打开交互式 setup pane；用户不需要了解 pane entrypoint、placement 或 focus 参数。
-setup 成功后直接在 pane 中显示二维码，用户用 HerdrGo 扫码即可。
+setup 成功后直接在 pane 中显示二维码，用户用 HerdrGoT 扫码即可。
 
 action 本身只负责启动界面，不输出二维码或执行安装。实际 setup 仍在 pane 中运行，
 因为 Herdr 会捕获普通 action 的标准输出，二维码和交互式错误信息不适合只留在
@@ -100,7 +100,7 @@ plugin log 中。内部 pane 是实现细节，不作为面向用户的命令接
 
 ```toml
 id = "herdrgo"
-name = "HerdrGo"
+name = "HerdrGoT"
 version = "<与 release tag 一致>"
 min_herdr_version = "0.8.2"
 description = "Native mobile remote control bridge for Herdr"
@@ -111,72 +111,72 @@ command = ["bash", "plugin/install.sh"]
 
 [[actions]]
 id = "setup"
-title = "Set up HerdrGo bridge"
+title = "Set up HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["bash", "plugin/herdrgo-action.sh", "setup-ui"]
+command = ["bash", "plugin/herdrgot-action.sh", "setup-ui"]
 
 [[panes]]
 id = "setup-ui"
-title = "HerdrGo Setup"
+title = "HerdrGoT Setup"
 placement = "zoomed"
-command = ["bash", "plugin/herdrgo-ctl.sh", "setup"]
+command = ["bash", "plugin/herdrgot-ctl.sh", "setup"]
 
 [[actions]]
 id = "pair"
-title = "Pair HerdrGo"
+title = "Pair HerdrGoT"
 contexts = ["workspace"]
-command = ["bash", "plugin/herdrgo-action.sh", "pair-ui"]
+command = ["bash", "plugin/herdrgot-action.sh", "pair-ui"]
 
 [[panes]]
 id = "pair-ui"
-title = "Pair HerdrGo"
+title = "Pair HerdrGoT"
 placement = "overlay"
-command = ["bash", "plugin/herdrgo-ctl.sh", "pair"]
+command = ["bash", "plugin/herdrgot-ctl.sh", "pair"]
 
 [[actions]]
 id = "status"
-title = "Show HerdrGo status"
+title = "Show HerdrGoT status"
 contexts = ["workspace"]
-command = ["bash", "plugin/herdrgo-action.sh", "status-ui"]
+command = ["bash", "plugin/herdrgot-action.sh", "status-ui"]
 
 [[panes]]
 id = "status-ui"
-title = "HerdrGo Status"
+title = "HerdrGoT Status"
 placement = "overlay"
-command = ["bash", "plugin/herdrgo-ctl.sh", "status"]
+command = ["bash", "plugin/herdrgot-ctl.sh", "status"]
 
 [[actions]]
 id = "start"
-title = "Start HerdrGo bridge"
+title = "Start HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["bash", "plugin/herdrgo-ctl.sh", "start"]
+command = ["bash", "plugin/herdrgot-ctl.sh", "start"]
 
 [[actions]]
 id = "stop"
-title = "Stop HerdrGo bridge"
+title = "Stop HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["bash", "plugin/herdrgo-ctl.sh", "stop"]
+command = ["bash", "plugin/herdrgot-ctl.sh", "stop"]
 
 [[actions]]
 id = "restart"
-title = "Restart HerdrGo bridge"
+title = "Restart HerdrGoT bridge"
 contexts = ["workspace"]
-command = ["bash", "plugin/herdrgo-ctl.sh", "restart"]
+command = ["bash", "plugin/herdrgot-ctl.sh", "restart"]
 
 [[actions]]
 id = "uninstall-service"
-title = "Uninstall HerdrGo bridge service"
+title = "Uninstall HerdrGoT bridge service"
 contexts = ["workspace"]
-command = ["bash", "plugin/herdrgo-action.sh", "uninstall-service-ui"]
+command = ["bash", "plugin/herdrgot-action.sh", "uninstall-service-ui"]
 
 [[panes]]
 id = "uninstall-service-ui"
-title = "Uninstall HerdrGo bridge service"
+title = "Uninstall HerdrGoT bridge service"
 placement = "zoomed"
-command = ["bash", "plugin/herdrgo-ctl.sh", "uninstall-service"]
+command = ["bash", "plugin/herdrgot-ctl.sh", "uninstall-service"]
 ```
 
-`herdrgo-action.sh` 是很薄的界面启动器：它通过 `HERDR_BIN_PATH` 和
+`herdrgot-action.sh` 是很薄的界面启动器：它通过 `HERDR_BIN_PATH` 和
 `HERDR_PLUGIN_ID` 调用 `herdr plugin pane open`，并把 manifest 中声明的 pane 布局留在
 插件内部。用户文档只公开 action id，不公开内部 `*-ui` pane id。
 
@@ -185,20 +185,20 @@ command = ["bash", "plugin/herdrgo-ctl.sh", "uninstall-service"]
 ## 7. 文件与目录
 
 插件 checkout 会在重新安装时被替换，因此系统服务不能直接把
-`$HERDR_PLUGIN_ROOT/bin/herdrgo-bridge` 写入 `ExecStart`。运行文件必须复制到不会随
+`$HERDR_PLUGIN_ROOT/bin/herdrgot-bridge` 写入 `ExecStart`。运行文件必须复制到不会随
 checkout 变化的 plugin state 目录。
 
 ```text
 $HERDR_PLUGIN_ROOT/
-├── bin/herdrgo-bridge                 # [[build]] 下载的候选版本
+├── bin/herdrgot-bridge                 # [[build]] 下载的候选版本
 └── plugin/
     ├── install.sh                     # 平台检测、下载和校验
-    ├── herdrgo-action.sh              # action 到交互式 pane 的内部适配层
-    └── herdrgo-ctl.sh                 # setup 与服务管理
+    ├── herdrgot-action.sh              # action 到交互式 pane 的内部适配层
+    └── herdrgot-ctl.sh                 # setup 与服务管理
 
 $HERDR_PLUGIN_STATE_DIR/
-├── runtime/herdrgo-bridge             # 系统服务使用的稳定运行副本
-├── runtime/herdrgo-ctl.sh             # 插件误删后的恢复/卸载入口
+├── runtime/herdrgot-bridge             # 系统服务使用的稳定运行副本
+├── runtime/herdrgot-ctl.sh             # 插件误删后的恢复/卸载入口
 ├── easytier_secret                    # 0600，现有 bridge 状态
 ├── easytier_network_id                # 0600，现有 bridge 状态
 ├── audit.log
@@ -233,16 +233,16 @@ $HERDR_PLUGIN_CONFIG_DIR/
 Linux 使用 systemd user unit：
 
 ```text
-~/.config/systemd/user/herdrgo-bridge.service
+~/.config/systemd/user/herdrgot-bridge.service
 ```
 
 关键约束：
 
-- `ExecStart` 指向 `$HERDR_PLUGIN_STATE_DIR/runtime/herdrgo-bridge` 的绝对路径。
+- `ExecStart` 指向 `$HERDR_PLUGIN_STATE_DIR/runtime/herdrgot-bridge` 的绝对路径。
 - `HERDR_SOCKET_PATH` 使用 Herdr 注入值；缺省回落到
   `~/.config/herdr/herdr.sock`。
-- `HERDRGO_BRIDGE_STATE_DIR` 指向 `$HERDR_PLUGIN_STATE_DIR`。
-- `HERDRGO_BRIDGE_ENV_FILE` 指向可选的 `$HERDR_PLUGIN_CONFIG_DIR/env`；由 bridge
+- `HERDRGOT_BRIDGE_STATE_DIR` 指向 `$HERDR_PLUGIN_STATE_DIR`。
+- `HERDRGOT_BRIDGE_ENV_FILE` 指向可选的 `$HERDR_PLUGIN_CONFIG_DIR/env`；由 bridge
   按 dotenv `KEY=value` 语法安全解析，不通过 shell 执行配置内容。
 - `Restart=on-failure`、`RestartSec=5`、`StartLimitIntervalSec=0`。
 - 保留 `NoNewPrivileges=yes` 与 `PrivateTmp=yes`。
@@ -259,7 +259,7 @@ Linux 使用 systemd user unit：
 macOS 使用用户域 LaunchAgent：
 
 ```text
-~/Library/LaunchAgents/kkrainbow.herdrgo.plist
+~/Library/LaunchAgents/kkrainbow.herdrgot.plist
 ```
 
 该 label/plist 已随旧版本部署，作为内部服务兼容标识保留；它不再出现在用户命令中。
@@ -407,9 +407,9 @@ herdr plugin action invoke herdrgo.setup
 
 - `herdr-plugin.toml` 声明公开 action 和内部 pane。
 - `plugin/install.sh` 下载与校验四平台 Release 产物。
-- `plugin/herdrgo-action.sh` 把单行 action 调用转换为内部 pane。
-- `plugin/herdrgo-ctl.sh` 管理稳定运行副本、systemd user unit 和 LaunchAgent。
-- `herdrgo-bridge pair` 显示二维码和可读摘要，`pair --json` 显式输出完整载荷；
+- `plugin/herdrgot-action.sh` 把单行 action 调用转换为内部 pane。
+- `plugin/herdrgot-ctl.sh` 管理稳定运行副本、systemd user unit 和 LaunchAgent。
+- `herdrgot-bridge pair` 显示二维码和可读摘要，`pair --json` 显式输出完整载荷；
   普通服务启动不再输出二维码或配对 JSON。
 - `.github/workflows/bridge-ci.yml` 运行 bridge 与 plugin 自动测试。
 - `.github/workflows/bridge-release.yml` 构建四平台产物、SHA256 和来源记录。

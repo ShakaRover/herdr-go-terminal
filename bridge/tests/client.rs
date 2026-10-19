@@ -1,7 +1,7 @@
 mod common;
 
-use herdrgo_bridge::herdr::client::HerdrClient;
-use herdrgo_bridge::herdr::types::SessionSnapshot;
+use herdrgot_bridge::herdr::client::HerdrClient;
+use herdrgot_bridge::herdr::types::SessionSnapshot;
 
 #[tokio::test]
 async fn ping_and_snapshot_roundtrip() {
@@ -33,7 +33,7 @@ async fn ping_and_snapshot_roundtrip() {
     assert_eq!(pong.protocol, 19);
     let snap: SessionSnapshot = client.snapshot().await.unwrap();
     assert_eq!(snap.panes[0].pane_id, "w1:p1");
-    assert_eq!(snap.panes[0].agent_status, herdrgo_bridge::herdr::types::AgentStatus::Blocked);
+    assert_eq!(snap.panes[0].agent_status, herdrgot_bridge::herdr::types::AgentStatus::Blocked);
     // id 必须是 string，且每请求一条新连接（mock 每连接只回一次）。
     let reqs = mock.received("session.snapshot");
     assert!(reqs[0]["id"].is_string());

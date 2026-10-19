@@ -123,8 +123,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 12),
                 const SelectionArea(
                   child: Text(
-                    'herdr plugin install herdr-go/herdr-go\n'
-                    'herdr plugin action invoke herdrgo.setup',
+                    'herdr plugin install ShakaRover/herdr-go-terminal\n'
+                    'herdr plugin action invoke herdrgot.setup',
                     style: TextStyle(fontFamily: 'monospace'),
                   ),
                 ),
@@ -133,7 +133,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 8),
                 const SelectionArea(
                   child: Text(
-                    'herdr plugin action invoke herdrgo.pair',
+                    'herdr plugin action invoke herdrgot.pair',
                     style: TextStyle(fontFamily: 'monospace'),
                   ),
                 ),

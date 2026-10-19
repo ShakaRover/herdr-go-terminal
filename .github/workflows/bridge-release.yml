@@ -81,20 +81,20 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           target="${{ matrix.target }}"
-          asset="herdrgo-bridge-${version}-${target}.tar.gz"
-          binary="bridge/target/${target}/release/herdrgo-bridge"
+          asset="herdrgot-bridge-${version}-${target}.tar.gz"
+          binary="bridge/target/${target}/release/herdrgot-bridge"
           mkdir -p dist/package
-          cp "${binary}" dist/package/herdrgo-bridge
-          chmod 755 dist/package/herdrgo-bridge
-          tar -czf "dist/${asset}" -C dist/package herdrgo-bridge
+          cp "${binary}" dist/package/herdrgot-bridge
+          chmod 755 dist/package/herdrgot-bridge
+          tar -czf "dist/${asset}" -C dist/package herdrgot-bridge
           if command -v sha256sum >/dev/null 2>&1; then
             (cd dist && sha256sum "${asset}" > "${asset}.sha256")
           else
             (cd dist && shasum -a 256 "${asset}" > "${asset}.sha256")
           fi
           {
-            printf 'herdrgo_version=%s\n' "${version}"
-            printf 'herdrgo_commit=%s\n' "${GITHUB_SHA}"
+            printf 'herdrgot_version=%s\n' "${version}"
+            printf 'herdrgot_commit=%s\n' "${GITHUB_SHA}"
             printf 'easytier_commit=%s\n' \
               '81487c363a56779e745eae927e130a813535c71e'
             printf 'target=%s\n' "${target}"
@@ -260,8 +260,8 @@ jobs:
               sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
             test -n "${signer_digest}"
             {
-              printf 'herdrgo_version=%s\n' "${version}"
-              printf 'herdrgo_commit=%s\n' "${GITHUB_SHA}"
+              printf 'herdrgot_version=%s\n' "${version}"
+              printf 'herdrgot_commit=%s\n' "${GITHUB_SHA}"
               printf 'easytier_commit=%s\n' \
                 'ae8f4398240e103e0bde89e38497612a18a65c85'
               printf 'target=android-%s\n' "${abi}"

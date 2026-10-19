@@ -3,7 +3,7 @@ set -eu
 
 entrypoint=${1:-}
 [ -n "$entrypoint" ] || {
-    printf 'HerdrGo action: missing pane entrypoint\n' >&2
+    printf 'HerdrGoT action: missing pane entrypoint\n' >&2
     exit 2
 }
 : "${HERDR_BIN_PATH:?Herdr did not provide HERDR_BIN_PATH}"

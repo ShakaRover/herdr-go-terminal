@@ -108,7 +108,7 @@ void main() {
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.text('Set up your computer'), findsOneWidget);
     expect(
-      find.textContaining('herdr plugin install herdr-go/herdr-go'),
+      find.textContaining('herdr plugin install ShakaRover/herdr-go-terminal'),
       findsOneWidget,
     );
 

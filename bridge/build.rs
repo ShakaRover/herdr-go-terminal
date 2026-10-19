@@ -9,7 +9,7 @@ fn main() {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .filter(|s| !s.is_empty());
     if let Some(hash) = out {
-        println!("cargo:rustc-env=HERDRGO_BRIDGE_GIT_HASH={hash}");
+        println!("cargo:rustc-env=HERDRGOT_BRIDGE_GIT_HASH={hash}");
     }
     println!("cargo:rerun-if-changed=../.git/HEAD");
 }

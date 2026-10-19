@@ -2,7 +2,7 @@
 
 Technical audit date: August 28, 2026.
 
-This document records what the HerdrGo iOS binary contains and maps those facts
+This document records what the HerdrGoT iOS binary contains and maps those facts
 to Apple's export-compliance questions. It is not a legal opinion. The final
 App Store Connect declaration remains the developer's attestation.
 
@@ -18,11 +18,11 @@ App Store Connect declaration remains the developer's attestation.
 The iOS crate disables the default features of `easytier-ffi`, but that crate
 depends on `easytier` with its default features. The resulting static library
 therefore contains EasyTier's Rust cryptographic implementations and optional
-protocol code in addition to the paths HerdrGo uses at runtime.
+protocol code in addition to the paths HerdrGoT uses at runtime.
 
 ## Cryptography in the binary
 
-HerdrGo's generated EasyTier configuration does not disable encryption or
+HerdrGoT's generated EasyTier configuration does not disable encryption or
 select a different algorithm. EasyTier therefore uses its encrypted default:
 
 - Data-plane encryption: AES-128-GCM through the `ring` backend.
@@ -33,7 +33,7 @@ select a different algorithm. EasyTier therefore uses its encrypted default:
 
 The linked binary also contains code for AES-256-GCM, ChaCha20-Poly1305,
 Rustls/TLS, QUIC, and BoringTun/WireGuard because those features are present in
-the EasyTier dependency graph. HerdrGo configures no TUN device, VPN portal, or
+the EasyTier dependency graph. HerdrGoT configures no TUN device, VPN portal, or
 WireGuard listener, but export declarations generally consider encryption the
 app contains, not only the path exercised in one configuration.
 
@@ -47,7 +47,7 @@ specifications:
 - SHA-256: FIPS 180-4
 - Noise Protocol Framework, Revision 34
 
-No HerdrGo code introduces a secret, proprietary, or unpublished cipher.
+No HerdrGoT code introduces a secret, proprietary, or unpublished cipher.
 EasyTier combines the published primitives through a published Noise handshake
 and its open-source data-plane protocol.
 
@@ -91,7 +91,7 @@ After the questionnaire:
 
 ## U.S. mass-market assessment
 
-HerdrGo is a free, publicly available, complete consumer application. It is not
+HerdrGoT is a free, publicly available, complete consumer application. It is not
 sold as an encryption component, SDK, cryptanalytic tool, or custom network
 infrastructure product. Those facts support a likely mass-market software
 classification rather than treatment as proprietary cryptography.

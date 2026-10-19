@@ -5,7 +5,7 @@ plugin_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 manifest="$plugin_root/herdr-plugin.toml"
 
 fail() {
-    printf 'HerdrGo install: %s\n' "$*" >&2
+    printf 'HerdrGoT install: %s\n' "$*" >&2
     exit 1
 }
 
@@ -23,11 +23,11 @@ case "$(uname -s):$(uname -m)" in
     *) fail "unsupported platform: $(uname -s) $(uname -m)" ;;
 esac
 
-archive="herdrgo-bridge-${version}-${target}.tar.gz"
+archive="herdrgot-bridge-${version}-${target}.tar.gz"
 checksum="$archive.sha256"
-base_url=${HERDRGO_RELEASE_BASE_URL:-"https://github.com/herdr-go/herdr-go/releases/download/v$version"}
-tmp_dir=$(mktemp -d "$plugin_root/.herdrgo-install.XXXXXX")
-candidate="$plugin_root/bin/.herdrgo-bridge.$$"
+base_url=${HERDRGOT_RELEASE_BASE_URL:-"https://github.com/ShakaRover/herdr-go-terminal/releases/download/v$version"}
+tmp_dir=$(mktemp -d "$plugin_root/.herdrgot-install.XXXXXX")
+candidate="$plugin_root/bin/.herdrgot-bridge.$$"
 
 cleanup() {
     rm -f "$candidate"
@@ -48,7 +48,7 @@ download() {
     fi
 }
 
-printf 'Downloading HerdrGo bridge %s for %s...\n' "$version" "$target"
+printf 'Downloading HerdrGoT bridge %s for %s...\n' "$version" "$target"
 download "$base_url/$archive" "$tmp_dir/$archive"
 download "$base_url/$checksum" "$tmp_dir/$checksum"
 
@@ -70,9 +70,9 @@ fi
 [ "$actual_hash" = "$expected_hash" ] || fail "archive checksum mismatch"
 
 tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
-[ -f "$tmp_dir/herdrgo-bridge" ] || fail "archive does not contain herdrgo-bridge"
+[ -f "$tmp_dir/herdrgot-bridge" ] || fail "archive does not contain herdrgot-bridge"
 mkdir -p "$plugin_root/bin"
-cp "$tmp_dir/herdrgo-bridge" "$candidate"
+cp "$tmp_dir/herdrgot-bridge" "$candidate"
 chmod 755 "$candidate"
-mv -f "$candidate" "$plugin_root/bin/herdrgo-bridge"
-printf 'HerdrGo bridge candidate installed at %s\n' "$plugin_root/bin/herdrgo-bridge"
+mv -f "$candidate" "$plugin_root/bin/herdrgot-bridge"
+printf 'HerdrGoT bridge candidate installed at %s\n' "$plugin_root/bin/herdrgot-bridge"

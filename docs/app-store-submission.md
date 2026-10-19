@@ -1,4 +1,4 @@
-# HerdrGo App Store submission
+# HerdrGoT App Store submission
 
 This file keeps the first iOS submission material reviewable with the app.
 Values marked `TODO` require an App Store Connect account, a legal decision,
@@ -6,7 +6,7 @@ or a live review bridge and must not be guessed in code.
 
 ## Build identity
 
-- App name: `HerdrGo`
+- App name: `HerdrGoT`
 - Bundle ID: `dev.herdr.herdrWeb`
 - Current version: `0.2.1`
 - Current build: `3`
@@ -21,7 +21,7 @@ setup are intentionally created before the first App Store Connect record.
 
 ## English metadata
 
-- Name: `HerdrGo`
+- Name: `HerdrGoT`
 - Subtitle: `Coding agents in your pocket`
 - Promotional text:
 
@@ -33,15 +33,15 @@ setup are intentionally created before the first App Store Connect record.
 
 - Description:
 
-  HerdrGo keeps the coding agents running on your computer within reach.
+  HerdrGoT keeps the coding agents running on your computer within reach.
 
   See which agents are working, waiting, or finished. Open a session to read
   its real terminal output, reply, send the keys agents need, and respond to
   recognized approval prompts from a native mobile interface.
 
-  Pair your own computer with one private QR code. HerdrGo then connects to the
-  HerdrGo bridge through an encrypted EasyTier peer-to-peer network. There is
-  no HerdrGo account, no advertising, and no central service that stores your
+  Pair your own computer with one private QR code. HerdrGoT then connects to the
+  HerdrGoT bridge through an encrypted EasyTier peer-to-peer network. There is
+  no HerdrGoT account, no advertising, and no central service that stores your
   terminal sessions.
 
   Features:
@@ -53,7 +53,7 @@ setup are intentionally created before the first App Store Connect record.
   - Image transfer directly to your paired computer
   - iPhone and iPad layouts
 
-  Herdr 0.8.2 or newer and the free HerdrGo plugin are required on a computer
+  Herdr 0.8.2 or newer and the free HerdrGoT plugin are required on a computer
   you control.
 
 - Privacy Policy URL: `https://herdr-go.github.io/privacy/`
@@ -62,7 +62,7 @@ setup are intentionally created before the first App Store Connect record.
 
 ## Simplified Chinese metadata
 
-- Name: `HerdrGo`
+- Name: `HerdrGoT`
 - Subtitle: `随时掌控你的 Coding Agents`
 - Promotional text:
 
@@ -74,14 +74,14 @@ setup are intentionally created before the first App Store Connect record.
 
 - Description:
 
-  HerdrGo 让运行在你电脑上的 Coding Agents 随时触手可及。
+  HerdrGoT 让运行在你电脑上的 Coding Agents 随时触手可及。
 
   快速查看哪些 Agent 正在工作、等待处理或已经完成；打开会话即可阅读真实
   终端输出、发送回复和特殊按键，并通过原生移动界面安全处理已识别的授权提示。
 
-  使用一个私密二维码即可配对自己的电脑。HerdrGo 随后通过加密的 EasyTier
-  点对点网络连接 HerdrGo bridge。无需注册 HerdrGo 账号，没有广告，也没有
-  集中保存终端会话的 HerdrGo 云服务。
+  使用一个私密二维码即可配对自己的电脑。HerdrGoT 随后通过加密的 EasyTier
+  点对点网络连接 HerdrGoT bridge。无需注册 HerdrGoT 账号，没有广告，也没有
+  集中保存终端会话的 HerdrGoT 云服务。
 
   主要功能：
 
@@ -92,7 +92,7 @@ setup are intentionally created before the first App Store Connect record.
   - 将图片直接传送到已配对电脑
   - 支持 iPhone 和 iPad
 
-  需要在你控制的电脑上安装 Herdr 0.8.2 或更高版本，以及免费的 HerdrGo
+  需要在你控制的电脑上安装 Herdr 0.8.2 或更高版本，以及免费的 HerdrGoT
   Plugin。
 
 - 隐私政策 URL：`https://herdr-go.github.io/zh/privacy/`
@@ -103,7 +103,7 @@ setup are intentionally created before the first App Store Connect record.
 
 ### Positioning
 
-HerdrGo is a native status and control client for Herdr sessions running on a
+HerdrGoT is a native status and control client for Herdr sessions running on a
 computer owned and controlled by the user. It does not mirror a desktop UI,
 host a cloud development environment, sell software, or execute downloaded
 code on the iPhone or iPad. Commands are executed by the user's existing tools
@@ -113,15 +113,15 @@ on the paired host.
 
 Replace every `TODO` before submission:
 
-> HerdrGo does not require an account. The app connects only to a HerdrGo
+> HerdrGoT does not require an account. The app connects only to a HerdrGoT
 > bridge on a user-controlled computer after scanning a private pairing QR
 > code.
 >
 > For App Review, we provide an isolated, continuously available test bridge.
-> Open the attached `HerdrGo-review-pairing.png` on a second screen and follow
+> Open the attached `HerdrGoT-review-pairing.png` on a second screen and follow
 > these steps:
 >
-> 1. Launch HerdrGo and tap Add computer.
+> 1. Launch HerdrGoT and tap Add computer.
 > 2. Scan the attached QR code.
 > 3. Wait for the computer named `TODO` to show Connected.
 > 4. Open the pre-created agent named `TODO`.

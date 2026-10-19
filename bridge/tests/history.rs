@@ -25,13 +25,13 @@ async fn history_app(claude_root: &std::path::Path)
             }],
             "layouts": [], "agents": []}}));
     let mock = common::MockHerdr::start(script).await;
-    let mut cfg = herdrgo_bridge::config::Config::from_cli(&herdrgo_bridge::config::Cli::from_process_env());
+    let mut cfg = herdrgot_bridge::config::Config::from_cli(&herdrgot_bridge::config::Cli::from_process_env());
     cfg.socket_path = mock.socket_path.clone();
     cfg.transcript_roots = vec![claude_root.to_path_buf()];
     let state_dir = tempfile::tempdir().unwrap();
     cfg.state_dir = state_dir.path().to_path_buf();
-    let (state, sd) = herdrgo_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
-    (mock, herdrgo_bridge::http::build_router(state), sd)
+    let (state, sd) = herdrgot_bridge::http::test_app_state(std::sync::Arc::new(cfg)).await;
+    (mock, herdrgot_bridge::http::build_router(state), sd)
 }
 
 #[tokio::test]

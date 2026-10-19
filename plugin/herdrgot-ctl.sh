@@ -1,20 +1,19 @@
 #!/bin/sh
 set -eu
 
-service_name=herdrgo-bridge.service
-plugin_id=herdrgo
-legacy_plugin_id=kkrainbow.herdrgo
-# These launchd identifiers are already deployed and remain a compatibility
-# ABI.
-launch_label=kkrainbow.herdrgo.bridge
-launch_plist_name=kkrainbow.herdrgo.plist
+service_name=herdrgot-bridge.service
+plugin_id=herdrgot
+legacy_plugin_id=
+# 独立于上游 herdrgo 的 launchd 标识，避免两个 bridge 互相覆盖。
+launch_label=kkrainbow.herdrgot.bridge
+launch_plist_name=kkrainbow.herdrgot.plist
 legacy_alias_active=false
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 platform_name=$(uname -s)
 case "$platform_name" in
     Linux | Darwin) ;;
     *)
-        printf 'HerdrGo: unsupported platform: %s\n' "$platform_name" >&2
+        printf 'HerdrGoT: unsupported platform: %s\n' "$platform_name" >&2
         exit 1
         ;;
 esac
@@ -27,7 +26,7 @@ pause_for_close() {
 }
 
 fail() {
-    printf 'HerdrGo: %s\n' "$*" >&2
+    printf 'HerdrGoT: %s\n' "$*" >&2
     pause_for_close
     exit 1
 }
@@ -39,8 +38,8 @@ fi
 [ -n "$state_dir" ] || fail "HERDR_PLUGIN_STATE_DIR is not available"
 
 runtime_dir="$state_dir/runtime"
-runtime_bridge="$runtime_dir/herdrgo-bridge"
-runtime_ctl="$runtime_dir/herdrgo-ctl.sh"
+runtime_bridge="$runtime_dir/herdrgot-bridge"
+runtime_ctl="$runtime_dir/herdrgot-ctl.sh"
 metadata_config_dir="$runtime_dir/plugin-config-dir"
 metadata_socket_path="$runtime_dir/herdr-socket-path"
 metadata_herdr_bin_path="$runtime_dir/herdr-bin-path"
@@ -158,8 +157,8 @@ require_runtime() {
 }
 
 export_bridge_env() {
-    export HERDRGO_BRIDGE_STATE_DIR="$state_dir"
-    export HERDRGO_BRIDGE_ENV_FILE="$config_dir/env"
+    export HERDRGOT_BRIDGE_STATE_DIR="$state_dir"
+    export HERDRGOT_BRIDGE_ENV_FILE="$config_dir/env"
     export HERDR_SOCKET_PATH="$socket_path"
     export HERDR_BIN_PATH="$herdr_bin_path"
 }
@@ -243,6 +242,7 @@ create_legacy_alias() {
 }
 
 ensure_legacy_aliases() {
+    [ -n "$legacy_plugin_id" ] || return 0
     [ "${HERDR_PLUGIN_ID:-}" = "$plugin_id" ] || return 0
     legacy_state_dir="$(dirname -- "$state_dir")/$legacy_plugin_id"
     legacy_config_dir="$(dirname -- "$HERDR_PLUGIN_CONFIG_DIR")/$legacy_plugin_id"
@@ -255,13 +255,13 @@ ensure_legacy_aliases() {
         "$legacy_config_dir" "$HERDR_PLUGIN_CONFIG_DIR" "config"
     create_legacy_alias "$legacy_state_dir" "$state_dir"
     create_legacy_alias "$legacy_config_dir" "$HERDR_PLUGIN_CONFIG_DIR"
-    printf 'HerdrGo: using existing pairing data through the new plugin ID.\n'
+    printf 'HerdrGoT: using existing pairing data through the new plugin ID.\n'
 }
 
 unregister_legacy_plugin() {
     [ "$legacy_alias_active" = true ] || return 0
     if ! "$herdr_bin_path" plugin uninstall "$legacy_plugin_id" >/dev/null 2>&1; then
-        printf 'HerdrGo: the previous plugin registration could not be removed.\n' >&2
+        printf 'HerdrGoT: the previous plugin registration could not be removed.\n' >&2
     fi
 }
 
@@ -276,7 +276,7 @@ write_systemd_unit() {
     env_value=$(systemd_escape "$config_dir/env")
     cat > "$temporary" <<EOF
 [Unit]
-Description=HerdrGo mobile bridge for Herdr
+Description=HerdrGoT mobile bridge for Herdr
 After=default.target
 StartLimitIntervalSec=0
 
@@ -289,8 +289,8 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 Environment="HERDR_SOCKET_PATH=$socket_value"
 Environment="HERDR_BIN_PATH=$herdr_bin_value"
-Environment="HERDRGO_BRIDGE_STATE_DIR=$state_value"
-Environment="HERDRGO_BRIDGE_ENV_FILE=$env_value"
+Environment="HERDRGOT_BRIDGE_STATE_DIR=$state_value"
+Environment="HERDRGOT_BRIDGE_ENV_FILE=$env_value"
 
 [Install]
 WantedBy=default.target
@@ -327,9 +327,9 @@ write_launch_plist() {
     <string>$socket_value</string>
     <key>HERDR_BIN_PATH</key>
     <string>$herdr_bin_value</string>
-    <key>HERDRGO_BRIDGE_STATE_DIR</key>
+    <key>HERDRGOT_BRIDGE_STATE_DIR</key>
     <string>$state_value</string>
-    <key>HERDRGO_BRIDGE_ENV_FILE</key>
+    <key>HERDRGOT_BRIDGE_ENV_FILE</key>
     <string>$env_value</string>
   </dict>
   <key>RunAtLoad</key>
@@ -432,7 +432,7 @@ wait_for_service() {
         sleep 1
         remaining=$((remaining - 1))
     done
-    printf 'HerdrGo service failed to reach running state.\n' >&2
+    printf 'HerdrGoT service failed to reach running state.\n' >&2
     service_status >&2 || true
     case "$platform_name" in
         Linux) printf 'Logs: journalctl --user -u %s -n 100\n' "$service_name" >&2 ;;
@@ -447,8 +447,8 @@ setup_service() {
     : "${HERDR_PLUGIN_ROOT:?Herdr did not provide HERDR_PLUGIN_ROOT}"
     : "${HERDR_PLUGIN_CONFIG_DIR:?Herdr did not provide HERDR_PLUGIN_CONFIG_DIR}"
     : "${HERDR_SOCKET_PATH:?Herdr did not provide HERDR_SOCKET_PATH}"
-    candidate="$HERDR_PLUGIN_ROOT/bin/herdrgo-bridge"
-    control_script="$HERDR_PLUGIN_ROOT/plugin/herdrgo-ctl.sh"
+    candidate="$HERDR_PLUGIN_ROOT/bin/herdrgot-bridge"
+    control_script="$HERDR_PLUGIN_ROOT/plugin/herdrgot-ctl.sh"
     [ -x "$candidate" ] || fail "candidate bridge is missing; reinstall the plugin"
     [ -f "$control_script" ] || fail "plugin control script is missing"
     [ -S "$HERDR_SOCKET_PATH" ] || fail "Herdr socket is unavailable: $HERDR_SOCKET_PATH"
@@ -485,7 +485,7 @@ setup_service() {
         fi
     fi
 
-    printf '\nHerdrGo bridge is running. Scan this code from the mobile app:\n\n'
+    printf '\nHerdrGoT bridge is running. Scan this code from the mobile app:\n\n'
     "$runtime_bridge" pair || fail "could not generate pairing information"
     pause_for_close
 }
@@ -512,9 +512,9 @@ status_bridge() {
 }
 
 uninstall_service() {
-    answer=${HERDRGO_UNINSTALL_CONFIRM:-}
+    answer=${HERDRGOT_UNINSTALL_CONFIRM:-}
     if [ "$answer" != yes ]; then
-        printf 'Remove the HerdrGo user service? Pairing state will be kept. [y/N] '
+        printf 'Remove the HerdrGoT user service? Pairing state will be kept. [y/N] '
         IFS= read -r answer || answer=
     fi
     case "$answer" in
@@ -549,7 +549,7 @@ uninstall_service() {
         "$runtime_ctl" "$runtime_ctl.previous" \
         "$metadata_config_dir" "$metadata_socket_path" "$metadata_herdr_bin_path"
     rmdir "$runtime_dir" 2>/dev/null || true
-    printf 'HerdrGo service removed. Pairing state remains in %s\n' "$state_dir"
+    printf 'HerdrGoT service removed. Pairing state remains in %s\n' "$state_dir"
     pause_for_close
 }
 

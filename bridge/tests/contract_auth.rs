@@ -4,13 +4,13 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-fn cfg_with(f: impl FnOnce(&mut herdrgo_bridge::config::Config)) -> std::sync::Arc<herdrgo_bridge::config::Config> {
-    let mut cfg = herdrgo_bridge::config::Config::from_cli(&herdrgo_bridge::config::Cli::from_process_env());
+fn cfg_with(f: impl FnOnce(&mut herdrgot_bridge::config::Config)) -> std::sync::Arc<herdrgot_bridge::config::Config> {
+    let mut cfg = herdrgot_bridge::config::Config::from_cli(&herdrgot_bridge::config::Cli::from_process_env());
     f(&mut cfg);
     std::sync::Arc::new(cfg)
 }
 
-async fn app_with(cfg: std::sync::Arc<herdrgo_bridge::config::Config>)
+async fn app_with(cfg: std::sync::Arc<herdrgot_bridge::config::Config>)
     -> (axum::Router, tokio::sync::watch::Sender<bool>)
 {
     let mock = common::MockHerdr::start(common::engine_script()).await;
@@ -19,8 +19,8 @@ async fn app_with(cfg: std::sync::Arc<herdrgo_bridge::config::Config>)
     // 审计落在 tempdir（函数返回即清理），避免 cargo test 写进真实 state dir。
     let state_dir = tempfile::tempdir().unwrap();
     c.state_dir = state_dir.path().to_path_buf();
-    let (state, sd) = herdrgo_bridge::http::test_app_state(std::sync::Arc::new(c)).await;
-    (herdrgo_bridge::http::build_router(state), sd)
+    let (state, sd) = herdrgot_bridge::http::test_app_state(std::sync::Arc::new(c)).await;
+    (herdrgot_bridge::http::build_router(state), sd)
 }
 
 fn get(uri: &str, headers: &[(&str, &str)]) -> Request<Body> {

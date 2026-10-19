@@ -1,19 +1,19 @@
 [Unit]
-Description=herdrgo-bridge (Rust REST bridge for herdr)
+Description=herdrgot-bridge (Rust REST bridge for herdr)
 After=default.target
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/herdrgo-bridge
+ExecStart=%h/.local/bin/herdrgot-bridge
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 PrivateTmp=yes
 Environment=HERDR_SOCKET_PATH=%h/.config/herdr/herdr.sock
 Environment=HERDR_BIN_PATH=%h/.local/bin/herdr
-Environment=HERDRGO_BRIDGE_STATE_DIR=%h/.local/state/herdrgo-bridge
-EnvironmentFile=-%h/.config/herdrgo-bridge/env
+Environment=HERDRGOT_BRIDGE_STATE_DIR=%h/.local/state/herdrgot-bridge
+EnvironmentFile=-%h/.config/herdrgot-bridge/env
 
 [Install]
 WantedBy=default.target

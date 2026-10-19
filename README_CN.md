@@ -1,6 +1,6 @@
 <div align="center">
 
-# HerdrGo
+# HerdrGoT
 
 **把整群 coding agent 装进口袋。**
 
@@ -15,7 +15,7 @@
 ---
 
 在电脑上同时跑几个 codex / kimi / claude，人一旦离开工位就只能干等——生怕哪个
-agent 卡在审批弹窗上没人点。HerdrGo 让你在手机上盯住整群 agent：谁在干活、谁
+agent 卡在审批弹窗上没人点。HerdrGoT 让你在手机上盯住整群 agent：谁在干活、谁
 卡住了等你拍板，一眼看清；点进去就能回话、发键、批准操作，人在哪都能让它们
 继续跑。
 
@@ -59,7 +59,7 @@ TUN、不用 root、不用申请 VPN 权限，secret 自动生成并持久化。
 
 ```
 ┌─────────────┐      扫码配对      ┌──────────────────────────────┐
-│  HerdrGo    │ ◄─────────────── │  herdrgo-bridge（宿主机）     │
+│  HerdrGoT    │ ◄─────────────── │  herdrgot-bridge（宿主机）     │
 │  app（手机）│                    │  · 连本机 herdr socket        │
 └──────┬──────┘                    │  · 对外提供 REST API          │
        │ EasyTier 虚拟网           │  · 内嵌 EasyTier（无 TUN）    │
@@ -77,8 +77,8 @@ REST API 暴露到虚拟网络，app 侧同样内嵌 EasyTier 把本地端口转
 在运行 Herdr 的电脑上执行（需要 Herdr 0.8.2+）：
 
 ```bash
-herdr plugin install herdr-go/herdr-go
-herdr plugin action invoke herdrgo.setup
+herdr plugin install ShakaRover/herdr-go-terminal
+herdr plugin action invoke herdrgot.setup
 ```
 
 setup 会在 Linux 安装 systemd user service，在 macOS 安装 LaunchAgent，随后启动
@@ -88,11 +88,11 @@ secret，已经配对的手机无需重新扫码。整个过程不需要 Rust �
 常用操作：
 
 ```bash
-herdr plugin action invoke herdrgo.pair
-herdr plugin action invoke herdrgo.pair-string
-herdr plugin action invoke herdrgo.status
-herdr plugin action invoke herdrgo.restart
-herdr plugin action invoke herdrgo.uninstall-service
+herdr plugin action invoke herdrgot.pair
+herdr plugin action invoke herdrgot.pair-string
+herdr plugin action invoke herdrgot.status
+herdr plugin action invoke herdrgot.restart
+herdr plugin action invoke herdrgot.uninstall-service
 ```
 
 删除 plugin 前先执行 `uninstall-service`，再执行
@@ -101,7 +101,7 @@ herdr plugin action invoke herdrgo.uninstall-service
 
 ## 安装 Android app
 
-从 [GitHub 最新 Release](https://github.com/herdr-go/herdr-go/releases/latest)
+从 [GitHub 最新 Release](https://github.com/ShakaRover/herdr-go-terminal/releases/latest)
 下载通用 APK。APK 同时包含 arm64-v8a 和 x86_64 原生库。
 
 ## 构建
@@ -149,22 +149,22 @@ bridge 部署在 herdr 宿主机上：
 ```bash
 cd bridge
 cargo build --release
-# 产物：bridge/target/release/herdrgo-bridge
+# 产物：bridge/target/release/herdrgot-bridge
 ```
 
 常驻运行可用 `bridge/systemd/` 下的 systemd 单元。bridge **默认零配置即进入
 EasyTier 模式**：自动生成并持久化网络 secret，经默认中继
 `txt://herdrgo.et-link.cc` 组网，REST API 走 data plane 虚拟 TCP，不监听 OS
-端口、不需要 TUN/root。需要配对时在私有终端执行 `herdrgo-bridge pair` 显示二维码和配对字符串
+端口、不需要 TUN/root。需要配对时在私有终端执行 `herdrgot-bridge pair` 显示二维码和配对字符串
 二维码；普通服务启动不会把 secret 写入服务日志。app 侧同样经内嵌 EasyTier +
 本地端口转发，不申请 VpnService。常用选项只有
 `--secret` / `--server` / `--port`（`--help`），高级选项见 `--help-advance`。
 secret 即网络凭据，等同钥匙，只在宿主机终端就地展示、勿泄露。详见
 `bridge/README.md`。
 
-如需走 HTTP 直连（本机/前置代理调试），显式关闭 EasyTier：`herdrgo-bridge
+如需走 HTTP 直连（本机/前置代理调试），显式关闭 EasyTier：`herdrgot-bridge
 --secret ""`，此时监听 `--host`/`--http-port`（默认 `127.0.0.1:8787`），并可用
-`HERDRGO_BRIDGE_DEVICE_HEADER`（+`HERDRGO_BRIDGE_DEVICE_ALLOWLIST`）做 device
+`HERDRGOT_BRIDGE_DEVICE_HEADER`（+`HERDRGOT_BRIDGE_DEVICE_ALLOWLIST`）做 device
 gate，app 首次启动填 bridge 地址并在「自定义请求头」里填对应 header（否则
 为只读模式）。
 

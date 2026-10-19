@@ -281,7 +281,7 @@ abstract class AppLocalizations {
   /// No description provided for @addFromStringHelp.
   ///
   /// In en, this message translates to:
-  /// **'On the computer, run `herdr plugin action invoke herdrgo.pair-string` (or `herdrgo-bridge pair --string`) and paste the output here.'**
+  /// **'On the computer, run `herdr plugin action invoke herdrgot.pair-string` (or `herdrgot-bridge pair --string`) and paste the output here.'**
   String get addFromStringHelp;
 
   /// No description provided for @addFromStringHint.
@@ -821,7 +821,7 @@ abstract class AppLocalizations {
   /// No description provided for @notPaired.
   ///
   /// In en, this message translates to:
-  /// **'No bridge is paired yet. Scan the pairing QR code printed when herdrgo-bridge starts to connect through the EasyTier virtual network.'**
+  /// **'No bridge is paired yet. Scan the pairing QR code printed when herdrgot-bridge starts to connect through the EasyTier virtual network.'**
   String get notPaired;
 
   /// No description provided for @deviceAlias.
@@ -887,7 +887,7 @@ abstract class AppLocalizations {
   /// No description provided for @pluginSetupHelp.
   ///
   /// In en, this message translates to:
-  /// **'Install the HerdrGo Plugin on the computer running Herdr, start its bridge service, then display the pairing QR code.'**
+  /// **'Install the HerdrGoT Plugin on the computer running Herdr, start its bridge service, then display the pairing QR code.'**
   String get pluginSetupHelp;
 
   /// No description provided for @pluginPairAgainHelp.
@@ -1037,7 +1037,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagnosticLoggingDetails.
   ///
   /// In en, this message translates to:
-  /// **'Logging is off by default. When enabled, HerdrGo keeps up to four 5 MB files in Documents/Diagnostics and excludes them from iCloud Backup. The logs may contain IP addresses and peer IDs, but HerdrGo does not add pairing secrets or terminal content.\n\nConnect and trust this iPhone or iPad to download the app container with Xcode on your Mac, or use Share logs below. iOS suspends ordinary apps in the background, so no new events can be recorded while the process is suspended.'**
+  /// **'Logging is off by default. When enabled, HerdrGoT keeps up to four 5 MB files in Documents/Diagnostics and excludes them from iCloud Backup. The logs may contain IP addresses and peer IDs, but HerdrGoT does not add pairing secrets or terminal content.\n\nConnect and trust this iPhone or iPad to download the app container with Xcode on your Mac, or use Share logs below. iOS suspends ordinary apps in the background, so no new events can be recorded while the process is suspended.'**
   String get diagnosticLoggingDetails;
 
   /// No description provided for @shareDiagnosticLogs.
@@ -1121,7 +1121,7 @@ abstract class AppLocalizations {
   /// No description provided for @scanImageInvalid.
   ///
   /// In en, this message translates to:
-  /// **'The QR code is not HerdrGo pairing data'**
+  /// **'The QR code is not HerdrGoT pairing data'**
   String get scanImageInvalid;
 
   /// No description provided for @scanImageFailed.

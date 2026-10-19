@@ -4,12 +4,13 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 release_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' \
     "$repo_root/herdr-plugin.toml" | sed -n '1p')
-test_root=$(mktemp -d "${TMPDIR:-/tmp}/herdrgo-plugin-test.XXXXXX")
+test_root=$(mktemp -d "${TMPDIR:-/tmp}/herdrgot-plugin-test.XXXXXX")
 socket_pids=
 
 # Exercise the default HOME-relative service path without inheriting a
 # developer or CI runner's XDG override.
 unset XDG_CONFIG_HOME
+unset HERDR_BIN_PATH
 
 cleanup() {
     for pid in $socket_pids; do
@@ -95,7 +96,7 @@ if [ "${FAKE_SERVICE_TERM_ON_RELOAD:-}" = yes ]; then
 fi
 if [ "${FAKE_SERVICE_STOP_FAIL:-}" = yes ]; then
     case "$*" in
-        *"disable --now herdrgo-bridge.service"*) exit 1 ;;
+        *"disable --now herdrgot-bridge.service"*) exit 1 ;;
     esac
 fi
 case "$*" in
@@ -147,7 +148,7 @@ make_bridge() {
     cat > "$path" <<EOF
 #!/bin/sh
 case "\${1:-}" in
-    --version) printf 'herdrgo-bridge $version\\n' ;;
+    --version) printf 'herdrgot-bridge $version\\n' ;;
     pair) printf 'PAIRING-$version\\n' ;;
     *) printf 'bridge process must be launched by the service manager\\n' ;;
 esac
@@ -181,9 +182,9 @@ test_install() {
     mkdir -p "$install_root/plugin" "$release_dir"
     cp "$repo_root/herdr-plugin.toml" "$install_root/herdr-plugin.toml"
     cp "$repo_root/plugin/install.sh" "$install_root/plugin/install.sh"
-    make_bridge "$release_dir/herdrgo-bridge" "$release_version"
-    archive="herdrgo-bridge-$release_version-x86_64-unknown-linux-musl.tar.gz"
-    tar -czf "$release_dir/$archive" -C "$release_dir" herdrgo-bridge
+    make_bridge "$release_dir/herdrgot-bridge" "$release_version"
+    archive="herdrgot-bridge-$release_version-x86_64-unknown-linux-musl.tar.gz"
+    tar -czf "$release_dir/$archive" -C "$release_dir" herdrgot-bridge
     if command -v sha256sum >/dev/null 2>&1; then
         (cd "$release_dir" && sha256sum "$archive" > "$archive.sha256")
     else
@@ -191,27 +192,27 @@ test_install() {
     fi
 
     PATH="$fake_bin:$PATH" FIXTURE_RELEASE_DIR="$release_dir" \
-        HERDRGO_RELEASE_BASE_URL=https://invalid.example/releases \
+        HERDRGOT_RELEASE_BASE_URL=https://invalid.example/releases \
         FAKE_OS=Linux FAKE_ARCH=x86_64 \
         sh "$install_root/plugin/install.sh" >/dev/null
-    assert_file "$install_root/bin/herdrgo-bridge"
-    output=$($install_root/bin/herdrgo-bridge --version)
-    [ "$output" = "herdrgo-bridge $release_version" ] || \
+    assert_file "$install_root/bin/herdrgot-bridge"
+    output=$($install_root/bin/herdrgot-bridge --version)
+    [ "$output" = "herdrgot-bridge $release_version" ] || \
         fail "wrong installed bridge version"
 
     printf 'bad checksum\n' > "$release_dir/$archive.sha256"
     if PATH="$fake_bin:$PATH" FIXTURE_RELEASE_DIR="$release_dir" \
-        HERDRGO_RELEASE_BASE_URL=https://invalid.example/releases \
+        HERDRGOT_RELEASE_BASE_URL=https://invalid.example/releases \
         FAKE_OS=Linux FAKE_ARCH=x86_64 \
         sh "$install_root/plugin/install.sh" >/dev/null 2>&1; then
         fail "checksum mismatch unexpectedly succeeded"
     fi
-    output=$($install_root/bin/herdrgo-bridge --version)
-    [ "$output" = "herdrgo-bridge $release_version" ] || \
+    output=$($install_root/bin/herdrgot-bridge --version)
+    [ "$output" = "herdrgot-bridge $release_version" ] || \
         fail "failed install replaced candidate"
 
     if PATH="$fake_bin:$PATH" FIXTURE_RELEASE_DIR="$release_dir" \
-        HERDRGO_RELEASE_BASE_URL=https://invalid.example/releases \
+        HERDRGOT_RELEASE_BASE_URL=https://invalid.example/releases \
         FAKE_OS=FreeBSD FAKE_ARCH=x86_64 \
         sh "$install_root/plugin/install.sh" >/dev/null 2>&1; then
         fail "unsupported platform unexpectedly succeeded"
@@ -227,103 +228,10 @@ printf '%s\n' "$*" > "$FAKE_ACTION_LOG"
 EOF
     chmod 755 "$fake_herdr"
     FAKE_ACTION_LOG="$action_log" HERDR_BIN_PATH="$fake_herdr" \
-        HERDR_PLUGIN_ID=herdrgo \
-        sh "$repo_root/plugin/herdrgo-action.sh" setup-ui
+        HERDR_PLUGIN_ID=herdrgot \
+        sh "$repo_root/plugin/herdrgot-action.sh" setup-ui
     assert_contains "$action_log" \
-        "plugin pane open --plugin herdrgo --entrypoint setup-ui --focus"
-}
-
-test_legacy_id_alias() {
-    case_root="$test_root/legacy-id"
-    plugin_root="$case_root/plugin"
-    state_root="$case_root/state/plugins"
-    state_dir="$state_root/herdrgo"
-    legacy_state_dir="$state_root/kkrainbow.herdrgo"
-    config_root="$case_root/config/plugins/config"
-    config_dir="$config_root/herdrgo"
-    legacy_config_dir="$config_root/kkrainbow.herdrgo"
-    home_dir="$case_root/home"
-    socket_path="$test_root/legacy-id.sock"
-    service_log="$case_root/service.log"
-    herdr_log="$case_root/herdr.log"
-    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" \
-        "$state_dir" "$legacy_state_dir" "$config_dir" \
-        "$legacy_config_dir" "$home_dir"
-    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
-    make_bridge "$plugin_root/bin/herdrgo-bridge" aliased
-    printf 'legacy-secret\n' > "$legacy_state_dir/easytier_secret"
-    printf 'HERDRGO_BRIDGE_POLL_MS=750\n' > "$legacy_config_dir/env"
-    start_socket "$socket_path"
-
-    PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
-        FAKE_HERDR_LOG="$herdr_log" HOME="$home_dir" USER=tester \
-        HERDR_PLUGIN_ID=herdrgo HERDR_PLUGIN_ROOT="$plugin_root" \
-        HERDR_PLUGIN_STATE_DIR="$state_dir" \
-        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null
-
-    assert_link_to "$state_dir" "$legacy_state_dir"
-    assert_link_to "$config_dir" "$legacy_config_dir"
-    assert_contains "$state_dir/easytier_secret" legacy-secret
-    assert_contains "$config_dir/env" 'HERDRGO_BRIDGE_POLL_MS=750'
-    assert_file "$legacy_state_dir/runtime/herdrgo-bridge"
-    assert_contains "$herdr_log" "herdr plugin uninstall kkrainbow.herdrgo"
-    unit="$home_dir/.config/systemd/user/herdrgo-bridge.service"
-    assert_contains "$unit" "$state_dir/runtime/herdrgo-bridge"
-    assert_contains "$unit" "HERDRGO_BRIDGE_ENV_FILE=$config_dir/env"
-
-    active_owner="$legacy_state_dir/.control.lock.$$"
-    mkdir "$active_owner"
-    printf '%s\n' "$$" > "$active_owner/pid"
-    ln -s "$(basename -- "$active_owner")" "$legacy_state_dir/control.lock"
-    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
-        HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" restart >/dev/null 2>&1; then
-        fail "new plugin ID did not share the legacy control lock"
-    fi
-    rm -f "$legacy_state_dir/control.lock" "$active_owner/pid"
-    rmdir "$active_owner"
-}
-
-test_legacy_id_conflict() {
-    case_root="$test_root/legacy-id-conflict"
-    plugin_root="$case_root/plugin"
-    state_root="$case_root/state/plugins"
-    state_dir="$state_root/herdrgo"
-    legacy_state_dir="$state_root/kkrainbow.herdrgo"
-    config_root="$case_root/config/plugins/config"
-    config_dir="$config_root/herdrgo"
-    legacy_config_dir="$config_root/kkrainbow.herdrgo"
-    home_dir="$case_root/home"
-    socket_path="$test_root/legacy-id-conflict.sock"
-    service_log="$case_root/service.log"
-    herdr_log="$case_root/herdr.log"
-    mkdir -p "$plugin_root/bin" "$plugin_root/plugin" \
-        "$state_dir" "$legacy_state_dir" "$config_dir" \
-        "$legacy_config_dir" "$home_dir"
-    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
-    make_bridge "$plugin_root/bin/herdrgo-bridge" conflict
-    printf 'new-secret\n' > "$state_dir/easytier_secret"
-    printf 'legacy-secret\n' > "$legacy_state_dir/easytier_secret"
-    : > "$config_dir/env"
-    : > "$legacy_config_dir/env"
-    start_socket "$socket_path"
-
-    if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
-        FAKE_HERDR_LOG="$herdr_log" HOME="$home_dir" USER=tester \
-        HERDR_PLUGIN_ID=herdrgo HERDR_PLUGIN_ROOT="$plugin_root" \
-        HERDR_PLUGIN_STATE_DIR="$state_dir" \
-        HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
-        fail "conflicting plugin ID data unexpectedly used the legacy state"
-    fi
-
-    [ ! -L "$state_dir" ] || fail "conflict replaced the new state directory"
-    [ ! -L "$config_dir" ] || fail "conflict replaced the new config directory"
-    assert_contains "$state_dir/easytier_secret" new-secret
-    assert_contains "$legacy_state_dir/easytier_secret" legacy-secret
-    assert_not_file "$service_log"
-    assert_not_file "$herdr_log"
+        "plugin pane open --plugin herdrgot --entrypoint setup-ui --focus"
 }
 
 test_signal_stops_control() {
@@ -335,15 +243,15 @@ test_signal_stops_control() {
     socket_path="$test_root/signal.sock"
     service_log="$case_root/service.log"
     mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$config_dir" "$home_dir"
-    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
-    make_bridge "$plugin_root/bin/herdrgo-bridge" signal
+    cp "$repo_root/plugin/herdrgot-ctl.sh" "$plugin_root/plugin/herdrgot-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgot-bridge" signal
     start_socket "$socket_path"
 
     if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         FAKE_SERVICE_TERM_ON_RELOAD=yes HOME="$home_dir" USER=tester \
         HERDR_PLUGIN_ROOT="$plugin_root" HERDR_PLUGIN_STATE_DIR="$state_dir" \
         HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" setup >/dev/null 2>&1; then
         fail "setup survived TERM and continued without its control lock"
     fi
     assert_contains "$service_log" "systemctl --user daemon-reload"
@@ -361,15 +269,15 @@ test_signal_cleans_atomic_lock_claim() {
     socket_path="$test_root/lock-signal.sock"
     service_log="$case_root/service.log"
     mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$config_dir" "$home_dir"
-    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
-    make_bridge "$plugin_root/bin/herdrgo-bridge" lock-signal
+    cp "$repo_root/plugin/herdrgot-ctl.sh" "$plugin_root/plugin/herdrgot-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgot-bridge" lock-signal
     start_socket "$socket_path"
 
     if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         FAKE_LOCK_TERM_ON_ACQUIRE=yes HOME="$home_dir" USER=tester \
         HERDR_PLUGIN_ROOT="$plugin_root" HERDR_PLUGIN_STATE_DIR="$state_dir" \
         HERDR_PLUGIN_CONFIG_DIR="$config_dir" HERDR_SOCKET_PATH="$socket_path" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null 2>&1; then
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" setup >/dev/null 2>&1; then
         fail "setup survived TERM at the atomic lock claim"
     fi
     [ ! -e "$state_dir/control.lock" ] && [ ! -L "$state_dir/control.lock" ] ||
@@ -388,47 +296,47 @@ test_linux_control() {
     socket_path="$test_root/linux.sock"
     service_log="$case_root/service.log"
     mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$config_dir" "$home_dir"
-    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
-    make_bridge "$plugin_root/bin/herdrgo-bridge" v1
-    printf 'HERDRGO_BRIDGE_SECRET=do-not-copy\n' > "$config_dir/env"
+    cp "$repo_root/plugin/herdrgot-ctl.sh" "$plugin_root/plugin/herdrgot-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgot-bridge" v1
+    printf 'HERDRGOT_BRIDGE_SECRET=do-not-copy\n' > "$config_dir/env"
     start_socket "$socket_path"
 
     output="$case_root/setup.out"
     PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" USER=tester HERDR_PLUGIN_ROOT="$plugin_root" \
-        HERDR_PLUGIN_ID=herdrgo \
+        HERDR_PLUGIN_ID=herdrgot \
         HERDR_PLUGIN_STATE_DIR="$state_dir" HERDR_PLUGIN_CONFIG_DIR="$config_dir" \
         HERDR_SOCKET_PATH="$socket_path" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup > "$output"
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" setup > "$output"
 
-    unit="$home_dir/.config/systemd/user/herdrgo-bridge.service"
+    unit="$home_dir/.config/systemd/user/herdrgot-bridge.service"
     assert_file "$unit"
-    assert_file "$state_dir/runtime/herdrgo-bridge"
-    assert_contains "$unit" "$state_dir/runtime/herdrgo-bridge"
-    assert_contains "$unit" "HERDRGO_BRIDGE_ENV_FILE=$config_dir/env"
+    assert_file "$state_dir/runtime/herdrgot-bridge"
+    assert_contains "$unit" "$state_dir/runtime/herdrgot-bridge"
+    assert_contains "$unit" "HERDRGOT_BRIDGE_ENV_FILE=$config_dir/env"
     assert_contains "$unit" "HERDR_BIN_PATH=$fake_bin/herdr"
     assert_not_contains "$unit" do-not-copy
     assert_contains "$output" PAIRING-v1
     assert_contains "$service_log" "systemctl --user daemon-reload"
-    assert_contains "$service_log" "systemctl --user restart herdrgo-bridge.service"
+    assert_contains "$service_log" "systemctl --user restart herdrgot-bridge.service"
     [ ! -L "$state_dir" ] || fail "fresh setup created a state alias"
     [ ! -L "$config_dir" ] || fail "fresh setup created a config alias"
 
     printf 'stable-secret\n' > "$state_dir/easytier_secret"
-    make_bridge "$plugin_root/bin/herdrgo-bridge" v2
+    make_bridge "$plugin_root/bin/herdrgot-bridge" v2
     PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" USER=tester HERDR_PLUGIN_ROOT="$plugin_root" \
         HERDR_PLUGIN_STATE_DIR="$state_dir" HERDR_PLUGIN_CONFIG_DIR="$config_dir" \
         HERDR_SOCKET_PATH="$socket_path" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null
-    assert_contains "$state_dir/runtime/herdrgo-bridge.previous" "herdrgo-bridge v1"
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" setup >/dev/null
+    assert_contains "$state_dir/runtime/herdrgot-bridge.previous" "herdrgot-bridge v1"
     [ "$(sed -n '1p' "$state_dir/easytier_secret")" = stable-secret ] ||
         fail "setup changed the EasyTier secret"
 
     mkdir "$state_dir/control.lock"
     if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" restart >/dev/null 2>&1; then
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" restart >/dev/null 2>&1; then
         fail "a control lock without a pid was reclaimed"
     fi
     [ -d "$state_dir/control.lock" ] || fail "a contender removed the active control lock"
@@ -440,7 +348,7 @@ test_linux_control() {
     ln -s "$(basename -- "$active_owner")" "$state_dir/control.lock"
     if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" restart >/dev/null 2>&1; then
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" restart >/dev/null 2>&1; then
         fail "a live atomic control lock did not exclude a contender"
     fi
     [ "$(readlink "$state_dir/control.lock")" = "$(basename -- "$active_owner")" ] ||
@@ -450,19 +358,19 @@ test_linux_control() {
 
     if PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         FAKE_SERVICE_STOP_FAIL=yes HOME="$home_dir" \
-        HERDR_PLUGIN_STATE_DIR="$state_dir" HERDRGO_UNINSTALL_CONFIRM=yes \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" uninstall-service >/dev/null 2>&1; then
+        HERDR_PLUGIN_STATE_DIR="$state_dir" HERDRGOT_UNINSTALL_CONFIRM=yes \
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" uninstall-service >/dev/null 2>&1; then
         fail "Linux uninstall ignored a service stop failure"
     fi
     assert_file "$unit"
-    assert_file "$state_dir/runtime/herdrgo-bridge"
+    assert_file "$state_dir/runtime/herdrgot-bridge"
 
     PATH="$fake_bin:$PATH" FAKE_OS=Linux FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
-        HERDRGO_UNINSTALL_CONFIRM=yes \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" uninstall-service >/dev/null
+        HERDRGOT_UNINSTALL_CONFIRM=yes \
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" uninstall-service >/dev/null
     assert_not_file "$unit"
-    assert_not_file "$state_dir/runtime/herdrgo-bridge"
+    assert_not_file "$state_dir/runtime/herdrgot-bridge"
     assert_file "$state_dir/easytier_secret"
 }
 
@@ -475,21 +383,21 @@ test_macos_control() {
     socket_path="$test_root/macos.sock"
     service_log="$case_root/service.log"
     mkdir -p "$plugin_root/bin" "$plugin_root/plugin" "$config_dir" "$home_dir"
-    cp "$repo_root/plugin/herdrgo-ctl.sh" "$plugin_root/plugin/herdrgo-ctl.sh"
-    make_bridge "$plugin_root/bin/herdrgo-bridge" mac
-    printf 'HERDRGO_BRIDGE_SECRET=do-not-copy\n' > "$config_dir/env"
+    cp "$repo_root/plugin/herdrgot-ctl.sh" "$plugin_root/plugin/herdrgot-ctl.sh"
+    make_bridge "$plugin_root/bin/herdrgot-bridge" mac
+    printf 'HERDRGOT_BRIDGE_SECRET=do-not-copy\n' > "$config_dir/env"
     start_socket "$socket_path"
 
     PATH="$fake_bin:$PATH" FAKE_OS=Darwin FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" HERDR_PLUGIN_ROOT="$plugin_root" \
         HERDR_PLUGIN_STATE_DIR="$state_dir" HERDR_PLUGIN_CONFIG_DIR="$config_dir" \
         HERDR_SOCKET_PATH="$socket_path" \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" setup >/dev/null
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" setup >/dev/null
 
-    plist="$home_dir/Library/LaunchAgents/kkrainbow.herdrgo.plist"
+    plist="$home_dir/Library/LaunchAgents/kkrainbow.herdrgot.plist"
     assert_file "$plist"
-    assert_contains "$plist" "kkrainbow.herdrgo.bridge"
-    assert_contains "$plist" "state &amp; dir/runtime/herdrgo-bridge"
+    assert_contains "$plist" "kkrainbow.herdrgot.bridge"
+    assert_contains "$plist" "state &amp; dir/runtime/herdrgot-bridge"
     assert_contains "$plist" "config &amp; dir/env"
     assert_contains "$plist" "$fake_bin/herdr"
     assert_not_contains "$plist" do-not-copy
@@ -500,29 +408,27 @@ test_macos_control() {
 
     if PATH="$fake_bin:$PATH" FAKE_OS=Darwin FAKE_SERVICE_LOG="$service_log" \
         FAKE_SERVICE_STOP_FAIL=yes HOME="$home_dir" \
-        HERDR_PLUGIN_STATE_DIR="$state_dir" HERDRGO_UNINSTALL_CONFIRM=yes \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" uninstall-service >/dev/null 2>&1; then
+        HERDR_PLUGIN_STATE_DIR="$state_dir" HERDRGOT_UNINSTALL_CONFIRM=yes \
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" uninstall-service >/dev/null 2>&1; then
         fail "macOS uninstall ignored a service stop failure"
     fi
     assert_file "$plist"
-    assert_file "$state_dir/runtime/herdrgo-bridge"
+    assert_file "$state_dir/runtime/herdrgot-bridge"
 
     PATH="$fake_bin:$PATH" FAKE_OS=Darwin FAKE_SERVICE_LOG="$service_log" \
         HOME="$home_dir" HERDR_PLUGIN_STATE_DIR="$state_dir" \
-        HERDRGO_UNINSTALL_CONFIRM=yes \
-        sh "$plugin_root/plugin/herdrgo-ctl.sh" uninstall-service >/dev/null
+        HERDRGOT_UNINSTALL_CONFIRM=yes \
+        sh "$plugin_root/plugin/herdrgot-ctl.sh" uninstall-service >/dev/null
     assert_not_file "$plist"
 }
 
 test_static_systemd_unit() {
-    unit="$repo_root/bridge/systemd/herdrgo-bridge.service"
+    unit="$repo_root/bridge/systemd/herdrgot-bridge.service"
     assert_contains "$unit" 'Environment=HERDR_BIN_PATH=%h/.local/bin/herdr'
 }
 
 test_install
 test_action
-test_legacy_id_alias
-test_legacy_id_conflict
 test_signal_cleans_atomic_lock_claim
 test_signal_stops_control
 test_linux_control

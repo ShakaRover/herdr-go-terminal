@@ -38,7 +38,7 @@ pub struct Config {
     pub easytier_secret: Option<String>,
     pub easytier_network_name: Option<String>,
     pub easytier_virtual_ip: Option<String>,
-    /// EasyTier 被动监听端口（默认 22023，利于 p2p 打洞；配对二维码引用）。
+    /// EasyTier 被动监听端口（默认 22024，利于 p2p 打洞；配对二维码引用）。
     pub easytier_listen_port: u16,
     // 测试注入：在默认监听之外追加 passive listener（供对端实例直连回环端口）。
     #[doc(hidden)]
@@ -47,28 +47,28 @@ pub struct Config {
 
 /// herdr 的 REST 桥接服务（Rust / axum）
 #[derive(Parser, Debug)]
-#[command(name = "herdrgo-bridge", version = Config::build_id())]
+#[command(name = "herdrgot-bridge", version = Config::build_id())]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<BridgeCommand>,
 
     /// 中继/发现服务器（可重复或逗号分隔，默认 txt://herdrgo.et-link.cc）
-    #[arg(long, env = "HERDRGO_BRIDGE_SERVER", value_delimiter = ',')]
+    #[arg(long, env = "HERDRGOT_BRIDGE_SERVER", value_delimiter = ',')]
     pub server: Vec<String>,
     /// EasyTier 网络 secret；缺省自动生成并持久化到 state 目录，显式传空串关闭 EasyTier
-    #[arg(long, env = "HERDRGO_BRIDGE_SECRET")]
+    #[arg(long, env = "HERDRGOT_BRIDGE_SECRET")]
     pub secret: Option<String>,
-    /// EasyTier 被动监听端口（默认 22023，tcp://0.0.0.0 无条件监听）
-    #[arg(long, env = "HERDRGO_BRIDGE_PORT")]
+    /// EasyTier 被动监听端口（默认 22024，tcp://0.0.0.0 无条件监听）
+    #[arg(long, env = "HERDRGOT_BRIDGE_PORT")]
     pub port: Option<u16>,
     /// 显示全部高级选项后退出
     #[arg(long)]
     pub help_advance: bool,
     /// 绑定地址（仅 HTTP 直连模式；默认 EasyTier 模式下不监听）
-    #[arg(long, env = "HERDRGO_BRIDGE_HOST", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_HOST", hide = true)]
     pub host: Option<String>,
     /// HTTP 直连模式的绑定端口（默认 8787；EasyTier 模式下不使用）
-    #[arg(long, env = "HERDRGO_BRIDGE_HTTP_PORT", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_HTTP_PORT", hide = true)]
     pub http_port: Option<u16>,
     /// herdr API socket
     #[arg(long, env = "HERDR_SOCKET_PATH", hide = true)]
@@ -77,62 +77,62 @@ pub struct Cli {
     #[arg(long, env = "HERDR_BIN_PATH", hide = true)]
     pub herdr_bin_path: Option<PathBuf>,
     /// 状态目录（audit、activity、上传）
-    #[arg(long, env = "HERDRGO_BRIDGE_STATE_DIR", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_STATE_DIR", hide = true)]
     pub state_dir: Option<PathBuf>,
     /// 活跃轮询间隔 ms（min 250）
-    #[arg(long, env = "HERDRGO_BRIDGE_POLL_MS", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_POLL_MS", hide = true)]
     pub poll_ms: Option<u64>,
     /// 空闲轮询间隔 ms（min 1000）
-    #[arg(long, env = "HERDRGO_BRIDGE_POLL_IDLE_MS", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_POLL_IDLE_MS", hide = true)]
     pub poll_idle_ms: Option<u64>,
     /// pane 读默认行数（min 1）
-    #[arg(long, env = "HERDRGO_BRIDGE_READ_LINES", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_READ_LINES", hide = true)]
     pub read_lines: Option<u32>,
     /// reply 提交键（可重复或逗号分隔）
-    #[arg(long, env = "HERDRGO_BRIDGE_SUBMIT_KEYS", value_delimiter = ',', hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_SUBMIT_KEYS", value_delimiter = ',', hide = true)]
     pub submit_keys: Vec<String>,
     /// 精确 origin 列表（可重复或逗号分隔）
-    #[arg(long, env = "HERDRGO_BRIDGE_ALLOWED_ORIGINS", value_delimiter = ',', hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_ALLOWED_ORIGINS", value_delimiter = ',', hide = true)]
     pub allowed_origins: Vec<String>,
     /// Host allowlist（可重复或逗号分隔）
-    #[arg(long, env = "HERDRGO_BRIDGE_PUBLIC_HOSTS", value_delimiter = ',', hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_PUBLIC_HOSTS", value_delimiter = ',', hide = true)]
     pub public_hosts: Vec<String>,
     /// Tailscale 身份
-    #[arg(long, env = "HERDRGO_BRIDGE_TRUSTED_USER", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_TRUSTED_USER", hide = true)]
     pub trusted_user: Option<String>,
     /// device gate 请求头名；设置后写端点要求该头（仅 HTTP 直连模式）
-    #[arg(long, env = "HERDRGO_BRIDGE_DEVICE_HEADER", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_DEVICE_HEADER", hide = true)]
     pub device_header: Option<String>,
     /// device 白名单（可重复或逗号分隔）；空 = 所有设备只读（fail-closed）
-    #[arg(long, env = "HERDRGO_BRIDGE_DEVICE_ALLOWLIST", value_delimiter = ',', hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_DEVICE_ALLOWLIST", value_delimiter = ',', hide = true)]
     pub device_allowlist: Vec<String>,
     /// off 时只看 primary session（on/off/1/0/true/false）
-    #[arg(long, env = "HERDRGO_BRIDGE_MULTI_SESSION", value_parser = parse_on_off, hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_MULTI_SESSION", value_parser = parse_on_off, hide = true)]
     pub multi_session: Option<bool>,
     /// history 总开关（on/off/1/0/true/false）
-    #[arg(long, env = "HERDRGO_BRIDGE_TRANSCRIPT", value_parser = parse_on_off, hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_TRANSCRIPT", value_parser = parse_on_off, hide = true)]
     pub transcript: Option<bool>,
     /// claude 日志 root（可重复或逗号分隔）
-    #[arg(long, env = "HERDRGO_BRIDGE_TRANSCRIPT_ROOT", value_delimiter = ',', hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_TRANSCRIPT_ROOT", value_delimiter = ',', hide = true)]
     pub transcript_roots: Vec<PathBuf>,
     /// codex 日志 root
-    #[arg(long, env = "HERDRGO_BRIDGE_CODEX_ROOT", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_CODEX_ROOT", hide = true)]
     pub codex_root: Option<PathBuf>,
     /// pi 日志 root
-    #[arg(long, env = "HERDRGO_BRIDGE_PI_ROOT", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_PI_ROOT", hide = true)]
     pub pi_root: Option<PathBuf>,
     /// opencode 数据目录
-    #[arg(long, env = "HERDRGO_BRIDGE_OPENCODE_ROOT", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_OPENCODE_ROOT", hide = true)]
     pub opencode_root: Option<PathBuf>,
     /// 覆盖网络名；缺省用 state 目录持久化的 uuid
-    #[arg(long, env = "HERDRGO_BRIDGE_EASYTIERSERWORKNAME", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_EASYTIERSERWORKNAME", hide = true)]
     pub easytier_network_name: Option<String>,
     /// 静态虚拟 IPv4（CIDR，如 10.126.0.1/24）；缺省 10.126.0.1/24
-    #[arg(long, env = "HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_EASYTIERSERVIRTUALIP", hide = true)]
     pub easytier_virtual_ip: Option<String>,
     // 测试注入：在默认监听之外追加 passive listener（供对端实例直连回环端口）。
     #[doc(hidden)]
-    #[arg(long, env = "HERDRGO_BRIDGE_EASYTIERSER_TEST_LISTENERS", value_delimiter = ',', hide = true)]
+    #[arg(long, env = "HERDRGOT_BRIDGE_EASYTIERSER_TEST_LISTENERS", value_delimiter = ',', hide = true)]
     pub easytier_test_listeners: Vec<String>,
 }
 
@@ -153,7 +153,7 @@ impl Cli {
     /// 仅从进程环境解析（忽略 argv）。供测试与库调用方使用。
     pub fn from_process_env() -> Self {
         sanitize_env();
-        Self::parse_from(["herdrgo-bridge"])
+        Self::parse_from(["herdrgot-bridge"])
     }
 
     /// 解析进程 argv。`--help` 只显示常用三项；`--help-advance` 打印完整
@@ -180,7 +180,7 @@ impl Cli {
 /// 从服务管理器指定的配置文件补充进程环境。已存在的进程环境保持优先，
 /// 文件按 dotenv 的 `KEY=value` 语法解析，不执行 shell 代码。
 pub fn load_process_env_file() -> anyhow::Result<()> {
-    let Some(path) = env::var_os("HERDRGO_BRIDGE_ENV_FILE")
+    let Some(path) = env::var_os("HERDRGOT_BRIDGE_ENV_FILE")
         .map(PathBuf::from)
         .and_then(norm_path)
     else {
@@ -191,12 +191,12 @@ pub fn load_process_env_file() -> anyhow::Result<()> {
     Ok(())
 }
 /// 解析前规范化进程环境：env 值 trim 后为空视为未设置（兼容旧
-/// env_string 语义，避免 `HERDRGO_BRIDGE_PORT=` 之类被 clap 硬报错）。
-/// 覆盖本组件的 HERDRGO_BRIDGE_* 与上游接口 HERDR_SOCKET_PATH。
+/// env_string 语义，避免 `HERDRGOT_BRIDGE_PORT=` 之类被 clap 硬报错）。
+/// 覆盖本组件的 HERDRGOT_BRIDGE_* 与上游接口 HERDR_SOCKET_PATH。
 pub fn sanitize_env() {
     for (k, v) in std::env::vars_os() {
         let Some(name) = k.to_str() else { continue };
-        if !name.starts_with("HERDRGO_BRIDGE_") && !name.starts_with("HERDR_") {
+        if !name.starts_with("HERDRGOT_BRIDGE_") && !name.starts_with("HERDR_") {
             continue;
         }
         let Ok(s) = v.into_string() else { continue };
@@ -262,10 +262,10 @@ pub fn default_state_dir() -> PathBuf {
     let base = env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home_dir().join(".local").join("state"));
-    base.join("herdrgo-bridge")
+    base.join("herdrgot-bridge")
 }
 
-/// 默认 EasyTier 中继/发现服务器（--server 与 HERDRGO_BRIDGE_SERVER 均未设置时用）。
+/// 默认 EasyTier 中继/发现服务器（--server 与 HERDRGOT_BRIDGE_SERVER 均未设置时用）。
 pub fn default_easytier_server() -> String {
     "txt://herdrgo.et-link.cc".to_string()
 }
@@ -388,7 +388,7 @@ impl Config {
             easytier_virtual_ip: cli.easytier_virtual_ip.clone().and_then(norm_string)
                 .or_else(|| Some(default_easytier_virtual_ip())),
             easytier_listen_port: clamp_min(
-                cli.port.unwrap_or(22023).into(), 1, "port") as u16,
+                cli.port.unwrap_or(22024).into(), 1, "port") as u16,
             easytier_test_listeners: norm_list(cli.easytier_test_listeners.clone()),
             state_dir,
         }
@@ -412,7 +412,7 @@ impl Config {
 
     pub fn build_id() -> &'static str {
         static BUILD_ID: LazyLock<String> = LazyLock::new(|| {
-            match option_env!("HERDRGO_BRIDGE_GIT_HASH") {
+            match option_env!("HERDRGOT_BRIDGE_GIT_HASH") {
                 Some(h) => format!("{}+{}", env!("CARGO_PKG_VERSION"), h),
                 None => env!("CARGO_PKG_VERSION").to_string(),
             }
@@ -440,21 +440,21 @@ pub(crate) mod tests {
 
     pub(crate) fn clear() {
         for k in [
-            "HERDRGO_BRIDGE_HOST", "HERDRGO_BRIDGE_PORT", "HERDR_SOCKET_PATH",
+            "HERDRGOT_BRIDGE_HOST", "HERDRGOT_BRIDGE_PORT", "HERDR_SOCKET_PATH",
             "HERDR_BIN_PATH",
-            "HERDRGO_BRIDGE_HTTP_PORT", "HERDRGO_BRIDGE_SERVER",
-            "HERDRGO_BRIDGE_SECRET",
-            "HERDRGO_BRIDGE_ENV_FILE",
-            "HERDRGO_BRIDGE_STATE_DIR", "HERDRGO_BRIDGE_POLL_MS",
-            "HERDRGO_BRIDGE_POLL_IDLE_MS", "HERDRGO_BRIDGE_READ_LINES",
-            "HERDRGO_BRIDGE_SUBMIT_KEYS", "HERDRGO_BRIDGE_ALLOWED_ORIGINS",
-            "HERDRGO_BRIDGE_PUBLIC_HOSTS", "HERDRGO_BRIDGE_TRUSTED_USER",
-            "HERDRGO_BRIDGE_DEVICE_HEADER", "HERDRGO_BRIDGE_DEVICE_ALLOWLIST",
-            "HERDRGO_BRIDGE_MULTI_SESSION", "HERDRGO_BRIDGE_TRANSCRIPT",
-            "HERDRGO_BRIDGE_TRANSCRIPT_ROOT", "HERDRGO_BRIDGE_CODEX_ROOT",
-            "HERDRGO_BRIDGE_PI_ROOT", "HERDRGO_BRIDGE_OPENCODE_ROOT",
-            "HERDRGO_BRIDGE_EASYTIERSERWORKNAME", "HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP",
-            "HERDRGO_BRIDGE_EASYTIERSER_TEST_LISTENERS",
+            "HERDRGOT_BRIDGE_HTTP_PORT", "HERDRGOT_BRIDGE_SERVER",
+            "HERDRGOT_BRIDGE_SECRET",
+            "HERDRGOT_BRIDGE_ENV_FILE",
+            "HERDRGOT_BRIDGE_STATE_DIR", "HERDRGOT_BRIDGE_POLL_MS",
+            "HERDRGOT_BRIDGE_POLL_IDLE_MS", "HERDRGOT_BRIDGE_READ_LINES",
+            "HERDRGOT_BRIDGE_SUBMIT_KEYS", "HERDRGOT_BRIDGE_ALLOWED_ORIGINS",
+            "HERDRGOT_BRIDGE_PUBLIC_HOSTS", "HERDRGOT_BRIDGE_TRUSTED_USER",
+            "HERDRGOT_BRIDGE_DEVICE_HEADER", "HERDRGOT_BRIDGE_DEVICE_ALLOWLIST",
+            "HERDRGOT_BRIDGE_MULTI_SESSION", "HERDRGOT_BRIDGE_TRANSCRIPT",
+            "HERDRGOT_BRIDGE_TRANSCRIPT_ROOT", "HERDRGOT_BRIDGE_CODEX_ROOT",
+            "HERDRGOT_BRIDGE_PI_ROOT", "HERDRGOT_BRIDGE_OPENCODE_ROOT",
+            "HERDRGOT_BRIDGE_EASYTIERSERWORKNAME", "HERDRGOT_BRIDGE_EASYTIERSERVIRTUALIP",
+            "HERDRGOT_BRIDGE_EASYTIERSER_TEST_LISTENERS",
         ] {
             env::remove_var(k);
         }
@@ -465,7 +465,7 @@ pub(crate) mod tests {
         let _g = tests_lock();
         clear();
         let dir = std::env::temp_dir().join(format!("herdr-test-{}", uuid::Uuid::new_v4()));
-        env::set_var("HERDRGO_BRIDGE_STATE_DIR", &dir);
+        env::set_var("HERDRGOT_BRIDGE_STATE_DIR", &dir);
         // 默认（不设 secret）→ 自动生成并持久化，EasyTier 开启。
         let c = Config::from_cli(&Cli::from_process_env());
         assert!(c.easytier_enabled());
@@ -477,7 +477,7 @@ pub(crate) mod tests {
         let c2 = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c2.easytier_secret.as_deref(), Some(s1.as_str()));
         // 显式 --secret 覆盖持久化值。
-        env::set_var("HERDRGO_BRIDGE_SECRET", "explicit");
+        env::set_var("HERDRGOT_BRIDGE_SECRET", "explicit");
         let c3 = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c3.easytier_secret.as_deref(), Some("explicit"));
         std::fs::remove_dir_all(&dir).ok();
@@ -520,20 +520,20 @@ pub(crate) mod tests {
         let path = dir.join("env");
         std::fs::write(
             &path,
-            "HERDRGO_BRIDGE_SERVER=tcp://file.example:11010\n\
-             HERDRGO_BRIDGE_PORT=23000\n",
+            "HERDRGOT_BRIDGE_SERVER=tcp://file.example:11010\n\
+             HERDRGOT_BRIDGE_PORT=23000\n",
         )
         .unwrap();
-        env::set_var("HERDRGO_BRIDGE_ENV_FILE", &path);
-        env::set_var("HERDRGO_BRIDGE_PORT", "24000");
+        env::set_var("HERDRGOT_BRIDGE_ENV_FILE", &path);
+        env::set_var("HERDRGOT_BRIDGE_PORT", "24000");
 
         load_process_env_file().unwrap();
 
         assert_eq!(
-            env::var("HERDRGO_BRIDGE_SERVER").unwrap(),
+            env::var("HERDRGOT_BRIDGE_SERVER").unwrap(),
             "tcp://file.example:11010"
         );
-        assert_eq!(env::var("HERDRGO_BRIDGE_PORT").unwrap(), "24000");
+        assert_eq!(env::var("HERDRGOT_BRIDGE_PORT").unwrap(), "24000");
         clear();
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -545,8 +545,8 @@ pub(crate) mod tests {
         let dir = std::env::temp_dir().join(format!("herdr-env-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("env");
-        std::fs::write(&path, "HERDRGO_BRIDGE_SECRET='do-not-log\n").unwrap();
-        env::set_var("HERDRGO_BRIDGE_ENV_FILE", &path);
+        std::fs::write(&path, "HERDRGOT_BRIDGE_SECRET='do-not-log\n").unwrap();
+        env::set_var("HERDRGOT_BRIDGE_ENV_FILE", &path);
 
         let error = load_process_env_file().unwrap_err().to_string();
 
@@ -560,7 +560,7 @@ pub(crate) mod tests {
     fn pair_subcommand_is_parsed() {
         let _g = tests_lock();
         clear();
-        let cli = Cli::parse_from(["herdrgo-bridge", "pair"]);
+        let cli = Cli::parse_from(["herdrgot-bridge", "pair"]);
         assert_eq!(
             cli.command,
             Some(BridgeCommand::Pair {
@@ -569,7 +569,7 @@ pub(crate) mod tests {
             })
         );
 
-        let cli = Cli::parse_from(["herdrgo-bridge", "pair", "--json"]);
+        let cli = Cli::parse_from(["herdrgot-bridge", "pair", "--json"]);
         assert_eq!(
             cli.command,
             Some(BridgeCommand::Pair {
@@ -578,7 +578,7 @@ pub(crate) mod tests {
             })
         );
 
-        let cli = Cli::parse_from(["herdrgo-bridge", "pair", "--string"]);
+        let cli = Cli::parse_from(["herdrgot-bridge", "pair", "--string"]);
         assert_eq!(
             cli.command,
             Some(BridgeCommand::Pair {
@@ -595,7 +595,7 @@ pub(crate) mod tests {
         clear();
         // 显式空串 → 关闭 EasyTier，走 HTTP 直连；sanitize_env 会移除空值，
         // 所以这里走 CLI argv 传入空串。
-        let cli = Cli::parse_from(["herdrgo-bridge", "--secret", ""]);
+        let cli = Cli::parse_from(["herdrgot-bridge", "--secret", ""]);
         let c = Config::from_cli(&cli);
         assert!(!c.easytier_enabled());
         // HTTP 直连默认端口。
@@ -610,7 +610,7 @@ pub(crate) mod tests {
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c.easytier_virtual_ip.as_deref(), Some("10.126.0.1/24"));
         // 显式配置优先。
-        env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.9/24");
+        env::set_var("HERDRGOT_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.9/24");
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c.easytier_virtual_ip.as_deref(), Some("10.126.0.9/24"));
     }
@@ -619,15 +619,15 @@ pub(crate) mod tests {
     fn easytier_config_parsed() {
         let _g = tests_lock();
         clear();
-        env::set_var("HERDRGO_BRIDGE_SERVER", "tcp://a.example:11010, tcp://b.example:11010");
-        env::set_var("HERDRGO_BRIDGE_SECRET", "s3cret");
-        env::set_var("HERDRGO_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
+        env::set_var("HERDRGOT_BRIDGE_SERVER", "tcp://a.example:11010, tcp://b.example:11010");
+        env::set_var("HERDRGOT_BRIDGE_SECRET", "s3cret");
+        env::set_var("HERDRGOT_BRIDGE_EASYTIERSERVIRTUALIP", "10.126.0.1/24");
         let c = Config::from_cli(&Cli::from_process_env());
         assert!(c.easytier_enabled());
         assert_eq!(c.easytier_server, vec!["tcp://a.example:11010", "tcp://b.example:11010"]);
         assert_eq!(c.easytier_virtual_ip.as_deref(), Some("10.126.0.1/24"));
-        assert_eq!(c.easytier_listen_port, 22023); // 默认监听端口
-        env::set_var("HERDRGO_BRIDGE_PORT", "23000");
+        assert_eq!(c.easytier_listen_port, 22024); // 默认监听端口
+        env::set_var("HERDRGOT_BRIDGE_PORT", "23000");
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c.easytier_listen_port, 23000);
     }
@@ -638,7 +638,7 @@ pub(crate) mod tests {
         clear();
         let c = Config::from_cli(&Cli::from_process_env());
         assert!(c.easytier_test_listeners.is_empty());
-        env::set_var("HERDRGO_BRIDGE_EASYTIERSER_TEST_LISTENERS", "tcp://127.0.0.1:15999, udp://127.0.0.1:16000");
+        env::set_var("HERDRGOT_BRIDGE_EASYTIERSER_TEST_LISTENERS", "tcp://127.0.0.1:15999, udp://127.0.0.1:16000");
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(
             c.easytier_test_listeners,
@@ -651,15 +651,15 @@ pub(crate) mod tests {
         let _g = tests_lock();
         clear();
         let dir = std::env::temp_dir().join(format!("herdr-test-{}", uuid::Uuid::new_v4()));
-        env::set_var("HERDRGO_BRIDGE_STATE_DIR", &dir);
-        env::set_var("HERDRGO_BRIDGE_SECRET", "s3cret");
+        env::set_var("HERDRGOT_BRIDGE_STATE_DIR", &dir);
+        env::set_var("HERDRGOT_BRIDGE_SECRET", "s3cret");
         let c = Config::from_cli(&Cli::from_process_env());
         let id1 = c.easytier_network_id().unwrap();
         assert!(uuid::Uuid::parse_str(&id1).is_ok());
         let id2 = c.easytier_network_id().unwrap();
         assert_eq!(id1, id2); // 持久化后稳定
         // 覆盖优先
-        env::set_var("HERDRGO_BRIDGE_EASYTIERSERWORKNAME", "override-net");
+        env::set_var("HERDRGOT_BRIDGE_EASYTIERSERWORKNAME", "override-net");
         let c2 = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c2.easytier_network_id().unwrap(), "override-net");
         std::fs::remove_dir_all(&dir).ok();
@@ -686,11 +686,11 @@ pub(crate) mod tests {
     fn invalid_values_rejected() {
         let _g = tests_lock();
         clear();
-        env::set_var("HERDRGO_BRIDGE_PORT", "not-a-number");
-        assert!(Cli::try_parse_from(["herdrgo-bridge"]).is_err());
+        env::set_var("HERDRGOT_BRIDGE_PORT", "not-a-number");
+        assert!(Cli::try_parse_from(["herdrgot-bridge"]).is_err());
         clear();
-        env::set_var("HERDRGO_BRIDGE_MULTI_SESSION", "maybe");
-        assert!(Cli::try_parse_from(["herdrgo-bridge"]).is_err());
+        env::set_var("HERDRGOT_BRIDGE_MULTI_SESSION", "maybe");
+        assert!(Cli::try_parse_from(["herdrgot-bridge"]).is_err());
         // 新语义下非法 env 会让任何后续解析硬报错，必须清理现场。
         clear();
     }
@@ -699,7 +699,7 @@ pub(crate) mod tests {
     fn numeric_below_min_clamped() {
         let _g = tests_lock();
         clear();
-        env::set_var("HERDRGO_BRIDGE_POLL_MS", "10"); // 低于 min 250
+        env::set_var("HERDRGOT_BRIDGE_POLL_MS", "10"); // 低于 min 250
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c.poll_ms, 250);
     }
@@ -708,9 +708,9 @@ pub(crate) mod tests {
     fn lists_and_device_gate() {
         let _g = tests_lock();
         clear();
-        env::set_var("HERDRGO_BRIDGE_ALLOWED_ORIGINS", "https://a.example, https://b.example");
-        env::set_var("HERDRGO_BRIDGE_DEVICE_HEADER", "x-device");
-        env::set_var("HERDRGO_BRIDGE_DEVICE_ALLOWLIST", " phone , tablet ");
+        env::set_var("HERDRGOT_BRIDGE_ALLOWED_ORIGINS", "https://a.example, https://b.example");
+        env::set_var("HERDRGOT_BRIDGE_DEVICE_HEADER", "x-device");
+        env::set_var("HERDRGOT_BRIDGE_DEVICE_ALLOWLIST", " phone , tablet ");
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c.allowed_origins, vec!["https://a.example", "https://b.example"]);
         assert_eq!(c.device_header.as_deref(), Some("x-device"));
@@ -721,8 +721,8 @@ pub(crate) mod tests {
     fn cli_overrides_env() {
         let _g = tests_lock();
         clear();
-        env::set_var("HERDRGO_BRIDGE_PORT", "9000");
-        let cli = Cli::parse_from(["herdrgo-bridge", "--port", "9999"]);
+        env::set_var("HERDRGOT_BRIDGE_PORT", "9000");
+        let cli = Cli::parse_from(["herdrgot-bridge", "--port", "9999"]);
         let c = Config::from_cli(&cli);
         assert_eq!(c.easytier_listen_port, 9999);
         assert_eq!(c.host, "127.0.0.1"); // 未指定的项回落 env/默认
@@ -732,7 +732,7 @@ pub(crate) mod tests {
     fn env_used_when_no_cli() {
         let _g = tests_lock();
         clear();
-        env::set_var("HERDRGO_BRIDGE_PORT", "9000");
+        env::set_var("HERDRGOT_BRIDGE_PORT", "9000");
         env::set_var("HERDR_BIN_PATH", "/opt/herdr/bin/herdr");
         let c = Config::from_cli(&Cli::from_process_env());
         assert_eq!(c.easytier_listen_port, 9000);
@@ -745,7 +745,7 @@ pub(crate) mod tests {
         let _g = tests_lock();
         clear();
         let cli = Cli::parse_from([
-            "herdrgo-bridge", "--multi-session", "off",
+            "herdrgot-bridge", "--multi-session", "off",
             "--allowed-origins", "https://a.example, https://b.example",
         ]);
         let c = Config::from_cli(&cli);

@@ -2,27 +2,27 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
-    let cli = herdrgo_bridge::config::Cli::parse_cli();
+    let cli = herdrgot_bridge::config::Cli::parse_cli();
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "herdrgo_bridge=info".into()),
+                .unwrap_or_else(|_| "herdrgot_bridge=info".into()),
         )
         .init();
-    let cfg = Arc::new(herdrgo_bridge::config::Config::from_cli(&cli));
+    let cfg = Arc::new(herdrgot_bridge::config::Config::from_cli(&cli));
     std::fs::create_dir_all(&cfg.state_dir).expect("create state dir");
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&cfg.state_dir, std::fs::Permissions::from_mode(0o700))
             .expect("chmod state dir");
     }
-    if let Some(herdrgo_bridge::config::BridgeCommand::Pair { json, string }) = cli.command {
+    if let Some(herdrgot_bridge::config::BridgeCommand::Pair { json, string }) = cli.command {
         let output = if json {
-            herdrgo_bridge::easytier_net::pairing_json_output(&cfg)
+            herdrgot_bridge::easytier_net::pairing_json_output(&cfg)
         } else if string {
-            herdrgo_bridge::easytier_net::pairing_string_output(&cfg)
+            herdrgot_bridge::easytier_net::pairing_string_output(&cfg)
         } else {
-            herdrgo_bridge::easytier_net::pairing_output(&cfg)
+            herdrgot_bridge::easytier_net::pairing_output(&cfg)
         };
         match output {
             Ok(output) => print!("{output}"),
@@ -35,15 +35,15 @@ async fn main() {
     }
     tracing::info!(
         socket = %cfg.socket_path.display(),
-        build = %herdrgo_bridge::config::Config::build_id(),
-        "herdrgo-bridge starting"
+        build = %herdrgot_bridge::config::Config::build_id(),
+        "herdrgot-bridge starting"
     );
-    let registry = herdrgo_bridge::sessions::SessionRegistry::new(
+    let registry = herdrgot_bridge::sessions::SessionRegistry::new(
         cfg.clone(),
-        herdrgo_bridge::state::activity::ActivityLedger::load(
+        herdrgot_bridge::state::activity::ActivityLedger::load(
             &cfg.state_dir.join("activity.json")));
     {
-        let ping_client = herdrgo_bridge::herdr::client::HerdrClient::new(cfg.socket_path.clone());
+        let ping_client = herdrgot_bridge::herdr::client::HerdrClient::new(cfg.socket_path.clone());
         match ping_client.ping().await {
             Ok(p) => tracing::info!(version = %p.version, protocol = p.protocol, "herdr connected"),
             Err(e) => tracing::warn!("herdr ping failed: {e}; will retry via polling"),
@@ -69,12 +69,12 @@ async fn main() {
             std::process::exit(0);
         });
     }
-    let state = herdrgo_bridge::http::AppState {
+    let state = herdrgot_bridge::http::AppState {
         cfg: cfg.clone(),
         registry,
-        audit: Arc::new(herdrgo_bridge::audit::AuditLog::new(&cfg.state_dir)),
-        journal: Arc::new(herdrgo_bridge::journal::JournalRegistry::new(&cfg)),
-        terminal_leases: herdrgo_bridge::terminal_resize::TerminalLeaseManager::new(
+        audit: Arc::new(herdrgot_bridge::audit::AuditLog::new(&cfg.state_dir)),
+        journal: Arc::new(herdrgot_bridge::journal::JournalRegistry::new(&cfg)),
+        terminal_leases: herdrgot_bridge::terminal_resize::TerminalLeaseManager::new(
             cfg.herdr_bin_path.clone(),
         ),
     };
@@ -83,15 +83,15 @@ async fn main() {
         let sweep_dir = cfg.state_dir.clone();
         tokio::spawn(async move {
             loop {
-                herdrgo_bridge::uploads::sweep(&sweep_dir);
+                herdrgot_bridge::uploads::sweep(&sweep_dir);
                 tokio::time::sleep(std::time::Duration::from_secs(6 * 3600)).await;
             }
         });
     }
-    let app = herdrgo_bridge::http::build_router(state);
+    let app = herdrgot_bridge::http::build_router(state);
     if cfg.easytier_enabled() {
         // net 需活到 serve 返回之后再 drop（EasyTier 实例随 net 销毁而停止）。
-        let net = herdrgo_bridge::easytier_net::start_easytier(&cfg).await.expect("start easytier");
+        let net = herdrgot_bridge::easytier_net::start_easytier(&cfg).await.expect("start easytier");
         tracing::info!(%net.virtual_addr, "listening on easytier data plane");
         let listener = net.take_listener().expect("take listener");
         axum::serve(listener, app.into_make_service()).await.expect("serve");

@@ -1,6 +1,6 @@
 <div align="center">
 
-# HerdrGo
+# HerdrGoT
 
 **Your whole herd of coding agents, in your pocket.**
 
@@ -16,7 +16,7 @@ A native mobile client for [herdr](https://herdr.dev) agents
 
 Running several coding agents (codex, kimi, claude, …) on your dev box is great
 until you step away — then any of them can stall on an approval prompt with
-nobody to click it. HerdrGo lets you watch the whole herd from your phone:
+nobody to click it. HerdrGoT lets you watch the whole herd from your phone:
 see at a glance who's working and who's blocked waiting on you, then tap in to
 reply, send keys, or approve — from anywhere.
 
@@ -68,7 +68,7 @@ Claude-style approval menu recognized as native buttons — one tap to approve.*
 
 ```
 ┌─────────────┐    scan QR code     ┌──────────────────────────────┐
-│  HerdrGo    │ ◄───────────────── │  herdrgo-bridge (host)       │
+│  HerdrGoT    │ ◄───────────────── │  herdrgot-bridge (host)       │
 │  app (phone)│                     │  · talks to the herdr socket  │
 └──────┬──────┘                     │  · exposes a REST API         │
        │ EasyTier virtual network   │  · embedded EasyTier (no TUN) │
@@ -89,8 +89,8 @@ only credential: keep the QR code private.
 On the computer running Herdr (Herdr 0.8.2+):
 
 ```bash
-herdr plugin install herdr-go/herdr-go
-herdr plugin action invoke herdrgo.setup
+herdr plugin install ShakaRover/herdr-go-terminal
+herdr plugin action invoke herdrgot.setup
 ```
 
 The setup action installs a systemd user service on Linux or a LaunchAgent on
@@ -102,11 +102,11 @@ working. No Rust toolchain or root access is required.
 Useful actions:
 
 ```bash
-herdr plugin action invoke herdrgo.pair
-herdr plugin action invoke herdrgo.pair-string
-herdr plugin action invoke herdrgo.status
-herdr plugin action invoke herdrgo.restart
-herdr plugin action invoke herdrgo.uninstall-service
+herdr plugin action invoke herdrgot.pair
+herdr plugin action invoke herdrgot.pair-string
+herdr plugin action invoke herdrgot.status
+herdr plugin action invoke herdrgot.restart
+herdr plugin action invoke herdrgot.uninstall-service
 ```
 
 Run `uninstall-service` before `herdr plugin uninstall herdrgo`.
@@ -116,7 +116,7 @@ without scanning again.
 ## Install the Android app
 
 Download the universal APK from the
-[latest GitHub release](https://github.com/herdr-go/herdr-go/releases/latest).
+[latest GitHub release](https://github.com/ShakaRover/herdr-go-terminal/releases/latest).
 The APK contains both arm64-v8a and x86_64 native libraries.
 
 ## Build
@@ -166,14 +166,14 @@ The bridge runs on the herdr host:
 ```bash
 cd bridge
 cargo build --release
-# output: bridge/target/release/herdrgo-bridge
+# output: bridge/target/release/herdrgot-bridge
 ```
 
 A systemd unit is available under `bridge/systemd/`. The bridge **enters
 EasyTier mode with zero configuration by default**: it generates and persists a
 network secret, joins via the default relay `txt://herdrgo.et-link.cc`, and
 serves the REST API over the data-plane virtual TCP — listening on no OS port,
-needing no TUN/root. Run `herdrgo-bridge pair` in a private terminal to display the QR code and pairing string
+needing no TUN/root. Run `herdrgot-bridge pair` in a private terminal to display the QR code and pairing string
 the pairing QR code; normal service startup never writes the secret to service
 logs. The app likewise uses embedded EasyTier + a local port forward, with no
 VpnService. The only common options are `--secret` / `--server` / `--port`
@@ -182,9 +182,9 @@ network credential — treat it like a key, show it only in the host terminal,
 never leak it. See `bridge/README.md`.
 
 For plain HTTP direct mode (local / reverse-proxy debugging), disable EasyTier
-explicitly with `herdrgo-bridge --secret ""`; it then listens on
+explicitly with `herdrgot-bridge --secret ""`; it then listens on
 `--host`/`--http-port` (default `127.0.0.1:8787`), and you can enable a device
-gate with `HERDRGO_BRIDGE_DEVICE_HEADER` (+`HERDRGO_BRIDGE_DEVICE_ALLOWLIST`) —
+gate with `HERDRGOT_BRIDGE_DEVICE_HEADER` (+`HERDRGOT_BRIDGE_DEVICE_ALLOWLIST`) —
 on first launch the app asks for the bridge address and the matching header
 (otherwise it stays read-only).
 

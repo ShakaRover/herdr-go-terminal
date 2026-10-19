@@ -205,7 +205,7 @@ final class DiagnosticLogController {
     }
 
     let snapshot = fileManager.temporaryDirectory
-      .appendingPathComponent("HerdrGo-Diagnostics-\(UUID().uuidString)", isDirectory: true)
+      .appendingPathComponent("HerdrGoT-Diagnostics-\(UUID().uuidString)", isDirectory: true)
     try fileManager.createDirectory(at: snapshot, withIntermediateDirectories: true)
     do {
       for file in files {

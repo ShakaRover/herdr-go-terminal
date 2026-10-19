@@ -111,7 +111,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addFromStringHelp =>
-      '在电脑端运行 `herdr plugin action invoke herdrgo.pair-string`（或 `herdrgo-bridge pair --string`），把输出的字符串粘贴到这里。';
+      '在电脑端运行 `herdr plugin action invoke herdrgot.pair-string`（或 `herdrgot-bridge pair --string`），把输出的字符串粘贴到这里。';
 
   @override
   String get addFromStringHint => '粘贴配对 JSON 字符串';
@@ -414,7 +414,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notPaired =>
-      '尚未配对。bridge 启动时会打印配对二维码（herdrgo-bridge 日志里找），扫码后即可通过 EasyTier 虚拟网连接。';
+      '尚未配对。bridge 启动时会打印配对二维码（herdrgot-bridge 日志里找），扫码后即可通过 EasyTier 虚拟网连接。';
 
   @override
   String get deviceAlias => '设备别名';
@@ -452,7 +452,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pluginSetupHelp =>
-      '在运行 Herdr 的电脑上安装 HerdrGo Plugin，启动 bridge 服务，然后显示配对二维码。';
+      '在运行 Herdr 的电脑上安装 HerdrGoT Plugin，启动 bridge 服务，然后显示配对二维码。';
 
   @override
   String get pluginPairAgainHelp => '之后需要重新显示配对二维码时：';
@@ -529,7 +529,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticLoggingDetails =>
-      '日志默认关闭。开启后，HerdrGo 会在 Documents/Diagnostics 中最多保留 4 个 5 MB 文件，并排除 iCloud 备份。日志可能包含 IP 地址和 peer ID，但 HerdrGo 不会主动写入配对密钥或终端内容。\n\n将 iPhone 或 iPad 连接并信任 Mac 后，可通过 Xcode 下载 App Container；也可使用下方的“分享日志”。普通 iOS App 在后台会被系统挂起，挂起期间无法继续记录新事件。';
+      '日志默认关闭。开启后，HerdrGoT 会在 Documents/Diagnostics 中最多保留 4 个 5 MB 文件，并排除 iCloud 备份。日志可能包含 IP 地址和 peer ID，但 HerdrGoT 不会主动写入配对密钥或终端内容。\n\n将 iPhone 或 iPad 连接并信任 Mac 后，可通过 Xcode 下载 App Container；也可使用下方的“分享日志”。普通 iOS App 在后台会被系统挂起，挂起期间无法继续记录新事件。';
 
   @override
   String get shareDiagnosticLogs => '分享日志';
@@ -573,7 +573,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get scanImageNoCode => '图片里没有识别到二维码';
 
   @override
-  String get scanImageInvalid => '二维码不是 HerdrGo 配对信息';
+  String get scanImageInvalid => '二维码不是 HerdrGoT 配对信息';
 
   @override
   String scanImageFailed(String error) {
